@@ -1,13 +1,14 @@
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+
 from agents.state import AgentState
 
 load_dotenv()
 
-llm = ChatOpenAI(model="gpt-4o-mini",temperature=0)
+llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-def planner_node(state:AgentState):
 
+def planner_node(state: AgentState):
     query = state["query"]
 
     prompt = f"""

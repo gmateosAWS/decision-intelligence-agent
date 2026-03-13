@@ -1,10 +1,11 @@
-from langgraph.graph import StateGraph, END
-from agents.state import AgentState
+from langgraph.graph import END, StateGraph
+
 from agents.planner import planner_node
-from agents.tools import *
+from agents.state import AgentState
+from agents.tools import knowledge_tool, optimization_tool, simulation_tool
 
-def tool_node(state:AgentState):
 
+def tool_node(state: AgentState):
     action = state["action"]
 
     if "optimization" in action:
@@ -22,15 +23,14 @@ def tool_node(state:AgentState):
 
 
 def build_graph():
-
     graph = StateGraph(AgentState)
 
-    graph.add_node("planner",planner_node)
-    graph.add_node("tool",tool_node)
+    graph.add_node("planner", planner_node)
+    graph.add_node("tool", tool_node)
 
     graph.set_entry_point("planner")
 
-    graph.add_edge("planner","tool")
-    graph.add_edge("tool",END)
+    graph.add_edge("planner", "tool")
+    graph.add_edge("tool", END)
 
     return graph.compile()

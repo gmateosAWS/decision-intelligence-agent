@@ -9,3 +9,6 @@ openai>=1.0
 scipy>=1.11
 python-dotenv>=1.0
 faiss-cpu>=1.7
+black>=23.3.0
+ruff>=0.0.241
+pre-commit>=2.20.0

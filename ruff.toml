@@ -1,0 +1,11 @@
+line-length = 88
+
+lint.select = [
+    "E",
+    "F",
+    "I"
+]
+
+lint.ignore = []
+
+fix = true
