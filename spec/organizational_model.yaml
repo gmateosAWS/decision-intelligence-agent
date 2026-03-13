@@ -1,0 +1,114 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Organizational Model Specification
+#
+# This file is the SINGLE SOURCE OF TRUTH for the business domain model.
+# All system components (graph, simulation, optimization, agent) read from here.
+# To adapt the system to a new domain: edit this file — no code changes needed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+domain:
+  name: "retail_pricing"
+  description: >
+    Retail business model that captures the causal relationships between
+    pricing, marketing investment, demand response, and profitability.
+    Supports scenario simulation and decision optimization.
+  version: "1.1.0"
+
+# ── VARIABLES ─────────────────────────────────────────────────────────────────
+variables:
+
+  # Decision variables: inputs the agent can control / optimize
+  decisions:
+    - name: price
+      description: "Unit sale price of the product"
+      unit: "EUR"
+      bounds:
+        min: 10.0
+        max: 50.0
+        steps: 60          # grid resolution for optimization
+      default: 25.0
+
+    - name: marketing_spend
+      description: "Monthly marketing investment"
+      unit: "EUR"
+      bounds:
+        min: 1000.0
+        max: 50000.0
+        steps: 20
+      default: 10000.0
+
+  # Intermediate variables: derived or ML-estimated, not directly controlled
+  intermediate:
+    - name: demand
+      description: "Units demanded per period, estimated by ML model"
+      unit: "units"
+      estimated_by: "ml_model"
+      ml_model_path: "models/demand_model.pkl"
+
+    - name: revenue
+      description: "Total revenue in the period"
+      unit: "EUR"
+      formula: "price * demand"
+
+    - name: cost
+      description: "Total variable cost in the period"
+      unit: "EUR"
+      formula: "demand * unit_cost"
+
+  # Target variables: business outcomes to track or optimize
+  targets:
+    - name: profit
+      description: "Net profit: revenue minus costs"
+      unit: "EUR"
+      formula: "revenue - cost"
+      optimize: maximize
+
+# ── CAUSAL RELATIONSHIPS ──────────────────────────────────────────────────────
+# Defines the Directed Acyclic Graph (DAG) of the organizational model.
+# Each entry becomes one or more directed edges in the causal graph.
+causal_relationships:
+  - from: [price, marketing_spend]
+    to: demand
+    type: ml_estimated
+    description: "Demand is a function of price and marketing, learned by ML"
+
+  - from: [price, demand]
+    to: revenue
+    type: formula
+    description: "Revenue = price × demand"
+
+  - from: [demand]
+    to: cost
+    type: formula
+    description: "Cost = demand × unit_cost"
+
+  - from: [revenue, cost]
+    to: profit
+    type: formula
+    description: "Profit = revenue − cost"
+
+# ── BUSINESS PARAMETERS ───────────────────────────────────────────────────────
+business_parameters:
+  unit_cost: 10.0          # Variable cost per unit produced/sold
+
+# ── SIMULATION ────────────────────────────────────────────────────────────────
+simulation:
+  monte_carlo_runs: 500    # Number of MC samples per scenario evaluation
+  noise_std: 0.1           # Relative noise added to demand estimates
+
+# ── CONSTRAINTS ───────────────────────────────────────────────────────────────
+# Business constraints that valid decisions must satisfy.
+# Used for output validation in the evaluation layer.
+constraints:
+  - expression: "profit > 0"
+    description: "Business must be profitable"
+  - expression: "price > unit_cost"
+    description: "Price must exceed unit variable cost"
+
+# ── OPTIMIZATION ──────────────────────────────────────────────────────────────
+optimization:
+  target: profit
+  method: grid_search
+  decision_variables: [price]    # Variables to optimize over
+  fixed_variables:               # Variables held constant during optimization
+    marketing_spend: 10000.0

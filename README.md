@@ -168,6 +168,30 @@ Implemented using **RandomForest regression**.
 The business is represented as a **causal Directed Acyclic Graph
 (DAG)**.
 
+```mermaid
+flowchart LR
+    price([price])
+    marketing([marketing])
+    demand([demand])
+    revenue([revenue])
+    cost([cost])
+    profit([profit])
+
+    price --> demand
+    marketing --> demand
+    demand --> revenue
+    demand --> cost
+    revenue --> profit
+
+    classDef decision    fill:#4A90D9,stroke:#2C5F8A,color:#fff
+    classDef variable    fill:#6EAF7C,stroke:#3D7A4A,color:#fff
+    classDef target      fill:#E8A838,stroke:#B07820,color:#fff
+
+    class price,marketing decision
+    class demand,revenue,cost variable
+    class profit target
+```
+
 Example relationships:
 
 ```
