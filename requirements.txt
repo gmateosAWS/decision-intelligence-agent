@@ -17,3 +17,4 @@ typing-extensions~=4.12
 black~=24.0
 ruff~=0.5
 pre-commit~=3.7
+langgraph-checkpoint-sqlite~=0.1

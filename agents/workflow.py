@@ -1,27 +1,16 @@
 """
-agents/workflow.py
-------------------
-LangGraph 3-node workflow with integrated observability.
+agents/workflow.py  – Mejora 3
+--------------------------------
+Cambios respecto a Mejora 2:
+  • build_graph() ahora acepta un checkpointer opcional (SqliteSaver).
+    Si se pasa, el grafo se compila con persistencia: cada nodo escribe
+    su estado parcial y LangGraph puede reanudar hilos por thread_id.
+  • synthesizer_node devuelve {answer, history} para que el turno quede
+    almacenado en el estado acumulado.  LangGraph aplica operator.add
+    sobre el campo history (definido en state.py).
+  • El resto (observabilidad, tool dispatch) permanece igual que Mejora 2.
 
 Graph:  planner_node → tool_node → synthesizer_node → END
-
-Observability integration
--------------------------
-The caller passes an AgentObserver via LangGraph's configurable dict:
-
-    config = observer.langsmith_config()
-    config["configurable"]["observer"] = observer
-    graph.invoke({"query": query, "run_id": run_id}, config=config)
-
-Each node reads the observer from config and calls the appropriate
-record_* method.  The observer is optional: if absent, the graph runs
-normally without any observability overhead.
-
-LangSmith tracing
------------------
-Automatic when LANGCHAIN_TRACING_V2=true is set.  The run_name and tags
-injected via observer.langsmith_config() make every invocation appear
-with a meaningful name in the LangSmith UI.
 """
 
 from __future__ import annotations
@@ -52,17 +41,15 @@ _TOOLS: Dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 
-def planner_node(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
-    """
-    Calls the LLM planner (structured output) and records timing via the observer.
-    Returns: {action, reasoning}
-    """
+def planner_node(
+    state: AgentState,
+    config: Optional[RunnableConfig] = None,
+) -> Dict:
+    """Calls the LLM planner and records timing via the observer."""
     obs = _get_observer(config)
-
     t0 = time.perf_counter()
     result = _planner_node_impl(state)
     elapsed_ms = (time.perf_counter() - t0) * 1000
-
     if obs:
         obs.record_planner(
             action=result.get("action", "knowledge"),
@@ -72,13 +59,11 @@ def planner_node(state: AgentState, config: Optional[RunnableConfig] = None) -> 
     return result
 
 
-def tool_node(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
-    """
-    Executes the tool selected by the planner.
-    Wraps execution in try/except so errors surface in the state
-    rather than crashing the graph.
-    Returns: {raw_result}
-    """
+def tool_node(
+    state: AgentState,
+    config: Optional[RunnableConfig] = None,
+) -> Dict:
+    """Executes the tool selected by the planner."""
     obs = _get_observer(config)
     action = state.get("action", "knowledge")
     tool_fn = _TOOLS.get(action, knowledge_tool)
@@ -110,9 +95,12 @@ def synthesizer_node(
     config: Optional[RunnableConfig] = None,
 ) -> Dict:
     """
-    Uses the LLM to convert the raw tool output into a business-oriented
-    natural-language answer.
-    Returns: {answer}
+    Converts the raw tool output into a business-oriented answer.
+
+    Returns {answer, history} so that:
+      • answer   is stored as usual.
+      • history  is APPENDED (operator.add) with the current turn dict,
+                 building the multi-turn conversation log.
     """
     from langchain_openai import ChatOpenAI
 
@@ -121,7 +109,6 @@ def synthesizer_node(
     action = state.get("action", "unknown")
     raw = state.get("raw_result") or {}
 
-    # Build a focused prompt from the raw result
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
     prompt = (
         "You are a business intelligence assistant.\n\n"
@@ -147,7 +134,9 @@ def synthesizer_node(
     if obs:
         obs.record_synthesizer(answer=answer, latency_ms=elapsed_ms)
 
-    return {"answer": answer}
+    # Append this turn to the accumulated history list
+    new_turn = {"query": query, "answer": answer}
+    return {"answer": answer, "history": [new_turn]}
 
 
 # ---------------------------------------------------------------------------
@@ -155,9 +144,15 @@ def synthesizer_node(
 # ---------------------------------------------------------------------------
 
 
-def build_graph() -> StateGraph:
+def build_graph(checkpointer=None):
     """
     Build and compile the 3-node LangGraph workflow.
+
+    Parameters
+    ----------
+    checkpointer : SqliteSaver | None
+        If provided, the graph persists state across invocations.
+        Pass a thread_id in the config to resume a conversation.
 
     Flow:
         planner_node → tool_node → synthesizer_node → END
@@ -173,6 +168,8 @@ def build_graph() -> StateGraph:
     builder.add_edge("tool", "synthesizer")
     builder.add_edge("synthesizer", END)
 
+    if checkpointer is not None:
+        return builder.compile(checkpointer=checkpointer)
     return builder.compile()
 
 
@@ -182,7 +179,7 @@ def build_graph() -> StateGraph:
 
 
 def _get_observer(config: Optional[RunnableConfig]):
-    """Extract the AgentObserver from the LangGraph configurable dict (if present)."""
+    """Extract the AgentObserver from the configurable dict."""
     if config is None:
         return None
     return config.get("configurable", {}).get("observer")
