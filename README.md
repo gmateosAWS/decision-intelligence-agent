@@ -113,13 +113,19 @@ flowchart TD
 flowchart LR
     User[User Query]
     Planner["Planner\n(LLM · structured output)"]
-    Tool["Tool Node\n(deterministic)"]
+    Opt[Optimization Tool]
+    Sim[Simulation Tool]
+    Know[Knowledge RAG]
     Synth["Synthesizer\n(LLM · natural language)"]
     Answer[Answer]
 
     User --> Planner
-    Planner -->|"optimization\nsimulation\nknowledge"| Tool
-    Tool --> Synth
+    Planner -->|optimization| Opt
+    Planner -->|simulation| Sim
+    Planner -->|knowledge| Know
+    Opt --> Synth
+    Sim --> Synth
+    Know --> Synth
     Synth --> Answer
 ```
 
@@ -210,7 +216,7 @@ flowchart LR
 2. For each node in topological order: computes via ML model (demand) or registered formula (revenue, cost, profit)
 3. Returns a complete dict of all variable values
 
-The graph structure is loaded from the spec — adding a new causal variable requires only a new formula entry and a new edge in `system_graph.py`.
+The graph structure is loaded from the spec — adding a new causal variable requires only a new formula entry and a new edge in `system/system_graph.py`.
 
 ---
 
@@ -225,7 +231,7 @@ Output statistics:
 | `expected_profit` | Mean profit across all runs |
 | `profit_std` | Standard deviation — spread of outcomes |
 | `profit_p10` | 10th percentile — pessimistic scenario |
-| `profit_p90` | 90th percentile — optimistic scenario |
+| `profit_p90` | 10th percentile — optimistic scenario |
 | `expected_demand` | Mean demand across all runs |
 | `demand_std` | Demand variability |
 | `downside_risk_pct` | % of runs where profit < 0 |
