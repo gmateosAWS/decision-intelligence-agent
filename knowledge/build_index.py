@@ -12,9 +12,12 @@ Ejecutar tras cualquier cambio en los documentos:
   python knowledge/build_index.py
 """
 
+from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
+
+load_dotenv()
 
 # ── Knowledge base ────────────────────────────────────────────────────────────
 # Documentos organizados por categoría para mejorar
