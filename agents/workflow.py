@@ -1,126 +1,188 @@
 """
-agents/workflow.py  ← CORREGIDO
-──────────────────────────────────
-Cambios:
-    1. Añadido nodo synthesizer_node: el LLM reformatea
-         el resultado crudo de la tool en una respuesta de negocio
-         clara y en lenguaje natural antes de responder al usuario.
-  2. Manejo de errores en tool_node: try/except con error propagado al estado.
-  3. Routing condicional desde tool_node hacia synthesizer
-      o directo a END si hay error.
-  4. Todos los nodos devuelven dicts parciales (patrón correcto en LangGraph).
-  5. El flujo completo es: planner → tool → synthesizer → END
+agents/workflow.py
+------------------
+LangGraph 3-node workflow with integrated observability.
 
-Arquitectura del grafo:
+Graph:  planner_node → tool_node → synthesizer_node → END
 
-  ┌──────────┐     ┌──────────┐     ┌──────────────┐
-  │ planner  │────►│  tool    │────►│ synthesizer  │────► END
-  └──────────┘     └──────────┘     └──────────────┘
+Observability integration
+-------------------------
+The caller passes an AgentObserver via LangGraph's configurable dict:
+
+    config = observer.langsmith_config()
+    config["configurable"]["observer"] = observer
+    graph.invoke({"query": query, "run_id": run_id}, config=config)
+
+Each node reads the observer from config and calls the appropriate
+record_* method.  The observer is optional: if absent, the graph runs
+normally without any observability overhead.
+
+LangSmith tracing
+-----------------
+Automatic when LANGCHAIN_TRACING_V2=true is set.  The run_name and tags
+injected via observer.langsmith_config() make every invocation appear
+with a meaningful name in the LangSmith UI.
 """
 
 from __future__ import annotations
 
-from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+import time
+from typing import Any, Dict, Optional
+
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
-from agents.planner import planner_node
-from agents.state import AgentState
-from agents.tools import knowledge_tool, optimization_tool, simulation_tool
+from .planner import planner_node as _planner_node_impl
+from .state import AgentState
+from .tools import knowledge_tool, optimization_tool, simulation_tool
 
-load_dotenv()
+# ---------------------------------------------------------------------------
+# Tool dispatch
+# ---------------------------------------------------------------------------
 
-_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
-
-# ── System prompt del sintetizador ────────────────────────────────────────────
-_SYNTHESIZER_PROMPT = """You are a business analyst presenting results
-to a decision-maker.
-You receive raw output from an analytical tool and must present it clearly.
-
-Guidelines:
-- Lead with the key business insight or recommendation.
-- Include the most important numbers
-    (expected profit, optimal price, risk level).
-- Explain what the result means for the business decision,
-    not just what the numbers are.
-- If the result is an error, explain what went wrong in plain language.
-- Be concise: 3-5 sentences maximum.
-- Use business language, not technical jargon."""
+_TOOLS: Dict[str, Any] = {
+    "optimization": optimization_tool,
+    "simulation": simulation_tool,
+    "knowledge": knowledge_tool,
+}
 
 
-# ── NODOS ─────────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Node definitions
+# ---------------------------------------------------------------------------
 
 
-def tool_node(state: AgentState) -> dict:
+def planner_node(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
     """
-    Ejecuta la herramienta seleccionada por el planner.
-    Captura excepciones y las propaga al estado en lugar de romper el grafo.
+    Calls the LLM planner (structured output) and records timing via the observer.
+    Returns: {action, reasoning}
     """
-    action = state.get("action", "knowledge")
-    query = state["query"]
+    obs = _get_observer(config)
 
-    try:
-        if action == "optimization":
-            raw = optimization_tool(query)
-        elif action == "simulation":
-            raw = simulation_tool(query)
-        else:
-            raw = knowledge_tool(query)
-        return {"raw_result": raw}
+    t0 = time.perf_counter()
+    result = _planner_node_impl(state)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
 
-    except Exception as exc:
-        error_msg = (
-            f"Tool '{action}' raised an error: {type(exc).__name__}: {exc}. "
-            "Check that the ML model and knowledge index are built."
+    if obs:
+        obs.record_planner(
+            action=result.get("action", "knowledge"),
+            reasoning=result.get("reasoning", ""),
+            latency_ms=elapsed_ms,
         )
-        return {"raw_result": error_msg}
+    return result
 
 
-def synthesizer_node(state: AgentState) -> dict:
+def tool_node(state: AgentState, config: Optional[RunnableConfig] = None) -> Dict:
     """
-    Usa el LLM para transformar el resultado crudo de la tool
-    en una respuesta de negocio estructurada y en lenguaje natural.
-
-    Este nodo cierra el ciclo: el LLM no computa, pero sí interpreta y comunica.
+    Executes the tool selected by the planner.
+    Wraps execution in try/except so errors surface in the state
+    rather than crashing the graph.
+    Returns: {raw_result}
     """
-    query = state["query"]
-    raw_result = state.get("raw_result", "No result available.")
+    obs = _get_observer(config)
+    action = state.get("action", "knowledge")
+    tool_fn = _TOOLS.get(action, knowledge_tool)
 
-    messages = [
-        {"role": "system", "content": _SYNTHESIZER_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"The user asked: {query}\n\nAnalytical tool output:\n{raw_result}"
-            ),
-        },
-    ]
+    t0 = time.perf_counter()
+    raw_result: Optional[Dict] = None
+    error: Optional[str] = None
 
     try:
-        response = _llm.invoke(messages)
-        return {"answer": response.content}
-    except Exception as exc:
-        return {"answer": f"Could not generate response: {exc}"}
+        raw_result = tool_fn(state)
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        raw_result = {"error": error}
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    if obs:
+        obs.record_tool(
+            tool_name=action,
+            result=raw_result,
+            latency_ms=elapsed_ms,
+            error=error,
+        )
+    return {"raw_result": raw_result}
 
 
-# ── GRAFO ─────────────────────────────────────────────────────────────────────
-
-
-def build_graph():
+def synthesizer_node(
+    state: AgentState,
+    config: Optional[RunnableConfig] = None,
+) -> Dict:
     """
-    Construye y compila el grafo LangGraph del agente.
-
-    Flujo: planner → tool → synthesizer → END
+    Uses the LLM to convert the raw tool output into a business-oriented
+    natural-language answer.
+    Returns: {answer}
     """
-    graph = StateGraph(AgentState)
+    from langchain_openai import ChatOpenAI
 
-    graph.add_node("planner", planner_node)
-    graph.add_node("tool", tool_node)
-    graph.add_node("synthesizer", synthesizer_node)
+    obs = _get_observer(config)
+    query = state.get("query", "")
+    action = state.get("action", "unknown")
+    raw = state.get("raw_result") or {}
 
-    graph.set_entry_point("planner")
-    graph.add_edge("planner", "tool")
-    graph.add_edge("tool", "synthesizer")
-    graph.add_edge("synthesizer", END)
+    # Build a focused prompt from the raw result
+    raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
+    prompt = (
+        "You are a business intelligence assistant.\n\n"
+        f"The user asked: {query}\n\n"
+        f"The {action} tool returned:\n{raw_text}\n\n"
+        "Provide a clear, concise business interpretation:\n"
+        "- What do the numbers mean?\n"
+        "- What action should the decision-maker take?\n"
+        "- What risks or caveats are relevant?\n"
+        "Answer in 3-5 sentences. Be specific and quantitative."
+    )
 
-    return graph.compile()
+    t0 = time.perf_counter()
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    try:
+        response = llm.invoke(prompt)
+        answer = response.content.strip()
+    except Exception as exc:  # noqa: BLE001
+        answer = f"[Synthesizer error: {exc}]\n\nRaw result:\n{raw_text}"
+
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    if obs:
+        obs.record_synthesizer(answer=answer, latency_ms=elapsed_ms)
+
+    return {"answer": answer}
+
+
+# ---------------------------------------------------------------------------
+# Graph factory
+# ---------------------------------------------------------------------------
+
+
+def build_graph() -> StateGraph:
+    """
+    Build and compile the 3-node LangGraph workflow.
+
+    Flow:
+        planner_node → tool_node → synthesizer_node → END
+    """
+    builder = StateGraph(AgentState)
+
+    builder.add_node("planner", planner_node)
+    builder.add_node("tool", tool_node)
+    builder.add_node("synthesizer", synthesizer_node)
+
+    builder.set_entry_point("planner")
+    builder.add_edge("planner", "tool")
+    builder.add_edge("tool", "synthesizer")
+    builder.add_edge("synthesizer", END)
+
+    return builder.compile()
+
+
+# ---------------------------------------------------------------------------
+# Private
+# ---------------------------------------------------------------------------
+
+
+def _get_observer(config: Optional[RunnableConfig]):
+    """Extract the AgentObserver from the LangGraph configurable dict (if present)."""
+    if config is None:
+        return None
+    return config.get("configurable", {}).get("observer")

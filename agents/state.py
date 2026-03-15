@@ -1,35 +1,29 @@
 """
-agents/state.py  ← REESCRITO (archivo anterior tenía contenido incorrecto)
-──────────────────────────────────────────────────────────────────────────
-Define el estado tipado del agente LangGraph.
+agents/state.py
+---------------
+AgentState TypedDict – the shared mutable state passed between LangGraph nodes.
 
-AgentState es el contrato entre todos los nodos del grafo:
-  - planner_node  escribe: action, reasoning
-  - tool_node     escribe: raw_result
-  - synthesizer_node escribe: answer
-  - Todos leen:   query
-
-El uso de TypedDict con campos Optional garantiza que los nodos puedan
-devolver actualizaciones parciales del estado sin romper el contrato.
+Fields
+------
+  query      (str)            – user's original question
+  action     (str | None)     – tool selected by the planner
+  reasoning  (str | None)     – planner's explanation of its choice
+  raw_result (dict | None)    – raw output from the analytical tool
+  answer     (str | None)     – synthesized natural-language response
+  run_id     (str | None)     – observability correlation ID (set by app.py)
 """
 
-from typing import Optional
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
 
 from typing_extensions import TypedDict
 
 
-class AgentState(TypedDict):
-    """Estado completo del agente a lo largo de la ejecución del grafo."""
-
-    # ── Input ─────────────────────────────────────────────────────────────────
-    query: str  # Pregunta original del usuario
-
-    # ── Planner output ────────────────────────────────────────────────────────
-    action: Optional[str]  # Herramienta seleccionada: optimization|simulation|knowledge
-    reasoning: Optional[str]  # Razonamiento del planner (para trazabilidad)
-
-    # ── Tool output ───────────────────────────────────────────────────────────
-    raw_result: Optional[str]  # Resultado crudo de la herramienta ejecutada
-
-    # ── Synthesizer output ────────────────────────────────────────────────────
-    answer: Optional[str]  # Respuesta final en lenguaje natural
+class AgentState(TypedDict, total=False):
+    query: str
+    action: Optional[str]
+    reasoning: Optional[str]
+    raw_result: Optional[Dict[str, Any]]
+    answer: Optional[str]
+    run_id: Optional[str]  # correlation ID for the observer

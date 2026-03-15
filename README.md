@@ -212,6 +212,7 @@ flowchart LR
 ```
 
 `SystemModel.evaluate()` performs a **topological traversal** of the DAG:
+
 1. Initialises decision nodes with input values
 2. For each node in topological order: computes via ML model (demand) or registered formula (revenue, cost, profit)
 3. Returns a complete dict of all variable values
@@ -226,16 +227,16 @@ The graph structure is loaded from the spec — adding a new causal variable req
 
 Output statistics:
 
-| Field | Description |
-|---|---|
-| `expected_profit` | Mean profit across all runs |
-| `profit_std` | Standard deviation — spread of outcomes |
-| `profit_p10` | 10th percentile — pessimistic scenario |
-| `profit_p90` | 10th percentile — optimistic scenario |
-| `expected_demand` | Mean demand across all runs |
-| `demand_std` | Demand variability |
-| `downside_risk_pct` | % of runs where profit < 0 |
-| `n_runs` | Number of simulations executed |
+| Field               | Description                             |
+| ------------------- | --------------------------------------- |
+| `expected_profit`   | Mean profit across all runs             |
+| `profit_std`        | Standard deviation — spread of outcomes |
+| `profit_p10`        | 10th percentile — pessimistic scenario  |
+| `profit_p90`        | 10th percentile — optimistic scenario   |
+| `expected_demand`   | Mean demand across all runs             |
+| `demand_std`        | Demand variability                      |
+| `downside_risk_pct` | % of runs where profit < 0              |
+| `n_runs`            | Number of simulations executed          |
 
 ---
 
@@ -251,14 +252,14 @@ Marketing spend is held fixed at the value declared in `spec.optimization.fixed_
 
 A FAISS vector database indexes **20 domain documents** across 6 categories:
 
-| Category | Content |
-|---|---|
-| `business_model` | Business overview, decision variables, constraints |
-| `causal_model` | Demand function, revenue, cost, profit relationships |
-| `ml_model` | RandomForest description, uncertainty interpretation |
-| `simulation` | Monte Carlo methodology, output interpretation, risk metrics |
-| `optimization` | Grid search approach, optimal price interpretation |
-| `interpretation` | Price elasticity, marketing ROI, decision guidance |
+| Category         | Content                                                      |
+| ---------------- | ------------------------------------------------------------ |
+| `business_model` | Business overview, decision variables, constraints           |
+| `causal_model`   | Demand function, revenue, cost, profit relationships         |
+| `ml_model`       | RandomForest description, uncertainty interpretation         |
+| `simulation`     | Monte Carlo methodology, output interpretation, risk metrics |
+| `optimization`   | Grid search approach, optimal price interpretation           |
+| `interpretation` | Price elasticity, marketing ROI, decision guidance           |
 
 The vectorstore is loaded **lazily** (on first query, not at import time). If the index does not exist, an explicit error is raised with instructions.
 
@@ -276,13 +277,13 @@ The agent is implemented as a **3-node LangGraph graph**:
 
 **`AgentState`** TypedDict fields:
 
-| Field | Set by | Description |
-|---|---|---|
-| `query` | Input | User's original question |
-| `action` | Planner | Selected tool name |
-| `reasoning` | Planner | LLM's reasoning for tool selection |
-| `raw_result` | Tool | Raw output from the analytical tool |
-| `answer` | Synthesizer | Final natural language response |
+| Field        | Set by      | Description                         |
+| ------------ | ----------- | ----------------------------------- |
+| `query`      | Input       | User's original question            |
+| `action`     | Planner     | Selected tool name                  |
+| `reasoning`  | Planner     | LLM's reasoning for tool selection  |
+| `raw_result` | Tool        | Raw output from the analytical tool |
+| `answer`     | Synthesizer | Final natural language response     |
 
 ---
 
@@ -314,9 +315,19 @@ decision-intelligence-agent/
 │   ├── tools.py                    # Tool wrappers (spec-driven defaults)
 │   ├── planner.py                  # LLM planner with structured output
 │   └── workflow.py                 # LangGraph: planner → tool → synthesizer
+├── evaluation/
+│   ├── __init__.py
+│   ├── observer.py                 # AgentObserver: run lifecycle, JSONL logging, confidence scoring
+│   ├── metrics.py                  # load_runs / compute_metrics / print_report
+│   └── dashboard.py                # HTML dashboard generator + CLI entry point
 ├── config/
 │   └── settings.py                 # Thin adapter over spec (backward-compatible)
-├── app.py                          # REPL entry point with error handling
+├── logs/                           # Created at runtime
+│   ├── agent_runs.jsonl            # Append-only run log (one JSON per line)
+│   ├── agent.log                   # Verbose debug log
+│   └── dashboard.html              # Generated by evaluation/dashboard.py
+├── app.py                          # REPL entry point with observability
+├── .env.example                    # Environment variable template
 ├── requirements.txt
 └── README.md
 ```
@@ -416,6 +427,102 @@ Goodbye.
 
 ---
 
+---
+
+## Observability & Evaluation Layer (`evaluation/`)
+
+> Every agent run is captured, measured and visualisable.
+
+### Architecture
+
+```
+app.py
+  └─ AgentObserver.start_run(query)          ← opens a RunRecord
+       ├─ planner_node  → obs.record_planner()
+       ├─ tool_node     → obs.record_tool()
+       └─ synthesizer_node → obs.record_synthesizer()
+  └─ AgentObserver.end_run()                 ← writes to JSONL
+
+logs/
+  ├─ agent_runs.jsonl   ← one JSON record per run (append-only)
+  ├─ agent.log          ← verbose debug log
+  └─ dashboard.html     ← generated on demand
+```
+
+### Components
+
+| Module                    | Responsibility                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------- |
+| `evaluation/observer.py`  | `AgentObserver` – wraps each run, records timing, derives confidence score, writes JSONL    |
+| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` – aggregates stats from JSONL; `print_report` – CLI summary |
+| `evaluation/dashboard.py` | `generate_html_dashboard` – self-contained HTML with Chart.js; CLI entry point              |
+
+### RunRecord fields
+
+| Field                    | Source           | Description                                                                                     |
+| ------------------------ | ---------------- | ----------------------------------------------------------------------------------------------- |
+| `run_id`                 | observer         | Unique ID per query (12-char hex)                                                               |
+| `session_id`             | observer         | Groups runs within one `python app.py` session                                                  |
+| `timestamp`              | observer         | ISO-8601 UTC                                                                                    |
+| `query`                  | input            | Raw user question                                                                               |
+| `action`                 | planner          | `optimization` / `simulation` / `knowledge`                                                     |
+| `reasoning`              | planner          | LLM's explanation of tool choice                                                                |
+| `planner_latency_ms`     | planner node     | Time from entry to structured output                                                            |
+| `tool_latency_ms`        | tool node        | Time to execute the analytical tool                                                             |
+| `synthesizer_latency_ms` | synthesizer node | Time for natural-language response                                                              |
+| `total_latency_ms`       | observer         | End-to-end wall time                                                                            |
+| `confidence_score`       | observer         | Derived: `1 – downside_risk_pct/100` for Monte Carlo, `1.0/0.3` for optimization, `0.9` for RAG |
+| `raw_result_keys`        | tool node        | Dict keys returned by the tool                                                                  |
+| `success`                | observer         | `false` if any node raised an exception                                                         |
+| `error`                  | observer         | Exception message if `success=false`                                                            |
+| `answer_length`          | synthesizer      | Character count of the final answer                                                             |
+
+### LangSmith integration
+
+Set these variables in `.env` to enable automatic tracing of every LangGraph invocation:
+
+```env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+LANGCHAIN_API_KEY=ls__your_key
+LANGCHAIN_PROJECT=decision-intelligence-agent
+```
+
+`AgentObserver.langsmith_config()` injects `run_name`, `tags` and `metadata` so
+each run appears named and tagged in the LangSmith UI. No code changes required —
+tracing activates automatically when the env var is present.
+
+### View metrics
+
+**CLI report** (prints to terminal):
+
+```bash
+python -m evaluation.dashboard
+```
+
+**HTML dashboard** (opens in browser):
+
+```bash
+python -m evaluation.dashboard --out logs/dashboard.html
+# then open logs/dashboard.html in your browser
+```
+
+**Inline (from the REPL)**:
+
+```
+Ask a business question: dashboard
+```
+
+The dashboard includes:
+
+- KPI cards: total runs, success rate, avg latency, avg confidence
+- Tool distribution doughnut chart
+- Latency breakdown bar chart (planner / tool / synthesizer)
+- Recent runs table with per-run confidence bars
+- Error log (if any failures occurred)
+
+---
+
 ## Adapting to a New Domain
 
 The spec-driven architecture makes domain adaptation straightforward. To model a different business scenario:
@@ -431,12 +538,15 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 
 ## Key Design Decisions
 
-| Decision | Rationale |
-|---|---|
-| Spec-driven YAML over hardcoded parameters | Domain model is explicit, auditable, and changeable without touching code |
-| LLM selects tools via structured output (Pydantic) | Eliminates fragile string parsing; tool selection is always a valid typed value |
-| LLM orchestrates, does not compute | Computations are deterministic and testable; LLM adds language understanding and synthesis |
-| DAG-driven topological evaluation | Adding new causal variables requires only formula registration, not refactoring `evaluate()` |
-| Lazy FAISS loading | Import never fails due to missing index; failure is explicit and informative |
-| Synthesizer node separate from tool node | Raw analytical output and natural language presentation are decoupled concerns |
-| Monte Carlo over point estimates | Decisions are evaluated under uncertainty; risk (downside_risk_pct) is a first-class output |
+| Decision                                           | Rationale                                                                                                           |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Spec-driven YAML over hardcoded parameters         | Domain model is explicit, auditable, and changeable without touching code                                           |
+| LLM selects tools via structured output (Pydantic) | Eliminates fragile string parsing; tool selection is always a valid typed value                                     |
+| LLM orchestrates, does not compute                 | Computations are deterministic and testable; LLM adds language understanding and synthesis                          |
+| DAG-driven topological evaluation                  | Adding new causal variables requires only formula registration, not refactoring `evaluate()`                        |
+| Lazy FAISS loading                                 | Import never fails due to missing index; failure is explicit and informative                                        |
+| Synthesizer node separate from tool node           | Raw analytical output and natural language presentation are decoupled concerns                                      |
+| Monte Carlo over point estimates                   | Decisions are evaluated under uncertainty; risk (downside_risk_pct) is a first-class output                         |
+| JSONL observability log                            | Every run is persisted as a structured record; metrics and dashboards are derived offline without affecting runtime |
+| Confidence score derived from tool output          | A single 0-1 score makes run quality comparable across tool types without requiring LLM self-evaluation             |
+| Observer injected via LangGraph configurable       | Observability is decoupled from business logic; nodes remain testable in isolation without an observer              |

@@ -4,4 +4,4 @@ __pycache__/
 .env
 *.pkl
 *.index
-.DS_Store
+.DS_Storelogs/
