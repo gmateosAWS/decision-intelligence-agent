@@ -1,19 +1,10 @@
 """
-memory/checkpointer.py
-----------------------
-Singleton SqliteSaver for LangGraph persistent checkpointing.
-
-The checkpointer stores the full LangGraph state after every node so
-that a conversation thread can be resumed from any point.
-
-SQLite file location: data/checkpoints.db  (auto-created on first use)
-
-Additional agent_sessions table tracks:
-    session_id  TEXT PRIMARY KEY
-    title       TEXT     – first user query (trimmed to 60 chars)
-    created_at  TEXT     – ISO timestamp
-    last_active TEXT     – ISO timestamp updated on every turn
-    turn_count  INTEGER  – incremented on every turn
+memory/checkpointer.py  – FIXED (register_turn simplificado)
+-------------------------------------------------------------
+Cambio: eliminada la bifurcación if/else idéntica en register_turn().
+Ambas ramas hacían exactamente el mismo UPSERT SQL, por lo que la
+condición `is_new` no tenía efecto real. El parámetro se mantiene en
+la firma para compatibilidad hacia atrás (app.py lo pasa).
 """
 
 from __future__ import annotations
@@ -58,42 +49,32 @@ def register_turn(
     session_id: str,
     query: str,
     *,
-    is_new: bool = False,
+    is_new: bool = False,  # noqa: ARG001  kept for API compatibility
 ) -> None:
     """
     Upsert a row in agent_sessions for *session_id*.
 
-    If *is_new* is True the row is inserted with title = first 60 chars
-    of *query*.  Otherwise the existing row's last_active and turn_count
-    are updated.
+    On first insert the title is set to the first 60 chars of *query*.
+    Subsequent calls (same session_id) increment turn_count and update
+    last_active; the title is preserved from the first insert.
+
+    Note: `is_new` is accepted but has no effect – the UPSERT handles
+    both cases correctly via ON CONFLICT.
     """
     now = _utcnow()
     conn = sqlite3.connect(str(_DB_PATH))
     try:
-        if is_new:
-            conn.execute(
-                """
-                INSERT INTO agent_sessions
-                    (session_id, title, created_at, last_active, turn_count)
-                VALUES (?, ?, ?, ?, 1)
-                ON CONFLICT(session_id) DO UPDATE SET
-                    last_active = excluded.last_active,
-                    turn_count  = turn_count + 1
-                """,
-                (session_id, query[:60], now, now),
-            )
-        else:
-            conn.execute(
-                """
-                INSERT INTO agent_sessions
-                    (session_id, title, created_at, last_active, turn_count)
-                VALUES (?, ?, ?, ?, 1)
-                ON CONFLICT(session_id) DO UPDATE SET
-                    last_active = excluded.last_active,
-                    turn_count  = turn_count + 1
-                """,
-                (session_id, query[:60], now, now),
-            )
+        conn.execute(
+            """
+            INSERT INTO agent_sessions
+                (session_id, title, created_at, last_active, turn_count)
+            VALUES (?, ?, ?, ?, 1)
+            ON CONFLICT(session_id) DO UPDATE SET
+                last_active = excluded.last_active,
+                turn_count  = turn_count + 1
+            """,
+            (session_id, query[:60], now, now),
+        )
         conn.commit()
     finally:
         conn.close()
