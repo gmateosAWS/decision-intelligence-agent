@@ -40,7 +40,8 @@ def get_checkpointer() -> SqliteSaver:
     global _checkpointer  # noqa: PLW0603
     if _checkpointer is None:
         _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _checkpointer = SqliteSaver.from_conn_string(str(_DB_PATH))
+        conn = sqlite3.connect(str(_DB_PATH), check_same_thread=False)
+        _checkpointer = SqliteSaver(conn)
         _ensure_sessions_table()
     return _checkpointer
 
