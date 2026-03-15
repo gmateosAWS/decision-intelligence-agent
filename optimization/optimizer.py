@@ -14,6 +14,7 @@ def optimize_price(system_model):
 
         results.append(r)
 
-    best = max(results, key=lambda x: x["expected_profit"])
+    best = max(results, key=lambda r: r["expected_profit"])
 
-    return best
+    # cast a tipos Python nativos
+    return {k: float(v) if hasattr(v, "item") else v for k, v in best.items()}

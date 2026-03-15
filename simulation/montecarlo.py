@@ -69,8 +69,8 @@ def monte_carlo(
     downside_risk_pct = float(np.mean(profits < 0) * 100)
 
     return {
-        "price": price,
-        "marketing": marketing,
+        "price": float(price),
+        "marketing": float(marketing),
         "expected_profit": float(np.mean(profits)),
         "profit_std": float(np.std(profits)),
         "profit_p10": float(np.percentile(profits, 10)),
