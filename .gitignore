@@ -4,5 +4,6 @@ __pycache__/
 .env
 *.pkl
 *.index
-.DS_Storelogs/
+.DS_Store
+logs/
 data/
