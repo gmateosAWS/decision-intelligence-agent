@@ -6,4 +6,5 @@ __pycache__/
 *.index
 .DS_Store
 logs/
-data/
+data/*
+!data/*.py
