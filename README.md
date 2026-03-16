@@ -701,7 +701,7 @@ observer.end_run() → escribe logs/agent_runs.jsonl
 
 ---
 
-python --version### Ejemplo de sesión multi-turno
+### Ejemplo de sesión multi-turno
 
 ```
 $ python app.py
