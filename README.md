@@ -76,15 +76,15 @@ The causal DAG is not decorative. The `SystemModel.evaluate()` method propagates
 ```mermaid
 flowchart TD
     User[User]
-    Agent[LangGraph Agent\nplanner · tool · synthesizer]
-    Spec[Organizational Spec\nspec/organizational_model.yaml]
+    Agent["LangGraph Agent<br/>planner · tool · synthesizer"]
+    Spec["Organizational Spec<br/>spec/organizational_model.yaml"]
     SimTool[Simulation Tool]
     OptTool[Optimization Tool]
     KnowTool[RAG Knowledge Tool]
     SimEngine[Monte Carlo Engine]
-    VectorDB[Vector Database\n20 documents · 6 categories]
-    SystemModel[System Model\ncausal DAG traversal]
-    MLModel[RandomForest\ndemand estimator]
+    VectorDB["Vector Database<br/>20 documents · 6 categories"]
+    SystemModel["System Model<br/>causal DAG traversal"]
+    MLModel["RandomForest<br/>demand estimator"]
     Data[Historical Sales Data]
 
     User --> Agent
@@ -112,11 +112,11 @@ flowchart TD
 ```mermaid
 flowchart LR
     User[User Query]
-    Planner["Planner\n(LLM · structured output)"]
+    Planner["Planner<br/>(LLM · structured output)"]
     Opt[Optimization Tool]
     Sim[Simulation Tool]
     Know[Knowledge RAG]
-    Synth["Synthesizer\n(LLM · natural language)"]
+    Synth["Synthesizer<br/>(LLM · natural language)"]
     Answer[Answer]
 
     User --> Planner
