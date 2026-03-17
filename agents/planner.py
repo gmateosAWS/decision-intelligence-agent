@@ -46,7 +46,7 @@ class ToolSelection(BaseModel):
     params: Dict[str, float] = {}  # nombre_variable -> valor extraído de la query
 
 
-_llm_structured = _llm.with_structured_output(ToolSelection)
+_llm_structured = _llm.with_structured_output(ToolSelection, method="function_calling")
 
 _HISTORY_WINDOW = 3
 
