@@ -38,16 +38,26 @@ load_dotenv()
 _llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
+class DecisionParam(BaseModel):
+    """Un par variable-valor extraído de la query del usuario."""
+
+    variable: str  # nombre exacto de la variable del spec
+    value: float  # valor numérico mencionado
+
+
 class ToolSelection(BaseModel):
     """Selección de herramienta con razonamiento y parámetros extraídos."""
 
     tool: Literal["optimization", "simulation", "knowledge"]
     reasoning: str
-    params: Dict[str, float] = {}  # nombre_variable -> valor extraído de la query
+    params: List[DecisionParam] = []  # vacío si no se mencionan valores
 
 
-_llm_structured = _llm.with_structured_output(ToolSelection, method="function_calling")
+# Volver al modo por defecto (json_schema estricto, compatible con List[objeto])
+_llm_structured = _llm.with_structured_output(ToolSelection)
 
+
+# Numero de turnos anteriores a incluir del historial (ajustable según necesidades)
 _HISTORY_WINDOW = 3
 
 
@@ -121,13 +131,13 @@ def planner_node(state: AgentState) -> Dict:
         return {
             "action": selection.tool,
             "reasoning": selection.reasoning,
-            "params": selection.params,
+            "params": {p.variable: p.value for p in selection.params},
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return {
             "action": "knowledge",
             "reasoning": (
-                f"Structured output failed ({exc}). Defaulting to knowledge tool."
+                f"Structured output failed ({exc}). " "Defaulting to knowledge tool."
             ),
             "params": {},
         }
