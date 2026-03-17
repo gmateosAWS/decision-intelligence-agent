@@ -34,6 +34,9 @@ class ToolSelection(BaseModel):
     tool: Literal["optimization", "simulation", "knowledge"]
     reasoning: str
 
+    price: float | None = None  # ← extraído de la query si se menciona
+    marketing: float | None = None  # ← extraído de la query si se menciona
+
 
 _llm_structured = _llm.with_structured_output(ToolSelection)
 
@@ -56,6 +59,10 @@ You have three tools available:
    what would profit be at price Y? what is the expected outcome?
    The tool evaluates a specific scenario under uncertainty
    using Monte Carlo simulation.
+   If the user mentions a specific price (e.g. "at €30", "if price is 28",
+   "simulate €35"), extract that value into the `price` field.
+   If they mention a marketing spend, extract it into `marketing`.
+   Otherwise leave both as null and the system will use spec defaults.
 
 3. KNOWLEDGE
    Use when the user asks: how does the model work? what is demand
@@ -102,11 +109,15 @@ def planner_node(state: AgentState) -> Dict:
         return {
             "action": selection.tool,
             "reasoning": selection.reasoning,
+            "price": selection.price,
+            "marketing": selection.marketing,
         }
     except Exception as exc:  # noqa: BLE001
         return {
             "action": "knowledge",
             "reasoning": (
-                f"Structured output failed ({exc}). " "Defaulting to knowledge tool."
+                f"Structured output failed ({exc}). " "Defaulting to knowledge tool.",
             ),
+            "price": None,
+            "marketing": None,
         }

@@ -53,15 +53,15 @@ def simulation_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     Returns the same dict structure as optimization_tool.
     """
     spec = get_spec()
-    price_var = spec.get_decision_var("price")
-    default_price = price_var.default
-    default_marketing = spec.fixed_variables.get(
+
+    # Prioridad: parámetro extraído por el planner > default del spec
+    price = state.get("price") or spec.get_decision_var("price").default
+    marketing = state.get("marketing") or spec.fixed_variables.get(
         "marketing_spend",
         spec.get_decision_var("marketing_spend").default,
     )
-    result: Dict[str, Any] = run_scenario(
-        system_model, default_price, default_marketing
-    )
+
+    result: Dict[str, Any] = run_scenario(system_model, price, marketing)
     return result
 
 
