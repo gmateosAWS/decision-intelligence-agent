@@ -39,12 +39,12 @@ load_dotenv()
 
 _BANNER = """
 ╔══════════════════════════════════════════════════════════════╗
-║      Decision Intelligence Agent  ·  v3 (memory)           ║
+║      Decision Intelligence Agent  ·  v3 (memory)             ║
 ╠══════════════════════════════════════════════════════════════╣
-║  Ask business questions about pricing and marketing.        ║
-║  Commands:                                                  ║
-║    session new | list | resume <id|#> | info | delete <id>  ║
-║    dashboard  ·  exit                                       ║
+║  Ask business questions about pricing and marketing.         ║
+║  Commands:                                                   ║
+║    session new | list | resume <id|#> | info | delete <id>   ║
+║    dashboard  ·  exit                                        ║
 ╚══════════════════════════════════════════════════════════════╝
 """
 

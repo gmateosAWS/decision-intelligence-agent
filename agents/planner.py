@@ -9,6 +9,17 @@ Cambios respecto a Mejora 2:
     Esto permite que el LLM resuelva referencias como
     "¿y si el precio fuese 28?" cuando la pregunta anterior
     era sobre optimización de precios.
+
+  – Mejora 5 (params genérico)
+-------------------------------------------------
+Cambios vs Mejora 4:
+  • ToolSelection usa `params: Dict[str, float]` en lugar de campos
+    fijos `price` y `marketing`. El schema es agnóstico al dominio.
+  • El system prompt se genera dinámicamente desde el spec, listando
+    las variables de decisión por nombre. Cambiar el YAML actualiza
+    automáticamente lo que el planner sabe extraer.
+  • planner_node devuelve {"action", "reasoning", "params"} —
+    sin nombres de campo de dominio en el contrato de estado.
 """
 
 from __future__ import annotations
@@ -20,78 +31,80 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
 from agents.state import AgentState
+from spec.spec_loader import get_spec
 
 load_dotenv()
 
-# ── LLM ─────────────────────────────────────────────────────────────────────
 _llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
 
-# ── Structured output schema ─────────────────────────────────────────────────
 class ToolSelection(BaseModel):
-    """Selección de herramienta con razonamiento explícito."""
+    """Selección de herramienta con razonamiento y parámetros extraídos."""
 
     tool: Literal["optimization", "simulation", "knowledge"]
     reasoning: str
-
-    price: float | None = None  # ← extraído de la query si se menciona
-    marketing: float | None = None  # ← extraído de la query si se menciona
+    params: Dict[str, float] = {}  # nombre_variable -> valor extraído de la query
 
 
 _llm_structured = _llm.with_structured_output(ToolSelection)
 
-# ── System prompt ─────────────────────────────────────────────────────────────
-_SYSTEM_PROMPT = """You are the planner of a Decision Intelligence system
-for a retail business.
-The system models how price and marketing investment affect demand,
-revenue, cost and profit.
-
-You have three tools available:
-
-1. OPTIMIZATION
-   Use when the user asks: what is the best price? what price maximises
-   profit? what decision should I make? find the optimal...
-   The tool searches the full price range and returns the price
-   that maximises expected profit.
-
-2. SIMULATION
-   Use when the user asks: what happens if price is X? simulate scenario...
-   what would profit be at price Y? what is the expected outcome?
-   The tool evaluates a specific scenario under uncertainty
-   using Monte Carlo simulation.
-   If the user mentions a specific price (e.g. "at €30", "if price is 28",
-   "simulate €35"), extract that value into the `price` field.
-   If they mention a marketing spend, extract it into `marketing`.
-   Otherwise leave both as null and the system will use spec defaults.
-
-3. KNOWLEDGE
-   Use when the user asks: how does the model work? what is demand
-   elasticity? explain the methodology, what does Monte Carlo mean?
-   what are the assumptions?
-   The tool retrieves relevant explanations from the system
-   knowledge base.
-
-Select the single most appropriate tool for the user's query.
-Always provide a brief reasoning for your choice."""
-
-# Number of previous turns to include in context
 _HISTORY_WINDOW = 3
+
+
+def _build_system_prompt() -> str:
+    """Construye el system prompt dinámicamente desde el spec."""
+    spec = get_spec()
+    vars_desc = "\n".join(
+        f"   - {v.name}: {v.description} ({v.unit}, "
+        f"rango {v.bounds_min}–{v.bounds_max}, defecto {v.default})"
+        for v in spec.decision_variables
+    )
+    return (
+        f"You are the planner of a Decision Intelligence system\n"
+        f"for a {spec.domain_name} business.\n"
+        f"The system models how decision variables affect demand,\n"
+        f"revenue, cost and profit.\n\n"
+        f"You have three tools available:\n\n"
+        f"1. OPTIMIZATION\n"
+        f"   Use when the user asks: what is the best price? what price maximises\n"
+        f"   profit? what decision should I make? find the optimal...\n"
+        f"   The tool searches the full decision variable range and returns the\n"
+        f"   combination that maximises expected profit.\n\n"
+        f"2. SIMULATION\n"
+        f"   Use when the user asks: what happens if X is Y? simulate scenario...\n"
+        f"   what would profit be at value Z? what is the expected outcome?\n"
+        f"   The tool evaluates a specific scenario under uncertainty\n"
+        f"   using Monte Carlo simulation.\n"
+        f"   If the user mentions specific values for decision variables, extract\n"
+        f"   them into the `params` dict using the exact variable name as key.\n"
+        f"   Decision variables available:\n"
+        f"{vars_desc}\n"
+        f"   Example: 'simulate at price 30' → params={{\"price\": 30.0}}\n"
+        f"   Leave params empty ({{}}) if no specific values are mentioned.\n\n"
+        f"3. KNOWLEDGE\n"
+        f"   Use when the user asks: how does the model work? what is demand\n"
+        f"   elasticity? explain the methodology, what does Monte Carlo mean?\n"
+        f"   The tool retrieves relevant explanations from the knowledge base.\n\n"
+        f"Select the single most appropriate tool for the user's query.\n"
+        f"Always provide a brief reasoning for your choice."
+    )
+
+
+_SYSTEM_PROMPT = _build_system_prompt()
 
 
 def planner_node(state: AgentState) -> Dict:
     """
-    Selects the best tool for the current query, optionally
-    injecting the last _HISTORY_WINDOW conversation turns for context.
+    Selects the best tool for the current query and extracts any
+    decision-variable values mentioned in the query into `params`.
 
-    Returns: {action, reasoning}
+    Returns: {action, reasoning, params}
     """
     query = state["query"]
     history: List[Dict[str, str]] = state.get("history") or []
 
-    # Build message list: system + recent history + current query
     messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
 
-    # Inject the most recent turns (oldest first)
     recent = history[-_HISTORY_WINDOW:]
     for turn in recent:
         user_q = turn.get("query", "")
@@ -101,7 +114,6 @@ def planner_node(state: AgentState) -> Dict:
         if assistant_a:
             messages.append({"role": "assistant", "content": assistant_a})
 
-    # Current user message
     messages.append({"role": "user", "content": query})
 
     try:
@@ -109,15 +121,13 @@ def planner_node(state: AgentState) -> Dict:
         return {
             "action": selection.tool,
             "reasoning": selection.reasoning,
-            "price": selection.price,
-            "marketing": selection.marketing,
+            "params": selection.params,
         }
     except Exception as exc:  # noqa: BLE001
         return {
             "action": "knowledge",
             "reasoning": (
-                f"Structured output failed ({exc}). " "Defaulting to knowledge tool.",
+                f"Structured output failed ({exc}). Defaulting to knowledge tool."
             ),
-            "price": None,
-            "marketing": None,
+            "params": {},
         }

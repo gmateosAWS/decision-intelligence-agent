@@ -1,6 +1,8 @@
 """
-agents/state.py  – Mejora 3
+agents/state.py
 ---------------------------
+– Mejora 3
+
 AgentState TypedDict – shared mutable state for the LangGraph nodes.
 
 Fields
@@ -16,6 +18,14 @@ Fields
   history    (List[Dict[str,str]])– accumulated (query, answer) turn pairs
                                     (uses operator.add so LangGraph appends
                                     rather than replacing the list)
+
+- Mejora 5 (params genérico)
+----------------------------
+Cambios vs Mejora 4:
+  • Eliminados los campos de dominio `price` y `marketing`.
+  • Añadido `params: Dict[str, float]` genérico — el planner lo rellena
+    con los valores de variables de decisión extraídos de la query.
+    Las tools leen de este dict y caen al default del spec si falta alguno.
 """
 
 from __future__ import annotations
@@ -30,8 +40,7 @@ class AgentState(TypedDict, total=False):
     query: str
     action: Optional[str]
     reasoning: Optional[str]
-    price: Optional[float]  # parámetro extraído por el planner
-    marketing: Optional[float]  # parámetro extraído por el planner
+    params: Dict[str, float]  # parámetros extraídos por el planner
     raw_result: Optional[Dict[str, Any]]
     answer: Optional[str]
     run_id: Optional[str]

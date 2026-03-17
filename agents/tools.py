@@ -44,25 +44,39 @@ def optimization_tool(state: Dict[str, Any]) -> Dict[str, Any]:
 
 def simulation_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Run a Monte Carlo simulation at the spec-default price and
-    marketing values and return the resulting profit distribution.
+    Run a Monte Carlo simulation using decision variable values from the
+    planner's extracted params, falling back to spec defaults for any
+    variable not mentioned in the query.
 
-    Previously used hardcoded values; now reads defaults from the
-    organizational spec (Mejora 1).
-
-    Returns the same dict structure as optimization_tool.
+    Domain coupling is intentionally confined to this function:
+    `run_scenario` still uses positional parameters (price, marketing),
+    so the mapping from generic `params` → runner signature lives here
+    as a single adapter point.
     """
     spec = get_spec()
+    extracted: Dict[str, float] = state.get("params") or {}
 
-    # Prioridad: parámetro extraído por el planner > default del spec
-    price = state.get("price") or spec.get_decision_var("price").default
-    marketing = state.get("marketing") or spec.fixed_variables.get(
+    # Build value map: extracted by planner > spec default
+    var_values: Dict[str, float] = {
+        var.name: float(extracted.get(var.name, var.default))
+        for var in spec.decision_variables
+    }
+    # Add fixed_variables from the optimization config (e.g. marketing_spend)
+    for name, val in spec.fixed_variables.items():
+        if name not in var_values:
+            var_values[name] = float(extracted.get(name, val))
+
+    # Adapter: map generic var_values → run_scenario positional params
+    price = var_values.get(
+        "price",
+        spec.get_decision_var("price").default,
+    )
+    marketing = var_values.get(
         "marketing_spend",
-        spec.get_decision_var("marketing_spend").default,
+        spec.fixed_variables.get("marketing_spend", 10_000.0),
     )
 
-    result: Dict[str, Any] = run_scenario(system_model, price, marketing)
-    return result
+    return run_scenario(system_model, price, marketing)
 
 
 def knowledge_tool(state: Dict[str, Any]) -> Dict[str, Any]:
