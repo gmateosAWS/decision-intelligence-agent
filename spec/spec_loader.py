@@ -77,6 +77,42 @@ class ConstraintSpec:
 
 
 @dataclass
+class DemandModelSpec:
+    """Coefficients of the synthetic linear demand function.
+
+    Formula:
+        demand = base_demand
+                 + price_elasticity * price
+                 + marketing_effect * marketing_spend
+                 + noise(sigma=noise_sigma)
+
+    These values are the single source of truth for both data generation
+    (generate_data.py) and any analytical validation of model predictions.
+    """
+
+    base_demand: float  # Intercept: baseline units at price=0, marketing=0
+    price_elasticity: float  # Units lost per EUR increase in price (negative)
+    marketing_effect: float  # Units gained per EUR of marketing spend
+    noise_sigma: float  # Std dev of Gaussian demand noise (units)
+
+
+@dataclass
+class DataGenerationSpec:
+    """Parameters controlling the synthetic training dataset.
+
+    All bounds here should mirror the decision variable bounds so that the
+    trained ML model interpolates (not extrapolates) at inference time.
+    """
+
+    n_samples: int
+    random_seed: int
+    price_min: float
+    price_max: float
+    marketing_min: float
+    marketing_max: float
+
+
+@dataclass
 class OrganizationalModelSpec:
     """Complete, validated representation of the organizational model spec."""
 
@@ -98,6 +134,12 @@ class OrganizationalModelSpec:
     business_parameters: Dict[str, Any]
     simulation_runs: int
     noise_std: float
+
+    # Demand model coefficients (spec-driven, used by generate_data.py)
+    demand_model: DemandModelSpec
+
+    # Data generation configuration (spec-driven, used by generate_data.py)
+    data_generation: DataGenerationSpec
 
     # Optimization
     optimization_target: str
@@ -173,7 +215,7 @@ def load_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
             )
         )
 
-    # Causal relationships → expand multi-target entries
+    # Causal relationships -> expand multi-target entries
     relationships: List[CausalRelationship] = []
     for rel in raw.get("causal_relationships", []):
         froms = rel["from"] if isinstance(rel["from"], list) else [rel["from"]]
@@ -198,6 +240,26 @@ def load_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
             )
         )
 
+    # Demand model coefficients
+    dm_raw = raw.get("demand_model", {})
+    demand_model = DemandModelSpec(
+        base_demand=float(dm_raw.get("base_demand", 120.0)),
+        price_elasticity=float(dm_raw.get("price_elasticity", -1.6)),
+        marketing_effect=float(dm_raw.get("marketing_effect", 0.0009)),
+        noise_sigma=float(dm_raw.get("noise_sigma", 5.0)),
+    )
+
+    # Data generation config
+    dg_raw = raw.get("data_generation", {})
+    data_generation = DataGenerationSpec(
+        n_samples=int(dg_raw.get("n_samples", 2000)),
+        random_seed=int(dg_raw.get("random_seed", 42)),
+        price_min=float(dg_raw.get("price_min", 10.0)),
+        price_max=float(dg_raw.get("price_max", 50.0)),
+        marketing_min=float(dg_raw.get("marketing_min", 1000.0)),
+        marketing_max=float(dg_raw.get("marketing_max", 20000.0)),
+    )
+
     sim = raw.get("simulation", {})
     opt = raw.get("optimization", {})
 
@@ -213,6 +275,8 @@ def load_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
         business_parameters=raw.get("business_parameters", {}),
         simulation_runs=int(sim.get("monte_carlo_runs", 500)),
         noise_std=float(sim.get("noise_std", 0.1)),
+        demand_model=demand_model,
+        data_generation=data_generation,
         optimization_target=opt.get("target", "profit"),
         optimization_method=opt.get("method", "grid_search"),
         optimization_decision_vars=opt.get("decision_variables", []),

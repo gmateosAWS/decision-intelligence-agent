@@ -7,30 +7,29 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 domain:
-  name: "retail_pricing"
+  name: 'retail_pricing'
   description: >
     Retail business model that captures the causal relationships between
     pricing, marketing investment, demand response, and profitability.
     Supports scenario simulation and decision optimization.
-  version: "1.1.0"
+  version: '1.2.0'
 
 # ── VARIABLES ─────────────────────────────────────────────────────────────────
 variables:
-
   # Decision variables: inputs the agent can control / optimize
   decisions:
     - name: price
-      description: "Unit sale price of the product"
-      unit: "EUR"
+      description: 'Unit sale price of the product'
+      unit: 'EUR'
       bounds:
         min: 10.0
         max: 50.0
-        steps: 60          # grid resolution for optimization
+        steps: 60 # grid resolution for optimization
       default: 25.0
 
     - name: marketing_spend
-      description: "Monthly marketing investment"
-      unit: "EUR"
+      description: 'Monthly marketing investment'
+      unit: 'EUR'
       bounds:
         min: 1000.0
         max: 50000.0
@@ -40,27 +39,27 @@ variables:
   # Intermediate variables: derived or ML-estimated, not directly controlled
   intermediate:
     - name: demand
-      description: "Units demanded per period, estimated by ML model"
-      unit: "units"
-      estimated_by: "ml_model"
-      ml_model_path: "models/demand_model.pkl"
+      description: 'Units demanded per period, estimated by ML model'
+      unit: 'units'
+      estimated_by: 'ml_model'
+      ml_model_path: 'models/demand_model.pkl'
 
     - name: revenue
-      description: "Total revenue in the period"
-      unit: "EUR"
-      formula: "price * demand"
+      description: 'Total revenue in the period'
+      unit: 'EUR'
+      formula: 'price * demand'
 
     - name: cost
-      description: "Total variable cost in the period"
-      unit: "EUR"
-      formula: "demand * unit_cost"
+      description: 'Total variable cost in the period'
+      unit: 'EUR'
+      formula: 'demand * unit_cost'
 
   # Target variables: business outcomes to track or optimize
   targets:
     - name: profit
-      description: "Net profit: revenue minus costs"
-      unit: "EUR"
-      formula: "revenue - cost"
+      description: 'Net profit: revenue minus costs'
+      unit: 'EUR'
+      formula: 'revenue - cost'
       optimize: maximize
 
 # ── CAUSAL RELATIONSHIPS ──────────────────────────────────────────────────────
@@ -70,45 +69,75 @@ causal_relationships:
   - from: [price, marketing_spend]
     to: demand
     type: ml_estimated
-    description: "Demand is a function of price and marketing, learned by ML"
+    description: 'Demand is a function of price and marketing, learned by ML'
 
   - from: [price, demand]
     to: revenue
     type: formula
-    description: "Revenue = price × demand"
+    description: 'Revenue = price x demand'
 
   - from: [demand]
     to: cost
     type: formula
-    description: "Cost = demand × unit_cost"
+    description: 'Cost = demand x unit_cost'
 
   - from: [revenue, cost]
     to: profit
     type: formula
-    description: "Profit = revenue − cost"
+    description: 'Profit = revenue - cost'
 
 # ── BUSINESS PARAMETERS ───────────────────────────────────────────────────────
 business_parameters:
-  unit_cost: 10.0          # Variable cost per unit produced/sold
+  unit_cost: 10.0 # Variable cost per unit produced/sold
+
+# ── DEMAND MODEL ──────────────────────────────────────────────────────────────
+# Coefficients of the synthetic linear demand function used to generate
+# training data and to validate analytical calculations.
+#
+# Formula:
+#   demand = base_demand
+#            + price_elasticity * price
+#            + marketing_effect * marketing_spend
+#            + noise(sigma=noise_sigma)
+#
+# Changing these values and re-running generate_data.py + train_demand_model.py
+# is all that is needed to recalibrate the model for a different market context.
+demand_model:
+  base_demand: 120.0 # Intercept: baseline units at price=0, marketing=0
+  price_elasticity: -1.6 # Units lost per EUR increase in price (must be negative)
+  marketing_effect: 0.0009 # Units gained per EUR of marketing spend
+  noise_sigma: 5.0 # Standard deviation of Gaussian demand noise (units)
+
+# ── DATA GENERATION ───────────────────────────────────────────────────────────
+# Controls the synthetic training dataset produced by data/generate_data.py.
+# price_range and marketing_range should match the decision variable bounds
+# so the trained model interpolates rather than extrapolates at inference time.
+data_generation:
+  n_samples: 2000
+  random_seed: 42
+  price_min: 10.0 # Lower bound for sampled price (matches bounds.min)
+  price_max: 50.0 # Upper bound for sampled price (matches bounds.max)
+  marketing_min: 1000.0 # Lower bound for sampled marketing spend (EUR)
+  marketing_max: 20000.0 # Upper bound for sampled marketing spend (EUR)
 
 # ── SIMULATION ────────────────────────────────────────────────────────────────
 simulation:
-  monte_carlo_runs: 500    # Number of MC samples per scenario evaluation
-  noise_std: 0.1           # Relative noise added to demand estimates
+  monte_carlo_runs: 500 # Number of MC samples per scenario evaluation
+  noise_std: 0.1 # Relative noise added to demand estimates
 
 # ── CONSTRAINTS ───────────────────────────────────────────────────────────────
 # Business constraints that valid decisions must satisfy.
 # Used for output validation in the evaluation layer.
 constraints:
-  - expression: "profit > 0"
-    description: "Business must be profitable"
-  - expression: "price > unit_cost"
-    description: "Price must exceed unit variable cost"
+  - expression: 'profit > 0'
+    description: 'Business must be profitable'
+  - expression: 'price > unit_cost'
+    description: 'Price must exceed unit variable cost'
 
 # ── OPTIMIZATION ──────────────────────────────────────────────────────────────
 optimization:
   target: profit
   method: grid_search
-  decision_variables: [price]    # Variables to optimize over
-  fixed_variables:               # Variables held constant during optimization
+  decision_variables: [price] # Variables to optimize over
+  fixed_variables: # Variables held constant during optimization
     marketing_spend: 10000.0
