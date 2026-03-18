@@ -44,15 +44,43 @@ To adapt the system to a new domain or change a business parameter: **edit the s
 variables:
   decisions:
     - name: price
-      bounds: { min: 10.0, max: 50.0 }
-  targets:
-    - name: profit
-      optimize: maximize
+      description: 'Unit sale price of the product'
+      unit: 'EUR'
+      bounds:
+        min: 10.0
+        max: 50.0
+        steps: 60 # grid resolution for optimization
+      default: 25.0
+
+    - name: marketing_spend
+      description: 'Monthly marketing investment'
+      unit: 'EUR'
+      bounds:
+        min: 1000.0
+        max: 50000.0
+        steps: 20
+      default: 10000.0
 
 causal_relationships:
   - from: [price, marketing_spend]
     to: demand
     type: ml_estimated
+    description: 'Demand is a function of price and marketing, learned by ML'
+
+  - from: [price, demand]
+    to: revenue
+    type: formula
+    description: 'Revenue = price × demand'
+
+  - from: [demand]
+    to: cost
+    type: formula
+    description: 'Cost = demand × unit_cost'
+
+  - from: [revenue, cost]
+    to: profit
+    type: formula
+    description: 'Profit = revenue − cost'
 ```
 
 ### 2 - LLM orchestrates, tools compute
@@ -111,12 +139,12 @@ flowchart TD
 
 Four incremental improvements were implemented and fully tested on top of the baseline prototype:
 
-| # | Improvement | What it solves |
-|---|---|---|
-| 1 | Spec-driven architecture | Domain model in YAML; business parameters configurable without touching code |
-| 2 | Observability layer | JSONL logging + LangSmith integration + HTML dashboard; every run is auditable |
-| 3 | Multi-turn conversational memory | SQLite checkpointing; persistent sessions with conversation history injection into LLM context |
-| 4 | Dynamic generic parameters | `params` dict in `ToolSelection`; planner prompt generated from spec; fully domain-agnostic parameter extraction |
+| #   | Improvement                      | What it solves                                                                                                   |
+| --- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 1   | Spec-driven architecture         | Domain model in YAML; business parameters configurable without touching code                                     |
+| 2   | Observability layer              | JSONL logging + LangSmith integration + HTML dashboard; every run is auditable                                   |
+| 3   | Multi-turn conversational memory | SQLite checkpointing; persistent sessions with conversation history injection into LLM context                   |
+| 4   | Dynamic generic parameters       | `params` dict in `ToolSelection`; planner prompt generated from spec; fully domain-agnostic parameter extraction |
 
 ---
 
@@ -196,18 +224,18 @@ A **RandomForest regressor** estimates the demand function from historical data:
 
 Training includes an 80/20 train/test split stratified by price quantiles. Verified performance on held-out test set:
 
-| Metric | Value |
-|---|---|
-| R2 | 0.9257 -- explains 92.6% of demand variability |
-| MAE | 4.58 units |
-| RMSE | 5.66 units |
+| Metric | Value                                          |
+| ------ | ---------------------------------------------- |
+| R2     | 0.9257 -- explains 92.6% of demand variability |
+| MAE    | 4.58 units                                     |
+| RMSE   | 5.66 units                                     |
 
 Feature importances confirm the expected causal structure:
 
-| Feature | Importance |
-|---|---|
-| price | 90.87% |
-| marketing_spend | 9.13% |
+| Feature         | Importance |
+| --------------- | ---------- |
+| price           | 90.87%     |
+| marketing_spend | 9.13%      |
 
 The trained model is persisted to `models/demand_model.pkl`.
 
@@ -259,16 +287,16 @@ The graph structure is loaded from the spec -- adding a new causal variable requ
 
 Output statistics:
 
-| Field | Description |
-|---|---|
-| `expected_profit` | Mean profit across all runs |
-| `profit_std` | Standard deviation -- spread of outcomes |
-| `profit_p10` | 10th percentile -- pessimistic scenario |
-| `profit_p90` | 90th percentile -- optimistic scenario |
-| `expected_demand` | Mean demand across all runs |
-| `demand_std` | Demand variability |
-| `downside_risk_pct` | % of runs where profit < 0 |
-| `n_runs` | Number of simulations executed |
+| Field               | Description                              |
+| ------------------- | ---------------------------------------- |
+| `expected_profit`   | Mean profit across all runs              |
+| `profit_std`        | Standard deviation -- spread of outcomes |
+| `profit_p10`        | 10th percentile -- pessimistic scenario  |
+| `profit_p90`        | 90th percentile -- optimistic scenario   |
+| `expected_demand`   | Mean demand across all runs              |
+| `demand_std`        | Demand variability                       |
+| `downside_risk_pct` | % of runs where profit < 0               |
+| `n_runs`            | Number of simulations executed           |
 
 ---
 
@@ -280,10 +308,10 @@ Marketing spend is held fixed at the value declared in `spec.optimization.fixed_
 
 Validated scenario results:
 
-| Scenario | Price | Demand | Expected Profit | Downside Risk |
-|---|---|---|---|---|
-| Default | EUR 25 | ~88 units | ~EUR 1,328 | 0% |
-| Optimized | ~EUR 48.64 | ~55 units | ~EUR 2,139 | 0% |
+| Scenario  | Price      | Demand    | Expected Profit | Downside Risk |
+| --------- | ---------- | --------- | --------------- | ------------- |
+| Default   | EUR 25     | ~88 units | ~EUR 1,328      | 0%            |
+| Optimized | ~EUR 48.64 | ~55 units | ~EUR 2,139      | 0%            |
 
 The optimum reflects the trade-off between lower volume and higher margin per unit: even though demand drops from 88 to 55 units (-38%), the margin increase from EUR 15 to EUR 38.64 per unit (+158%) more than compensates.
 
@@ -293,14 +321,14 @@ The optimum reflects the trade-off between lower volume and higher margin per un
 
 A FAISS vector database indexes **20 domain documents** across 6 categories:
 
-| Category | Content |
-|---|---|
-| `business_model` | Business overview, decision variables, constraints |
-| `causal_model` | Demand function, revenue, cost, profit relationships |
-| `ml_model` | RandomForest description, uncertainty interpretation |
-| `simulation` | Monte Carlo methodology, output interpretation, risk metrics |
-| `optimization` | Grid search approach, optimal price interpretation |
-| `interpretation` | Price elasticity, marketing ROI, decision guidance |
+| Category         | Content                                                      |
+| ---------------- | ------------------------------------------------------------ |
+| `business_model` | Business overview, decision variables, constraints           |
+| `causal_model`   | Demand function, revenue, cost, profit relationships         |
+| `ml_model`       | RandomForest description, uncertainty interpretation         |
+| `simulation`     | Monte Carlo methodology, output interpretation, risk metrics |
+| `optimization`   | Grid search approach, optimal price interpretation           |
+| `interpretation` | Price elasticity, marketing ROI, decision guidance           |
 
 The vector store is loaded **lazily** (on first query, not at import time). If the index does not exist, an explicit error is raised with instructions.
 
@@ -318,16 +346,16 @@ The agent is implemented as a **3-node LangGraph graph**:
 
 **`AgentState`** TypedDict fields:
 
-| Field | Set by | Description |
-|---|---|---|
-| `query` | Input | User's original question |
-| `action` | Planner | Selected tool name |
-| `reasoning` | Planner | LLM's reasoning for tool selection |
-| `params` | Planner | Generic dict of extracted variable values -- e.g. `{"price": 30.0}` |
-| `raw_result` | Tool | Raw output from the analytical tool |
-| `answer` | Synthesizer | Final natural language response |
-| `run_id` | Input | Observability correlation ID |
-| `history` | Synthesizer | Accumulated (query, answer) turn pairs -- merged via `operator.add` |
+| Field        | Set by      | Description                                                         |
+| ------------ | ----------- | ------------------------------------------------------------------- |
+| `query`      | Input       | User's original question                                            |
+| `action`     | Planner     | Selected tool name                                                  |
+| `reasoning`  | Planner     | LLM's reasoning for tool selection                                  |
+| `params`     | Planner     | Generic dict of extracted variable values -- e.g. `{"price": 30.0}` |
+| `raw_result` | Tool        | Raw output from the analytical tool                                 |
+| `answer`     | Synthesizer | Final natural language response                                     |
+| `run_id`     | Input       | Observability correlation ID                                        |
+| `history`    | Synthesizer | Accumulated (query, answer) turn pairs -- merged via `operator.add` |
 
 ---
 
@@ -507,31 +535,31 @@ logs/
 
 ### Components
 
-| Module | Responsibility |
-|---|---|
-| `evaluation/observer.py` | `AgentObserver` -- wraps each run, records timing, derives confidence score, writes JSONL |
-| `evaluation/metrics.py` | `load_runs` / `compute_metrics` -- aggregates stats from JSONL; `print_report` -- CLI summary |
-| `evaluation/dashboard.py` | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point |
+| Module                    | Responsibility                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------------- |
+| `evaluation/observer.py`  | `AgentObserver` -- wraps each run, records timing, derives confidence score, writes JSONL     |
+| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` -- aggregates stats from JSONL; `print_report` -- CLI summary |
+| `evaluation/dashboard.py` | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point               |
 
 ### RunRecord fields
 
-| Field | Source | Description |
-|---|---|---|
-| `run_id` | observer | Unique ID per query (12-char hex) |
-| `session_id` | observer | Groups runs within one session |
-| `timestamp` | observer | ISO-8601 UTC |
-| `query` | input | Raw user question |
-| `action` | planner | `optimization` / `simulation` / `knowledge` |
-| `reasoning` | planner | LLM's explanation of tool choice |
-| `planner_latency_ms` | planner node | Time from entry to structured output |
-| `tool_latency_ms` | tool node | Time to execute the analytical tool |
-| `synthesizer_latency_ms` | synthesizer node | Time for natural-language response |
-| `total_latency_ms` | observer | End-to-end wall time |
-| `confidence_score` | observer | Derived: `1 - downside_risk_pct/100` for Monte Carlo, `1.0` for optimization, `0.9` for RAG |
-| `raw_result_keys` | tool node | Dict keys returned by the tool |
-| `success` | observer | `false` if any node raised an exception |
-| `error` | observer | Exception message if `success=false` |
-| `answer_length` | synthesizer | Character count of the final answer |
+| Field                    | Source           | Description                                                                                 |
+| ------------------------ | ---------------- | ------------------------------------------------------------------------------------------- |
+| `run_id`                 | observer         | Unique ID per query (12-char hex)                                                           |
+| `session_id`             | observer         | Groups runs within one session                                                              |
+| `timestamp`              | observer         | ISO-8601 UTC                                                                                |
+| `query`                  | input            | Raw user question                                                                           |
+| `action`                 | planner          | `optimization` / `simulation` / `knowledge`                                                 |
+| `reasoning`              | planner          | LLM's explanation of tool choice                                                            |
+| `planner_latency_ms`     | planner node     | Time from entry to structured output                                                        |
+| `tool_latency_ms`        | tool node        | Time to execute the analytical tool                                                         |
+| `synthesizer_latency_ms` | synthesizer node | Time for natural-language response                                                          |
+| `total_latency_ms`       | observer         | End-to-end wall time                                                                        |
+| `confidence_score`       | observer         | Derived: `1 - downside_risk_pct/100` for Monte Carlo, `1.0` for optimization, `0.9` for RAG |
+| `raw_result_keys`        | tool node        | Dict keys returned by the tool                                                              |
+| `success`                | observer         | `false` if any node raised an exception                                                     |
+| `error`                  | observer         | Exception message if `success=false`                                                        |
+| `answer_length`          | synthesizer      | Character count of the final answer                                                         |
 
 ### LangSmith integration
 
@@ -608,11 +636,11 @@ app.py (REPL)
 
 ### `memory/checkpointer.py`
 
-| Responsibility | Detail |
-|---|---|
-| `get_checkpointer()` | Singleton `SqliteSaver` pointing to `data/checkpoints.db` |
-| `register_turn()` | Upsert in `agent_sessions`: updates `last_active` and `turn_count` |
-| `_ensure_sessions_table()` | Creates the `agent_sessions` table if it does not exist |
+| Responsibility             | Detail                                                             |
+| -------------------------- | ------------------------------------------------------------------ |
+| `get_checkpointer()`       | Singleton `SqliteSaver` pointing to `data/checkpoints.db`          |
+| `register_turn()`          | Upsert in `agent_sessions`: updates `last_active` and `turn_count` |
+| `_ensure_sessions_table()` | Creates the `agent_sessions` table if it does not exist            |
 
 Schema of `agent_sessions`:
 
@@ -829,19 +857,19 @@ def simulation_tool(state: Dict[str, Any]) -> Dict[str, Any]:
 
 ### Domain change without code changes
 
-| Task | Before | After |
-|---|---|---|
-| Change decision variables | Edit YAML + edit ToolSelection + edit simulation_tool | Edit YAML only |
-| Add a new decision variable | Edit YAML + add field to schema | Edit YAML only |
-| Change from retail to energy | Requires changes in planner, state, tools | Edit YAML only |
+| Task                         | Before                                                | After          |
+| ---------------------------- | ----------------------------------------------------- | -------------- |
+| Change decision variables    | Edit YAML + edit ToolSelection + edit simulation_tool | Edit YAML only |
+| Add a new decision variable  | Edit YAML + add field to schema                       | Edit YAML only |
+| Change from retail to energy | Requires changes in planner, state, tools             | Edit YAML only |
 
 ### Validated tests
 
-| Query | Params extracted | Result |
-|---|---|---|
-| `Simulate profit at price 30` | `{"price": 30.0}` | demand ~78 u, profit ~EUR 1,559 |
-| `What would happen if we set price at 20?` | `{"price": 20.0}` | demand ~95 u, profit ~EUR 951 |
-| `Run the simulation with default parameters` | `{}` | default EUR 25 -> demand ~88 u, profit ~EUR 1,328 |
+| Query                                                   | Params extracted             | Result                                                 |
+| ------------------------------------------------------- | ---------------------------- | ------------------------------------------------------ |
+| `Simulate profit at price 30`                           | `{"price": 30.0}`            | demand ~78 u, profit ~EUR 1,559                        |
+| `What would happen if we set price at 20?`              | `{"price": 20.0}`            | demand ~95 u, profit ~EUR 951                          |
+| `Run the simulation with default parameters`            | `{}`                         | default EUR 25 -> demand ~88 u, profit ~EUR 1,328      |
 | `And what if marketing increases by 5000?` (multi-turn) | `{"marketing_spend": 15000}` | demand ~92 u, profit ~EUR 1,358; ROI +EUR 38/EUR 5,000 |
 
 The last test demonstrates the interaction between multi-turn memory (context resolution: "increases by 5000" resolved as 10,000 + 5,000 = 15,000) and generic parameter extraction (mapped correctly to the spec variable name `marketing_spend`).
@@ -863,18 +891,18 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 
 ## Key Design Decisions
 
-| Decision | Rationale |
-|---|---|
-| Spec-driven YAML over hardcoded parameters | Domain model is explicit, auditable, and changeable without touching code |
-| LLM selects tools via structured output (Pydantic) | Eliminates fragile string parsing; tool selection is always a valid typed value |
-| Generic `params: Dict[str, float]` in `ToolSelection` | Variable extraction from queries is fully domain-agnostic; switching domains requires only editing the spec YAML |
-| LLM orchestrates, does not compute | Computations are deterministic and testable; LLM adds language understanding and synthesis |
-| Dynamic system prompt generated from spec | Planner describes the correct variable names to the LLM without manual updates when the domain changes |
-| DAG-driven topological evaluation | Adding new causal variables requires only formula registration, not refactoring `evaluate()` |
-| Lazy FAISS loading | Import never fails due to missing index; failure is explicit and informative |
-| Synthesizer node separate from tool node | Raw analytical output and natural language presentation are decoupled concerns |
-| Monte Carlo over point estimates | Decisions are evaluated under uncertainty; risk (`downside_risk_pct`) is a first-class output |
-| JSONL observability log | Every run is persisted as a structured record; metrics and dashboards are derived offline without affecting runtime |
-| Confidence score derived from tool output | A single 0-1 score makes run quality comparable across tool types without requiring LLM self-evaluation |
-| Observer injected via LangGraph configurable | Observability is decoupled from business logic; nodes remain testable in isolation without an observer |
-| SQLite for session persistence | Zero-infrastructure persistence; portable, inspectable, and sufficient for prototype scale |
+| Decision                                              | Rationale                                                                                                           |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Spec-driven YAML over hardcoded parameters            | Domain model is explicit, auditable, and changeable without touching code                                           |
+| LLM selects tools via structured output (Pydantic)    | Eliminates fragile string parsing; tool selection is always a valid typed value                                     |
+| Generic `params: Dict[str, float]` in `ToolSelection` | Variable extraction from queries is fully domain-agnostic; switching domains requires only editing the spec YAML    |
+| LLM orchestrates, does not compute                    | Computations are deterministic and testable; LLM adds language understanding and synthesis                          |
+| Dynamic system prompt generated from spec             | Planner describes the correct variable names to the LLM without manual updates when the domain changes              |
+| DAG-driven topological evaluation                     | Adding new causal variables requires only formula registration, not refactoring `evaluate()`                        |
+| Lazy FAISS loading                                    | Import never fails due to missing index; failure is explicit and informative                                        |
+| Synthesizer node separate from tool node              | Raw analytical output and natural language presentation are decoupled concerns                                      |
+| Monte Carlo over point estimates                      | Decisions are evaluated under uncertainty; risk (`downside_risk_pct`) is a first-class output                       |
+| JSONL observability log                               | Every run is persisted as a structured record; metrics and dashboards are derived offline without affecting runtime |
+| Confidence score derived from tool output             | A single 0-1 score makes run quality comparable across tool types without requiring LLM self-evaluation             |
+| Observer injected via LangGraph configurable          | Observability is decoupled from business logic; nodes remain testable in isolation without an observer              |
+| SQLite for session persistence                        | Zero-infrastructure persistence; portable, inspectable, and sufficient for prototype scale                          |
