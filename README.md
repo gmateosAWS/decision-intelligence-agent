@@ -70,17 +70,17 @@ causal_relationships:
   - from: [price, demand]
     to: revenue
     type: formula
-    description: 'Revenue = price × demand'
+    description: 'Revenue = price x demand'
 
   - from: [demand]
     to: cost
     type: formula
-    description: 'Cost = demand × unit_cost'
+    description: 'Cost = demand x unit_cost'
 
   - from: [revenue, cost]
     to: profit
     type: formula
-    description: 'Profit = revenue − cost'
+    description: 'Profit = revenue - cost'
 ```
 
 ### 2 - LLM orchestrates, tools compute
@@ -137,7 +137,7 @@ flowchart TD
 
 ## Improvements Summary
 
-Four incremental improvements were implemented and fully tested on top of the baseline prototype:
+Five incremental improvements were implemented and fully tested on top of the baseline prototype:
 
 | #   | Improvement                      | What it solves                                                                                                   |
 | --- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
@@ -145,6 +145,7 @@ Four incremental improvements were implemented and fully tested on top of the ba
 | 2   | Observability layer              | JSONL logging + LangSmith integration + HTML dashboard; every run is auditable                                   |
 | 3   | Multi-turn conversational memory | SQLite checkpointing; persistent sessions with conversation history injection into LLM context                   |
 | 4   | Dynamic generic parameters       | `params` dict in `ToolSelection`; planner prompt generated from spec; fully domain-agnostic parameter extraction |
+| 5   | Spec-driven demand model         | `demand_model` and `data_generation` sections in YAML; `generate_data.py` reads all coefficients from spec -- no hardcoded numerics                |
 
 ---
 
@@ -190,27 +191,43 @@ The synthesizer receives the raw tool result and produces a business-oriented re
 - **Simulation configuration**: Monte Carlo runs, noise model
 - **Optimization configuration**: target, method, fixed variables
 
-`spec_loader.py` parses the YAML into typed Python dataclasses and exposes a singleton `get_spec()` used across all components.
+`spec_loader.py` parses the YAML into typed Python dataclasses (`DecisionVariable`, `DemandModelSpec`, `DataGenerationSpec`, etc.) and exposes a singleton `get_spec()` used across all components.
 
 ---
 
 ### Data Layer (`data/`)
 
-Synthetic sales data is generated to simulate historical observations.
+Synthetic sales data is generated to simulate historical observations. All parameters
+are read from `spec/organizational_model.yaml` -- no numeric literals in code.
 
 Variables: `price`, `marketing`, `demand`
 
-Demand follows the relationship:
+Demand follows the relationship declared in the spec under `demand_model`:
 
 ```
-demand = 120 - 1.6 x price + 0.0009 x marketing + noise(sigma=5)
+demand = base_demand
+         + price_elasticity * price
+         + marketing_effect * marketing_spend
+         + noise(sigma=noise_sigma)
 ```
 
-- `price` is sampled from `uniform(10, 50)` -- matching the spec decision variable range
-- `marketing` is sampled from `uniform(1000, 20000)` -- reflecting real business scale in EUR
-- The coefficient `0.0009` is calibrated so that marketing at its default value (EUR 10,000) contributes ~9 demand units, keeping the marketing effect meaningful but secondary to price
+Current spec values (`spec/organizational_model.yaml` v1.2.0):
 
-2,000 samples are generated with `numpy` random seed 42 for reproducibility.
+| Parameter | Value | Description |
+|---|---|---|
+| `base_demand` | 120.0 | Intercept: baseline units at price=0, marketing=0 |
+| `price_elasticity` | -1.6 | Units lost per EUR increase in price |
+| `marketing_effect` | 0.0009 | Units gained per EUR of marketing spend |
+| `noise_sigma` | 5.0 | Std dev of Gaussian demand noise (units) |
+
+Data generation ranges (declared under `data_generation` in the spec):
+
+- `price`: sampled from `uniform(price_min=10, price_max=50)` -- matches decision variable bounds
+- `marketing`: sampled from `uniform(marketing_min=1000, marketing_max=20000)` -- real EUR scale
+- `n_samples`: 2,000 -- `random_seed`: 42 (reproducibility)
+
+To recalibrate the demand model: edit `demand_model` and/or `data_generation` in the spec,
+then re-run `python data/generate_data.py` and `python models/train_demand_model.py`.
 
 ---
 
@@ -368,7 +385,7 @@ decision-intelligence-agent/
 |   +-- spec_loader.py              # Typed YAML parser, singleton get_spec()
 |   +-- __init__.py
 +-- data/
-|   +-- generate_data.py            # Synthetic sales dataset (2,000 samples)
+|   +-- generate_data.py            # Synthetic dataset -- all params read from spec
 |   +-- checkpoints.db              # SQLite: LangGraph state + agent_sessions
 +-- models/
 |   +-- train_demand_model.py       # RF training, evaluation metrics, model export
@@ -881,9 +898,10 @@ The last test demonstrates the interaction between multi-turn memory (context re
 The spec-driven architecture makes domain adaptation straightforward. To model a different business scenario:
 
 1. Edit `spec/organizational_model.yaml` -- define your variables, causal relationships, bounds and parameters
-2. Register formula functions for new derived nodes in `system/system_model.py` (`_NODE_FORMULAS`)
-3. Retrain the ML model if the input/output variables change (`models/train_demand_model.py`)
-4. Rebuild the knowledge index with domain-specific documents (`knowledge/build_index.py`)
+2. Update `demand_model` and `data_generation` in the spec to reflect the new domain's demand function
+3. Register formula functions for new derived nodes in `system/system_model.py` (`_NODE_FORMULAS`)
+4. Re-run `python data/generate_data.py` and `python models/train_demand_model.py` to retrain
+5. Rebuild the knowledge index with domain-specific documents (`knowledge/build_index.py`)
 
 No changes to the agent, planner, workflow, or simulation engine are required.
 
@@ -906,3 +924,4 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Confidence score derived from tool output             | A single 0-1 score makes run quality comparable across tool types without requiring LLM self-evaluation             |
 | Observer injected via LangGraph configurable          | Observability is decoupled from business logic; nodes remain testable in isolation without an observer              |
 | SQLite for session persistence                        | Zero-infrastructure persistence; portable, inspectable, and sufficient for prototype scale                          |
+| Demand model coefficients in spec YAML             | `base_demand`, `price_elasticity`, `marketing_effect`, `noise_sigma` are first-class spec parameters; recalibrating the model requires only editing the YAML, not touching code |
