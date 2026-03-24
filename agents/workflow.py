@@ -50,7 +50,7 @@ def planner_node(
     """Calls the LLM planner and records timing via the observer."""
     obs = _get_observer(config)
     t0 = time.perf_counter()
-    result = _planner_node_impl(state)
+    result = _sanitize_for_state(_planner_node_impl(state))
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
         obs.record_planner(
@@ -75,7 +75,7 @@ def tool_node(
     error: Optional[str] = None
 
     try:
-        raw_result = tool_fn(state)
+        raw_result = _sanitize_for_state(tool_fn(state))
     except Exception as exc:  # noqa: BLE001
         error = f"{type(exc).__name__}: {exc}"
         raw_result = {"error": error}
@@ -107,7 +107,7 @@ def synthesizer_node(
     obs = _get_observer(config)
     query = state.get("query", "")
     action = state.get("action", "unknown")
-    raw = state.get("raw_result") or {}
+    raw = _sanitize_for_state(state.get("raw_result") or {})
 
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
     prompt = (
@@ -134,7 +134,7 @@ def synthesizer_node(
     if obs:
         obs.record_synthesizer(answer=answer, latency_ms=elapsed_ms)
 
-    return {"answer": answer}
+    return _sanitize_for_state({"answer": answer})
 
 
 def judge_node(
@@ -142,7 +142,7 @@ def judge_node(
     config: Optional[RunnableConfig] = None,
 ) -> Dict:
     """Evaluate and optionally revise the synthesized answer."""
-    return _judge_node_impl(state, config)
+    return _sanitize_for_state(_judge_node_impl(state, config))
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +184,32 @@ def build_graph(checkpointer=None):
 # ---------------------------------------------------------------------------
 # Private
 # ---------------------------------------------------------------------------
+
+
+def _sanitize_for_state(value: Any) -> Any:
+    """Convert NumPy and other non-msgpack-friendly values to plain Python."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _sanitize_for_state(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_sanitize_for_state(item) for item in value]
+
+    item_method = getattr(value, "item", None)
+    if callable(item_method):
+        try:
+            return _sanitize_for_state(item_method())
+        except Exception:  # noqa: BLE001
+            pass
+
+    tolist_method = getattr(value, "tolist", None)
+    if callable(tolist_method):
+        try:
+            return _sanitize_for_state(tolist_method())
+        except Exception:  # noqa: BLE001
+            pass
+
+    return str(value)
 
 
 def _get_observer(config: Optional[RunnableConfig]):

@@ -116,9 +116,12 @@ def main() -> None:  # noqa: C901
     while True:
         try:
             raw = input("Ask a business question: ").strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print("\nGoodbye.")
             break
+        except KeyboardInterrupt:
+            print("\n[Interrumpido en el prompt — escribe 'exit' para salir]\n")
+            continue
 
         if not raw:
             continue
@@ -126,7 +129,7 @@ def main() -> None:  # noqa: C901
         # ---- Built-in commands ----------------------------------------
         lower = raw.lower()
 
-        if lower == "exit":
+        if lower in {"exit", "quit", "q"}:
             print("Goodbye.")
             break
 
@@ -193,8 +196,8 @@ def main() -> None:  # noqa: C901
             observer.end_run(success=True)
 
         except KeyboardInterrupt:
-            print("\n[Interrupted]\n")
-            observer.end_run(success=False, error="KeyboardInterrupt")
+            print("\n[Ejecución interrumpida por el usuario]\n")
+            observer.cancel_run(reason="KeyboardInterrupt")
 
         except Exception as exc:  # noqa: BLE001
             print(f"\n[Error] {exc}\n")

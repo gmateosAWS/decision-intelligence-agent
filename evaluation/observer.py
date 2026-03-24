@@ -241,7 +241,7 @@ class AgentObserver:
             self._run.success = False
             self._run.error = error
 
-        record = asdict(self._run)
+        record = self._sanitize_value(asdict(self._run))
         self._append_jsonl(record)
 
         icon = "✓" if self._run.success else "✗"
@@ -253,7 +253,26 @@ class AgentObserver:
             self._run.success,
         )
         self._run = None
+        self._run_start = None
         return record
+
+    def cancel_run(self, reason: str = "Cancelled") -> None:
+        """Abort the current run without persisting a failed JSONL record."""
+        if not self._run:
+            return
+
+        elapsed_ms = None
+        if self._run_start is not None:
+            elapsed_ms = (time.perf_counter() - self._run_start) * 1000
+
+        self._logger.warning(
+            "◀ RUN CANCELLED  run_id=%-12s  total=%7s  reason=%s",
+            self._run.run_id,
+            f"{elapsed_ms:.0f} ms" if elapsed_ms is not None else "n/a",
+            reason,
+        )
+        self._run = None
+        self._run_start = None
 
     # ------------------------------------------------------------------
     # LangSmith helpers
@@ -318,7 +337,36 @@ class AgentObserver:
     def _append_jsonl(self, record: Dict) -> None:
         path = self.log_dir / self.JSONL_FILENAME
         with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            f.write(json.dumps(self._sanitize_value(record), ensure_ascii=False) + "\n")
+
+    @staticmethod
+    def _sanitize_value(value: Any) -> Any:
+        """Convert NumPy scalars/arrays and other exotic objects to plain Python."""
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, dict):
+            return {
+                str(key): AgentObserver._sanitize_value(item)
+                for key, item in value.items()
+            }
+        if isinstance(value, (list, tuple, set)):
+            return [AgentObserver._sanitize_value(item) for item in value]
+
+        item_method = getattr(value, "item", None)
+        if callable(item_method):
+            try:
+                return AgentObserver._sanitize_value(item_method())
+            except Exception:  # noqa: BLE001
+                pass
+
+        tolist_method = getattr(value, "tolist", None)
+        if callable(tolist_method):
+            try:
+                return AgentObserver._sanitize_value(tolist_method())
+            except Exception:  # noqa: BLE001
+                pass
+
+        return str(value)
 
     @staticmethod
     def _derive_confidence(result: Dict) -> Optional[float]:
