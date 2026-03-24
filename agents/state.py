@@ -44,5 +44,9 @@ class AgentState(TypedDict, total=False):
     raw_result: Optional[Dict[str, Any]]
     answer: Optional[str]
     run_id: Optional[str]
+    judge_score: Optional[float]
+    judge_passed: Optional[bool]
+    judge_feedback: Optional[str]
+    judge_revised: Optional[bool]
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]

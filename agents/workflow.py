@@ -5,12 +5,13 @@ Cambios respecto a Mejora 2:
   • build_graph() ahora acepta un checkpointer opcional (SqliteSaver).
     Si se pasa, el grafo se compila con persistencia: cada nodo escribe
     su estado parcial y LangGraph puede reanudar hilos por thread_id.
-  • synthesizer_node devuelve {answer, history} para que el turno quede
-    almacenado en el estado acumulado.  LangGraph aplica operator.add
-    sobre el campo history (definido en state.py).
-  • El resto (observabilidad, tool dispatch) permanece igual que Mejora 2.
+  • synthesizer_node devuelve un borrador de respuesta.
+  • judge_node evalúa online la respuesta final, la aprueba o la revisa
+    una vez antes de devolverla al usuario.
+  • El historial se añade solo después del juez, para persistir la versión
+    final y no el borrador previo.
 
-Graph:  planner_node → tool_node → synthesizer_node → END
+Graph:  planner_node → tool_node → synthesizer_node → judge_node → END
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from typing import Any, Dict, Optional
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
+from .judge import judge_node as _judge_node_impl
 from .planner import planner_node as _planner_node_impl
 from .state import AgentState
 from .tools import knowledge_tool, optimization_tool, simulation_tool
@@ -97,10 +99,8 @@ def synthesizer_node(
     """
     Converts the raw tool output into a business-oriented answer.
 
-    Returns {answer, history} so that:
-      • answer   is stored as usual.
-      • history  is APPENDED (operator.add) with the current turn dict,
-                 building the multi-turn conversation log.
+    The answer is judged in a later node before it is appended to history,
+    so this node only returns the synthesized draft answer.
     """
     from langchain_openai import ChatOpenAI
 
@@ -134,9 +134,15 @@ def synthesizer_node(
     if obs:
         obs.record_synthesizer(answer=answer, latency_ms=elapsed_ms)
 
-    # Append this turn to the accumulated history list
-    new_turn = {"query": query, "answer": answer}
-    return {"answer": answer, "history": [new_turn]}
+    return {"answer": answer}
+
+
+def judge_node(
+    state: AgentState,
+    config: Optional[RunnableConfig] = None,
+) -> Dict:
+    """Evaluate and optionally revise the synthesized answer."""
+    return _judge_node_impl(state, config)
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +152,7 @@ def synthesizer_node(
 
 def build_graph(checkpointer=None):
     """
-    Build and compile the 3-node LangGraph workflow.
+    Build and compile the 4-node LangGraph workflow.
 
     Parameters
     ----------
@@ -155,18 +161,20 @@ def build_graph(checkpointer=None):
         Pass a thread_id in the config to resume a conversation.
 
     Flow:
-        planner_node → tool_node → synthesizer_node → END
+        planner_node → tool_node → synthesizer_node → judge_node → END
     """
     builder = StateGraph(AgentState)
 
     builder.add_node("planner", planner_node)
     builder.add_node("tool", tool_node)
     builder.add_node("synthesizer", synthesizer_node)
+    builder.add_node("judge", judge_node)
 
     builder.set_entry_point("planner")
     builder.add_edge("planner", "tool")
     builder.add_edge("tool", "synthesizer")
-    builder.add_edge("synthesizer", END)
+    builder.add_edge("synthesizer", "judge")
+    builder.add_edge("judge", END)
 
     if checkpointer is not None:
         return builder.compile(checkpointer=checkpointer)

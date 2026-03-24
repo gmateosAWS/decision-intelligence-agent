@@ -59,7 +59,8 @@ def compute_metrics(runs: List[Dict]) -> Dict:
       total_runs, success_rate,
       avg_total_latency_ms, p50_total_latency_ms, p95_total_latency_ms,
       avg_planner_latency_ms, avg_tool_latency_ms, avg_synthesizer_latency_ms,
-      avg_confidence_score,
+      avg_judge_latency_ms, avg_confidence_score, avg_judge_score,
+      judge_approval_rate, judge_revision_rate,
       tool_distribution (dict action → count),
       error_count, errors (list of error strings),
       sessions (list of unique session ids),
@@ -77,7 +78,12 @@ def compute_metrics(runs: List[Dict]) -> Dict:
     planner_lat: List[float] = []
     tool_lat: List[float] = []
     synth_lat: List[float] = []
+    judge_lat: List[float] = []
     confidences: List[float] = []
+    judge_scores: List[float] = []
+    judge_passes = 0
+    judge_total = 0
+    judge_revisions = 0
     errors: List[str] = []
     sessions: set = set()
 
@@ -91,7 +97,16 @@ def compute_metrics(runs: List[Dict]) -> Dict:
         _append_if(planner_lat, r.get("planner_latency_ms"))
         _append_if(tool_lat, r.get("tool_latency_ms"))
         _append_if(synth_lat, r.get("synthesizer_latency_ms"))
+        _append_if(judge_lat, r.get("judge_latency_ms"))
         _append_if(confidences, r.get("confidence_score"))
+        _append_if(judge_scores, r.get("judge_score"))
+
+        if r.get("judge_passed") is not None:
+            judge_total += 1
+            if r.get("judge_passed"):
+                judge_passes += 1
+        if r.get("judge_revised"):
+            judge_revisions += 1
 
         if not r.get("success", True) and r.get("error"):
             errors.append(r["error"])
@@ -107,7 +122,15 @@ def compute_metrics(runs: List[Dict]) -> Dict:
         "avg_planner_latency_ms": _mean(planner_lat),
         "avg_tool_latency_ms": _mean(tool_lat),
         "avg_synthesizer_latency_ms": _mean(synth_lat),
+        "avg_judge_latency_ms": _mean(judge_lat),
         "avg_confidence_score": _mean(confidences),
+        "avg_judge_score": _mean(judge_scores),
+        "judge_approval_rate": (
+            round(judge_passes / judge_total, 4) if judge_total else None
+        ),
+        "judge_revision_rate": (
+            round(judge_revisions / judge_total, 4) if judge_total else None
+        ),
         "tool_distribution": dict(tool_counts),
         "errors": errors,
         "sessions": sorted(sessions),
@@ -166,6 +189,8 @@ def print_report(metrics: Dict) -> None:
     print(f"│  {'Avg tool':<30} {_fmt_ms(metrics['avg_tool_latency_ms']):>15}      │")
     v = _fmt_ms(metrics["avg_synthesizer_latency_ms"])
     print(f"│  {'Avg synthesizer':<30} {v:>15}      │")
+    v = _fmt_ms(metrics["avg_judge_latency_ms"])
+    print(f"│  {'Avg judge':<30} {v:>15}      │")
 
     print("├" + "─" * (W - 2) + "┤")
     print(f"│{'  Quality':^{W-2}}│")
@@ -173,6 +198,15 @@ def print_report(metrics: Dict) -> None:
 
     v = _fmt_conf(metrics["avg_confidence_score"])
     print(f"│  {'Avg confidence score':<30} {v:>24} │")
+    judge_score = metrics.get("avg_judge_score")
+    judge_score_s = _fmt_conf(judge_score)
+    print(f"│  {'Avg judge score':<30} {judge_score_s:>24} │")
+    approval = metrics.get("judge_approval_rate")
+    revision = metrics.get("judge_revision_rate")
+    approval_s = _fmt_pct(approval) if approval is not None else "n/a"
+    revision_s = _fmt_pct(revision) if revision is not None else "n/a"
+    print(f"│  {'Judge approval rate':<30} {approval_s:>15}      │")
+    print(f"│  {'Judge revision rate':<30} {revision_s:>15}      │")
 
     dist = metrics.get("tool_distribution", {})
     if dist:

@@ -63,6 +63,13 @@ class RunRecord:
     synthesizer_latency_ms: Optional[float] = None
     answer_length: Optional[int] = None
 
+    # Judge
+    judge_latency_ms: Optional[float] = None
+    judge_score: Optional[float] = None
+    judge_passed: Optional[bool] = None
+    judge_revised: Optional[bool] = None
+    judge_feedback: Optional[str] = None
+
     # Overall
     total_latency_ms: Optional[float] = None
     success: bool = True
@@ -182,6 +189,39 @@ class AgentObserver:
             latency_ms,
             len(answer),
         )
+
+    def record_judge(
+        self,
+        score: Optional[float],
+        approved: bool,
+        feedback: str,
+        latency_ms: float,
+        revised: bool,
+        final_answer: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Record online-judge evaluation and optional revision."""
+        if self._run:
+            self._run.judge_latency_ms = latency_ms
+            self._run.judge_score = score
+            self._run.judge_passed = approved
+            self._run.judge_revised = revised
+            self._run.judge_feedback = feedback
+            if final_answer is not None:
+                self._run.answer_length = len(final_answer)
+            if error and self._run.error is None:
+                self._run.error = f"Judge error: {error}"
+
+        score_text = f"{score:.2f}" if score is not None else "n/a"
+        self._logger.info(
+            "  JUDGE       approved=%-5s  revised=%-5s  latency=%6.0f ms  score=%s",
+            approved,
+            revised,
+            latency_ms,
+            score_text,
+        )
+        if feedback:
+            self._logger.info("  JUDGE NOTE  %s", self._truncate(feedback, 100))
 
     def end_run(
         self,

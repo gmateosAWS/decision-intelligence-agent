@@ -231,7 +231,7 @@ _HTML_TEMPLATE = """\
 
 {errors_section}
 
-<footer>Decision Intelligence Agent · Observability Layer · Mejora 2</footer>
+<footer>Decision Intelligence Agent · Observability Layer</footer>
 
 <script>
 // Tool distribution doughnut
@@ -256,7 +256,7 @@ new Chart(document.getElementById('toolChart'), {{
 new Chart(document.getElementById('latChart'), {{
   type: 'bar',
   data: {{
-    labels: ['Planner', 'Tool', 'Synthesizer'],
+    labels: ['Planner', 'Tool', 'Synthesizer', 'Judge'],
     datasets: [{{
       label: 'avg ms',
       data: {lat_values},
@@ -314,6 +314,7 @@ def generate_html_dashboard(
             "avg_planner_latency_ms": None,
             "avg_tool_latency_ms": None,
             "avg_synthesizer_latency_ms": None,
+            "avg_judge_latency_ms": None,
             "avg_confidence_score": None,
             "tool_distribution": {},
             "errors": [],
@@ -336,10 +337,11 @@ def generate_html_dashboard(
     p_ms = metrics.get("avg_planner_latency_ms") or 0
     t_ms = metrics.get("avg_tool_latency_ms") or 0
     s_ms = metrics.get("avg_synthesizer_latency_ms") or 0
-    lat_values = json.dumps([round(p_ms), round(t_ms), round(s_ms)])
+    j_ms = metrics.get("avg_judge_latency_ms") or 0
+    lat_values = json.dumps([round(p_ms), round(t_ms), round(s_ms), round(j_ms)])
 
     # Latency rows for table
-    total_ms = (p_ms + t_ms + s_ms) or 1
+    total_ms = (p_ms + t_ms + s_ms + j_ms) or 1
 
     def share(v):
         return f"{v/total_ms*100:.0f}%" if total_ms else "—"
@@ -349,6 +351,7 @@ def generate_html_dashboard(
             f"<tr><td>Planner</td><td>{_ms(p_ms)}</td><td>{share(p_ms)}</td></tr>",
             f"<tr><td>Tool</td><td>{_ms(t_ms)}</td><td>{share(t_ms)}</td></tr>",
             f"<tr><td>Synthesizer</td><td>{_ms(s_ms)}</td><td>{share(s_ms)}</td></tr>",
+            f"<tr><td>Judge</td><td>{_ms(j_ms)}</td><td>{share(j_ms)}</td></tr>",
         ]
     )
 

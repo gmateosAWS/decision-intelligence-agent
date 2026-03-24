@@ -139,13 +139,13 @@ flowchart TD
 
 Five incremental improvements were implemented and fully tested on top of the baseline prototype:
 
-| #   | Improvement                      | What it solves                                                                                                   |
-| --- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| 1   | Spec-driven architecture         | Domain model in YAML; business parameters configurable without touching code                                     |
-| 2   | Observability layer              | JSONL logging + LangSmith integration + HTML dashboard; every run is auditable                                   |
-| 3   | Multi-turn conversational memory | SQLite checkpointing; persistent sessions with conversation history injection into LLM context                   |
-| 4   | Dynamic generic parameters       | `params` dict in `ToolSelection`; planner prompt generated from spec; fully domain-agnostic parameter extraction |
-| 5   | Spec-driven demand model         | `demand_model` and `data_generation` sections in YAML; `generate_data.py` reads all coefficients from spec -- no hardcoded numerics                |
+| #   | Improvement                      | What it solves                                                                                                                      |
+| --- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Spec-driven architecture         | Domain model in YAML; business parameters configurable without touching code                                                        |
+| 2   | Observability layer              | JSONL logging + LangSmith integration + HTML dashboard; every run is auditable                                                      |
+| 3   | Multi-turn conversational memory | SQLite checkpointing; persistent sessions with conversation history injection into LLM context                                      |
+| 4   | Dynamic generic parameters       | `params` dict in `ToolSelection`; planner prompt generated from spec; fully domain-agnostic parameter extraction                    |
+| 5   | Spec-driven demand model         | `demand_model` and `data_generation` sections in YAML; `generate_data.py` reads all coefficients from spec -- no hardcoded numerics |
 
 ---
 
@@ -213,12 +213,12 @@ demand = base_demand
 
 Current spec values (`spec/organizational_model.yaml` v1.2.0):
 
-| Parameter | Value | Description |
-|---|---|---|
-| `base_demand` | 120.0 | Intercept: baseline units at price=0, marketing=0 |
-| `price_elasticity` | -1.6 | Units lost per EUR increase in price |
-| `marketing_effect` | 0.0009 | Units gained per EUR of marketing spend |
-| `noise_sigma` | 5.0 | Std dev of Gaussian demand noise (units) |
+| Parameter          | Value  | Description                                       |
+| ------------------ | ------ | ------------------------------------------------- |
+| `base_demand`      | 120.0  | Intercept: baseline units at price=0, marketing=0 |
+| `price_elasticity` | -1.6   | Units lost per EUR increase in price              |
+| `marketing_effect` | 0.0009 | Units gained per EUR of marketing spend           |
+| `noise_sigma`      | 5.0    | Std dev of Gaussian demand noise (units)          |
 
 Data generation ranges (declared under `data_generation` in the spec):
 
@@ -498,7 +498,7 @@ python app.py
 
 ```
 +--------------------------------------------------------------+
-|  Decision Intelligence Agent  *  v3 (memory)                |
+|  Decision Intelligence Agent  *  v3 (memory)                 |
 +--------------------------------------------------------------+
 |  Ask business questions about pricing and marketing.         |
 |  Commands:                                                   |
@@ -909,19 +909,19 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 
 ## Key Design Decisions
 
-| Decision                                              | Rationale                                                                                                           |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Spec-driven YAML over hardcoded parameters            | Domain model is explicit, auditable, and changeable without touching code                                           |
-| LLM selects tools via structured output (Pydantic)    | Eliminates fragile string parsing; tool selection is always a valid typed value                                     |
-| Generic `params: Dict[str, float]` in `ToolSelection` | Variable extraction from queries is fully domain-agnostic; switching domains requires only editing the spec YAML    |
-| LLM orchestrates, does not compute                    | Computations are deterministic and testable; LLM adds language understanding and synthesis                          |
-| Dynamic system prompt generated from spec             | Planner describes the correct variable names to the LLM without manual updates when the domain changes              |
-| DAG-driven topological evaluation                     | Adding new causal variables requires only formula registration, not refactoring `evaluate()`                        |
-| Lazy FAISS loading                                    | Import never fails due to missing index; failure is explicit and informative                                        |
-| Synthesizer node separate from tool node              | Raw analytical output and natural language presentation are decoupled concerns                                      |
-| Monte Carlo over point estimates                      | Decisions are evaluated under uncertainty; risk (`downside_risk_pct`) is a first-class output                       |
-| JSONL observability log                               | Every run is persisted as a structured record; metrics and dashboards are derived offline without affecting runtime |
-| Confidence score derived from tool output             | A single 0-1 score makes run quality comparable across tool types without requiring LLM self-evaluation             |
-| Observer injected via LangGraph configurable          | Observability is decoupled from business logic; nodes remain testable in isolation without an observer              |
-| SQLite for session persistence                        | Zero-infrastructure persistence; portable, inspectable, and sufficient for prototype scale                          |
-| Demand model coefficients in spec YAML             | `base_demand`, `price_elasticity`, `marketing_effect`, `noise_sigma` are first-class spec parameters; recalibrating the model requires only editing the YAML, not touching code |
+| Decision                                              | Rationale                                                                                                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spec-driven YAML over hardcoded parameters            | Domain model is explicit, auditable, and changeable without touching code                                                                                                       |
+| LLM selects tools via structured output (Pydantic)    | Eliminates fragile string parsing; tool selection is always a valid typed value                                                                                                 |
+| Generic `params: Dict[str, float]` in `ToolSelection` | Variable extraction from queries is fully domain-agnostic; switching domains requires only editing the spec YAML                                                                |
+| LLM orchestrates, does not compute                    | Computations are deterministic and testable; LLM adds language understanding and synthesis                                                                                      |
+| Dynamic system prompt generated from spec             | Planner describes the correct variable names to the LLM without manual updates when the domain changes                                                                          |
+| DAG-driven topological evaluation                     | Adding new causal variables requires only formula registration, not refactoring `evaluate()`                                                                                    |
+| Lazy FAISS loading                                    | Import never fails due to missing index; failure is explicit and informative                                                                                                    |
+| Synthesizer node separate from tool node              | Raw analytical output and natural language presentation are decoupled concerns                                                                                                  |
+| Monte Carlo over point estimates                      | Decisions are evaluated under uncertainty; risk (`downside_risk_pct`) is a first-class output                                                                                   |
+| JSONL observability log                               | Every run is persisted as a structured record; metrics and dashboards are derived offline without affecting runtime                                                             |
+| Confidence score derived from tool output             | A single 0-1 score makes run quality comparable across tool types without requiring LLM self-evaluation                                                                         |
+| Observer injected via LangGraph configurable          | Observability is decoupled from business logic; nodes remain testable in isolation without an observer                                                                          |
+| SQLite for session persistence                        | Zero-infrastructure persistence; portable, inspectable, and sufficient for prototype scale                                                                                      |
+| Demand model coefficients in spec YAML                | `base_demand`, `price_elasticity`, `marketing_effect`, `noise_sigma` are first-class spec parameters; recalibrating the model requires only editing the YAML, not touching code |
