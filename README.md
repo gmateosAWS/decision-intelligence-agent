@@ -104,15 +104,22 @@ The causal DAG is not decorative. The `SystemModel.evaluate()` method propagates
 ```mermaid
 flowchart TD
     User[User]
-    Agent["LangGraph Agent\nplanner - tool - synthesizer"]
-    Spec["Organizational Spec\nspec/organizational_model.yaml"]
+    Agent["LangGraph Agent
+planner - tool - synthesizer - judge"]
+    Spec["Organizational Spec
+spec/organizational_model.yaml"]
     SimTool[Simulation Tool]
     OptTool[Optimization Tool]
     KnowTool[RAG Knowledge Tool]
     SimEngine[Monte Carlo Engine]
-    VectorDB["Vector Database\n20 documents - 6 categories"]
-    SystemModel["System Model\ncausal DAG traversal"]
-    MLModel["RandomForest\ndemand estimator"]
+    VectorDB["Vector Database
+20 documents - 6 categories"]
+    SystemModel["System Model
+causal DAG traversal"]
+    MLModel["RandomForest
+demand estimator"]
+    Judge["Online Judge
+LLM quality gate"]
     Data[Historical Sales Data]
 
     User --> Agent
@@ -123,6 +130,7 @@ flowchart TD
     Agent --> SimTool
     Agent --> OptTool
     Agent --> KnowTool
+    Agent --> Judge
 
     SimTool --> SimEngine
     OptTool --> SimEngine
@@ -135,17 +143,26 @@ flowchart TD
 
 ---
 
-## Improvements Summary
+## Capabilities
 
-Five incremental improvements were implemented and fully tested on top of the baseline prototype:
+The prototype combines several architectural capabilities that make it suitable for
+decision support, system explainability, and controlled LLM interaction:
 
-| #   | Improvement                      | What it solves                                                                                                                      |
-| --- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Spec-driven architecture         | Domain model in YAML; business parameters configurable without touching code                                                        |
-| 2   | Observability layer              | JSONL logging + LangSmith integration + HTML dashboard; every run is auditable                                                      |
-| 3   | Multi-turn conversational memory | SQLite checkpointing; persistent sessions with conversation history injection into LLM context                                      |
-| 4   | Dynamic generic parameters       | `params` dict in `ToolSelection`; planner prompt generated from spec; fully domain-agnostic parameter extraction                    |
-| 5   | Spec-driven demand model         | `demand_model` and `data_generation` sections in YAML; `generate_data.py` reads all coefficients from spec -- no hardcoded numerics |
+- **Spec-driven domain modeling** -- business variables, causal relationships,
+  simulation settings, optimization targets, and synthetic demand-model coefficients
+  are declared in `spec/organizational_model.yaml`.
+- **Deterministic analytical execution** -- optimization, Monte Carlo simulation,
+  and graph propagation are performed by Python components, not by the LLM.
+- **Online answer validation** -- the synthesizer output passes through an
+  LLM-based judge that checks grounding, responsiveness and quantitative consistency
+  before the final answer is returned.
+- **Structured observability** -- every run captures tool choice, latencies,
+  confidence signals, judge verdicts and final outcome in JSONL logs and dashboards.
+- **Persistent conversational memory** -- session context is stored in SQLite so
+  the planner can resolve follow-up questions across multiple turns.
+- **Domain-agnostic parameter extraction** -- the planner extracts decision
+  parameters generically from natural language using the decision-variable names
+  defined in the spec.
 
 ---
 
@@ -154,12 +171,16 @@ Five incremental improvements were implemented and fully tested on top of the ba
 ```mermaid
 flowchart LR
     User[User Query]
-    Planner["Planner\n(LLM - structured output)"]
+    Planner["Planner
+(LLM - structured output)"]
     Opt[Optimization Tool]
     Sim[Simulation Tool]
     Know[Knowledge RAG]
-    Synth["Synthesizer\n(LLM - natural language)"]
-    Answer[Answer]
+    Synth["Synthesizer
+(LLM - natural language)"]
+    Judge["Judge
+(LLM - quality gate)"]
+    Answer[Final Answer]
 
     User --> Planner
     Planner -->|optimization| Opt
@@ -168,12 +189,15 @@ flowchart LR
     Opt --> Synth
     Sim --> Synth
     Know --> Synth
-    Synth --> Answer
+    Synth --> Judge
+    Judge --> Answer
 ```
 
 The planner uses **structured output** (Pydantic schema) to guarantee the tool selection is always a valid, typed value -- no fragile string parsing.
 
-The synthesizer receives the raw tool result and produces a business-oriented response: it explains what the numbers mean, not just what they are.
+The synthesizer receives the raw tool result and produces a business-oriented draft response: it explains what the numbers mean, not just what they are.
+
+The online judge evaluates that draft against the original query and the raw tool output. If the answer is insufficiently grounded, incomplete or quantitatively inconsistent, the judge requests a revision before returning the final answer to the user.
 
 ---
 
@@ -353,26 +377,32 @@ The vector store is loaded **lazily** (on first query, not at import time). If t
 
 ### Agent Layer (`agents/`)
 
-The agent is implemented as a **3-node LangGraph graph**:
+The agent is implemented as a **4-node LangGraph graph**:
 
 **`planner_node`** -- Selects the appropriate tool using `gpt-4o-mini` with structured output. The system prompt is built dynamically from the spec, listing all decision variable names and ranges. Output is a typed `ToolSelection(tool, reasoning, params)` object -- no string parsing.
 
 **`tool_node`** -- Executes the selected tool. Wrapped in `try/except`: errors are captured and propagated to the state rather than crashing the graph.
 
-**`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented natural language answer: what do the numbers mean, what should the decision-maker do.
+**`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer: what do the numbers mean, what should the decision-maker do, and what risks or caveats matter.
+
+**`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version.
 
 **`AgentState`** TypedDict fields:
 
-| Field        | Set by      | Description                                                         |
-| ------------ | ----------- | ------------------------------------------------------------------- |
-| `query`      | Input       | User's original question                                            |
-| `action`     | Planner     | Selected tool name                                                  |
-| `reasoning`  | Planner     | LLM's reasoning for tool selection                                  |
-| `params`     | Planner     | Generic dict of extracted variable values -- e.g. `{"price": 30.0}` |
-| `raw_result` | Tool        | Raw output from the analytical tool                                 |
-| `answer`     | Synthesizer | Final natural language response                                     |
-| `run_id`     | Input       | Observability correlation ID                                        |
-| `history`    | Synthesizer | Accumulated (query, answer) turn pairs -- merged via `operator.add` |
+| Field            | Set by        | Description                                                         |
+| ---------------- | ------------- | ------------------------------------------------------------------- |
+| `query`          | Input         | User's original question                                            |
+| `action`         | Planner       | Selected tool name                                                  |
+| `reasoning`      | Planner       | LLM's reasoning for tool selection                                  |
+| `params`         | Planner       | Generic dict of extracted variable values -- e.g. `{"price": 30.0}` |
+| `raw_result`     | Tool          | Raw output from the analytical tool                                 |
+| `answer`         | Judge         | Final natural language response returned to the user                |
+| `run_id`         | Input         | Observability correlation ID                                        |
+| `judge_score`    | Judge         | Overall quality score assigned by the online judge                  |
+| `judge_passed`   | Judge         | Whether the initial synthesized answer passed without revision      |
+| `judge_feedback` | Judge         | Judge explanation of why the answer was approved or revised         |
+| `judge_revised`  | Judge         | Whether the answer had to be rewritten once before delivery         |
+| `history`        | Judge         | Accumulated (query, answer) turn pairs -- merged via `operator.add` |
 
 ---
 
@@ -404,14 +434,15 @@ decision-intelligence-agent/
 |   +-- state.py                    # AgentState TypedDict
 |   +-- tools.py                    # Tool wrappers (spec-driven defaults + generic params)
 |   +-- planner.py                  # LLM planner: dynamic prompt + structured output
-|   +-- workflow.py                 # LangGraph: planner -> tool -> synthesizer
+|   +-- judge.py                    # Online answer-quality judge and single-pass reviser
+|   +-- workflow.py                 # LangGraph: planner -> tool -> synthesizer -> judge
 +-- memory/
 |   +-- __init__.py                 # Public exports
 |   +-- checkpointer.py             # SqliteSaver singleton + agent_sessions table
 |   +-- session_manager.py          # CRUD and session listing (CLI helpers)
 +-- evaluation/
 |   +-- __init__.py
-|   +-- observer.py                 # AgentObserver: run lifecycle, JSONL logging, confidence
+|   +-- observer.py                 # AgentObserver: run lifecycle, JSONL logging, judge metrics
 |   +-- metrics.py                  # load_runs / compute_metrics / print_report
 |   +-- dashboard.py                # HTML dashboard generator + CLI entry point
 +-- config/
@@ -446,13 +477,18 @@ source venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-**3. Configure API key**
+**3. Configure API key and judge settings**
 
 Create a `.env` file in the project root:
 
 ```env
 OPENAI_API_KEY=your_api_key
+JUDGE_MODEL=gpt-4o-mini
+JUDGE_THRESHOLD=0.75
 ```
+
+- `JUDGE_MODEL` selects the model used by the online judge.
+- `JUDGE_THRESHOLD` defines the minimum score required for a synthesized draft to pass without revision.
 
 Get your key from: https://platform.openai.com/api-keys
 
@@ -539,9 +575,10 @@ Every agent run is captured, measured and visualisable.
 ```
 app.py
   +-- AgentObserver.start_run(query)          opens a RunRecord
-       +-- planner_node  -> obs.record_planner()
-       +-- tool_node     -> obs.record_tool()
-       +-- synthesizer_node -> obs.record_synthesizer()
+       +-- planner_node      -> obs.record_planner()
+       +-- tool_node         -> obs.record_tool()
+       +-- synthesizer_node  -> obs.record_synthesizer()
+       +-- judge_node        -> obs.record_judge()
   +-- AgentObserver.end_run()                 writes to JSONL
 
 logs/
@@ -552,31 +589,36 @@ logs/
 
 ### Components
 
-| Module                    | Responsibility                                                                                |
-| ------------------------- | --------------------------------------------------------------------------------------------- |
-| `evaluation/observer.py`  | `AgentObserver` -- wraps each run, records timing, derives confidence score, writes JSONL     |
-| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` -- aggregates stats from JSONL; `print_report` -- CLI summary |
-| `evaluation/dashboard.py` | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point               |
+| Module                    | Responsibility                                                                                           |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `evaluation/observer.py`  | `AgentObserver` -- wraps each run, records timing, confidence signals, judge verdicts, and writes JSONL |
+| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` -- aggregates run, latency, confidence and judge-quality metrics         |
+| `evaluation/dashboard.py` | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point                          |
 
 ### RunRecord fields
 
-| Field                    | Source           | Description                                                                                 |
-| ------------------------ | ---------------- | ------------------------------------------------------------------------------------------- |
-| `run_id`                 | observer         | Unique ID per query (12-char hex)                                                           |
-| `session_id`             | observer         | Groups runs within one session                                                              |
-| `timestamp`              | observer         | ISO-8601 UTC                                                                                |
-| `query`                  | input            | Raw user question                                                                           |
-| `action`                 | planner          | `optimization` / `simulation` / `knowledge`                                                 |
-| `reasoning`              | planner          | LLM's explanation of tool choice                                                            |
-| `planner_latency_ms`     | planner node     | Time from entry to structured output                                                        |
-| `tool_latency_ms`        | tool node        | Time to execute the analytical tool                                                         |
-| `synthesizer_latency_ms` | synthesizer node | Time for natural-language response                                                          |
-| `total_latency_ms`       | observer         | End-to-end wall time                                                                        |
+| Field                    | Source           | Description                                                                                   |
+| ------------------------ | ---------------- | --------------------------------------------------------------------------------------------- |
+| `run_id`                 | observer         | Unique ID per query (12-char hex)                                                             |
+| `session_id`             | observer         | Groups runs within one session                                                                |
+| `timestamp`              | observer         | ISO-8601 UTC                                                                                  |
+| `query`                  | input            | Raw user question                                                                             |
+| `action`                 | planner          | `optimization` / `simulation` / `knowledge`                                                   |
+| `reasoning`              | planner          | LLM's explanation of tool choice                                                              |
+| `planner_latency_ms`     | planner node     | Time from entry to structured output                                                          |
+| `tool_latency_ms`        | tool node        | Time to execute the analytical tool                                                           |
+| `synthesizer_latency_ms` | synthesizer node | Time for first natural-language draft                                                         |
+| `judge_latency_ms`       | judge node       | Time for online answer validation and optional revision                                       |
+| `judge_score`            | judge node       | Final quality score assigned by the online judge                                              |
+| `judge_passed`           | judge node       | Whether the synthesizer draft passed without revision                                         |
+| `judge_revised`          | judge node       | Whether the judge rewrote the answer once before delivery                                     |
+| `judge_feedback`         | judge node       | Short explanation of the judge verdict                                                        |
+| `total_latency_ms`       | observer         | End-to-end wall time                                                                          |
 | `confidence_score`       | observer         | Derived: `1 - downside_risk_pct/100` for Monte Carlo, `1.0` for optimization, `0.9` for RAG |
-| `raw_result_keys`        | tool node        | Dict keys returned by the tool                                                              |
-| `success`                | observer         | `false` if any node raised an exception                                                     |
-| `error`                  | observer         | Exception message if `success=false`                                                        |
-| `answer_length`          | synthesizer      | Character count of the final answer                                                         |
+| `raw_result_keys`        | tool node        | Dict keys returned by the tool                                                                |
+| `success`                | observer         | `false` if any node raised an exception                                                       |
+| `error`                  | observer         | Exception message if `success=false`                                                          |
+| `answer_length`          | judge            | Character count of the final answer delivered to the user                                     |
 
 ### LangSmith integration
 
@@ -615,8 +657,9 @@ Ask a business question: dashboard
 The dashboard includes:
 
 - KPI cards: total runs, success rate, avg latency, avg confidence
+- Judge metrics: average judge score, approval rate and revision rate
 - Tool distribution doughnut chart
-- Latency breakdown bar chart (planner / tool / synthesizer)
+- Latency breakdown bar chart (planner / tool / synthesizer / judge)
 - Recent runs table with per-run confidence bars
 - Error log (if any failures occurred)
 
@@ -708,9 +751,13 @@ User: "And if price is 28?"  <- planner understands the context
 
 ### `agents/workflow.py`
 
-- `build_graph(checkpointer=None)` accepts an optional `SqliteSaver`.
-- `synthesizer_node` returns `{"answer": ..., "history": [new_turn]}`.
-  LangGraph applies `operator.add` and the new turn is persisted under the session `thread_id`.
+`build_graph(checkpointer=...)` compiles the LangGraph workflow with persistent state. The graph now includes an online quality gate after synthesis:
+
+```
+planner -> tool -> synthesizer -> judge -> END
+```
+
+This keeps the answer-validation logic inside the graph itself, so the final response is governed before it reaches the user.
 
 ### Turn flow
 
