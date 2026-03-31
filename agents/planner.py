@@ -64,6 +64,32 @@ _llm_structured = _llm.with_structured_output(ToolSelection)
 _HISTORY_WINDOW = 3
 
 
+def _build_few_shot_examples(spec) -> str:
+    """
+    Builds 3 dynamic routing examples from the first decision variable in the spec.
+
+    One example per tool: optimization (find the optimal value), simulation
+    (evaluate a specific value), and knowledge (explain the model).
+    """
+    v0 = spec.decision_variables[0]
+    sim_value = v0.default
+    return (
+        f"EXAMPLES\n"
+        f"--------\n"
+        f'User: "What is the optimal {v0.name}?"\n'
+        f"→ tool: optimization | reasoning: The user is asking for the {v0.name} that"
+        f" maximises profit, which requires searching the full range"
+        f" {v0.bounds_min}–{v0.bounds_max}. | params: {{}}\n\n"
+        f'User: "What would happen if {v0.name} is {sim_value}?"\n'
+        f"→ tool: simulation | reasoning: The user specifies a concrete {v0.name}"
+        f" value and asks for the expected outcome under uncertainty."
+        f' | params: {{"{v0.name}": {sim_value}}}\n\n'
+        f'User: "How does the demand model work?"\n'
+        f"→ tool: knowledge | reasoning: The user is asking for an explanation of the"
+        f" methodology, not a specific decision or scenario. | params: {{}}"
+    )
+
+
 def _build_system_prompt() -> str:
     """Construye el system prompt dinámicamente desde el spec."""
     spec = get_spec()
@@ -72,6 +98,7 @@ def _build_system_prompt() -> str:
         f"rango {v.bounds_min}–{v.bounds_max}, defecto {v.default})"
         for v in spec.decision_variables
     )
+    examples = _build_few_shot_examples(spec)
     return (
         f"You are the planner of a Decision Intelligence system\n"
         f"for a {spec.domain_name} business.\n"
@@ -87,17 +114,17 @@ def _build_system_prompt() -> str:
         f"   Use when the user asks: what happens if X is Y? simulate scenario...\n"
         f"   what would profit be at value Z? what is the expected outcome?\n"
         f"   The tool evaluates a specific scenario under uncertainty\n"
-        f"   using Monte Carlo simulation.\n"
-        f"   If the user mentions specific values for decision variables, extract\n"
-        f"   them into the `params` dict using the exact variable name as key.\n"
-        f"   Decision variables available:\n"
-        f"{vars_desc}\n"
-        f"   Example: 'simulate at price 30' → params={{\"price\": 30.0}}\n"
-        f"   Leave params empty ({{}}) if no specific values are mentioned.\n\n"
+        f"   using Monte Carlo simulation.\n\n"
         f"3. KNOWLEDGE\n"
         f"   Use when the user asks: how does the model work? what is demand\n"
         f"   elasticity? explain the methodology, what does Monte Carlo mean?\n"
         f"   The tool retrieves relevant explanations from the knowledge base.\n\n"
+        f"{examples}\n\n"
+        f"If the user mentions specific values for decision variables, extract\n"
+        f"them into the `params` dict using the exact variable name as key.\n"
+        f"Decision variables available:\n"
+        f"{vars_desc}\n"
+        f"Leave params empty if no specific values are mentioned.\n\n"
         f"Select the single most appropriate tool for the user's query.\n"
         f"Always provide a brief reasoning for your choice."
     )

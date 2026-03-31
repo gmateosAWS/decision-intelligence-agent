@@ -379,11 +379,11 @@ The vector store is loaded **lazily** (on first query, not at import time). If t
 
 The agent is implemented as a **4-node LangGraph graph**:
 
-**`planner_node`** -- Selects the appropriate tool using `gpt-4o-mini` with structured output. The system prompt is built dynamically from the spec, listing all decision variable names and ranges. Output is a typed `ToolSelection(tool, reasoning, params)` object -- no string parsing.
+**`planner_node`** -- Selects the appropriate tool using structured output (model configurable via `PLANNER_MODEL` env var, defaults to `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. Output is a typed `ToolSelection(tool, reasoning, params)` object -- no string parsing.
 
 **`tool_node`** -- Executes the selected tool. Wrapped in `try/except`: errors are captured and propagated to the state rather than crashing the graph.
 
-**`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer: what do the numbers mean, what should the decision-maker do, and what risks or caveats matter.
+**`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer (model configurable via `SYNTHESIZER_MODEL` env var, defaults to `gpt-4o-mini`): what do the numbers mean, what should the decision-maker do, and what risks or caveats matter.
 
 **`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version.
 
@@ -477,18 +477,28 @@ source venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-**3. Configure API key and judge settings**
+**3. Configure API keys and model settings**
 
 Create a `.env` file in the project root:
 
-```env
+```
+# --- API Keys ---
 OPENAI_API_KEY=your_api_key
+
+# --- LLM Model Configuration ---
+PLANNER_MODEL=gpt-4o-mini
+SYNTHESIZER_MODEL=gpt-4o-mini
 JUDGE_MODEL=gpt-4o-mini
 JUDGE_THRESHOLD=0.75
 ```
 
-- `JUDGE_MODEL` selects the model used by the online judge.
-- `JUDGE_THRESHOLD` defines the minimum score required for a synthesized draft to pass without revision.
+* `PLANNER_MODEL` selects the model used by the planner node for tool selection.
+* `SYNTHESIZER_MODEL` selects the model used by the synthesizer node for natural language responses.
+* `JUDGE_MODEL` selects the model used by the online judge for answer validation.
+* `JUDGE_THRESHOLD` defines the minimum score required for a synthesized draft to pass without revision.
+
+Each node can use a different model independently. For example, a more capable model
+for the planner (tool routing) and a faster model for synthesis and judging.
 
 Get your key from: https://platform.openai.com/api-keys
 
@@ -619,6 +629,21 @@ logs/
 | `success`                | observer         | `false` if any node raised an exception                                                       |
 | `error`                  | observer         | Exception message if `success=false`                                                          |
 | `answer_length`          | judge            | Character count of the final answer delivered to the user                                     |
+| `planner_model`          | planner node     | LLM model used for tool selection                                                             |
+| `synthesizer_model`      | synthesizer node | LLM model used for natural language synthesis                                                 |
+| `judge_model`            | judge node       | LLM model used for online answer validation                                                   |
+
+### JSONL sample (new fields)
+
+```json
+{
+  "planner_model": "gpt-4o",
+  "synthesizer_model": "gpt-4o-mini",
+  "judge_model": "gpt-4o-mini"
+}
+```
+
+These fields are logged per run, enabling analysis of model performance across different configurations.
 
 ### LangSmith integration
 
@@ -972,3 +997,5 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Observer injected via LangGraph configurable          | Observability is decoupled from business logic; nodes remain testable in isolation without an observer                                                                          |
 | SQLite for session persistence                        | Zero-infrastructure persistence; portable, inspectable, and sufficient for prototype scale                                                                                      |
 | Demand model coefficients in spec YAML                | `base_demand`, `price_elasticity`, `marketing_effect`, `noise_sigma` are first-class spec parameters; recalibrating the model requires only editing the YAML, not touching code |
+| Per-node configurable LLM models via environment variables | Planner, synthesizer and judge can each use a different model; enables cost/quality trade-offs (e.g. capable model for routing, fast model for synthesis) without code changes |
+| Few-shot examples generated dynamically from the spec | Planner prompt includes routing examples built from actual decision variable names; improves tool selection accuracy while remaining fully domain-agnostic |
