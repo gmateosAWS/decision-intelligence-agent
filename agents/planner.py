@@ -125,8 +125,14 @@ def _build_system_prompt() -> str:
         f"Decision variables available:\n"
         f"{vars_desc}\n"
         f"Leave params empty if no specific values are mentioned.\n\n"
-        f"Select the single most appropriate tool for the user's query.\n"
-        f"Always provide a brief reasoning for your choice."
+        f"Before selecting a tool, reason step by step in the `reasoning` field:\n"
+        f"  1. What is the user asking for?\n"
+        f"  2. Does the query mention concrete values for any decision variable?\n"
+        f"  3. Is this an exploration/optimization question or a request to"
+        f" understand\n"
+        f"     how the system works?\n"
+        f"  4. Which tool fits best and why?\n\n"
+        f"Select the single most appropriate tool for the user's query."
     )
 
 
