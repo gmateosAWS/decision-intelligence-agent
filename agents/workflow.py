@@ -1,17 +1,26 @@
 """
-agents/workflow.py  – Mejora 3
---------------------------------
-Cambios respecto a Mejora 2:
-  • build_graph() ahora acepta un checkpointer opcional (SqliteSaver).
-    Si se pasa, el grafo se compila con persistencia: cada nodo escribe
-    su estado parcial y LangGraph puede reanudar hilos por thread_id.
-  • synthesizer_node devuelve un borrador de respuesta.
-  • judge_node evalúa online la respuesta final, la aprueba o la revisa
-    una vez antes de devolverla al usuario.
-  • El historial se añade solo después del juez, para persistir la versión
-    final y no el borrador previo.
+agents/workflow.py
+------------------
+LangGraph workflow for the Decision Intelligence Agent.
 
-Graph:  planner_node → tool_node → synthesizer_node → judge_node → END
+Defines the four pipeline nodes and compiles them into a directed graph:
+
+    planner_node → tool_node → synthesizer_node → judge_node → END
+
+Nodes
+-----
+- ``planner_node``    -- wraps the LLM planner; records timing via observer.
+- ``tool_node``       -- dispatches to the tool selected by the planner
+                         (optimization / simulation / knowledge); errors are
+                         captured and propagated in state rather than raised.
+- ``synthesizer_node``-- converts raw tool output into a business-oriented
+                         draft answer using an LLM (``SYNTHESIZER_MODEL``).
+- ``judge_node``      -- delegates to ``agents/judge.py`` for online quality
+                         evaluation and optional single-pass revision.
+
+``build_graph(checkpointer=None)`` compiles the graph with optional SQLite
+persistence: when a checkpointer is provided, LangGraph writes partial state
+after each node and can resume a thread by ``thread_id``.
 """
 
 from __future__ import annotations

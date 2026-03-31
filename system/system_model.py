@@ -1,22 +1,16 @@
 """
-system/system_model.py  ← CORREGIDO + INTEGRA MEJORA 1
-────────────────────────────────────────────────────────
-Cambios:
-  1. El DAG causal (system_graph) ahora está
-      FUNCIONALMENTE CONECTADO al modelo.
-     evaluate() propaga valores en orden topológico, no ejecuta fórmulas hardcodeadas.
-  2. Las fórmulas de los nodos derivados están registradas
-      en _NODE_FORMULAS,
-     separadas de la lógica de traversal.
-  3. unit_cost se carga desde spec (Mejora 1) o desde config como fallback.
-  4. El grafo se construye una vez en __init__ y se reutiliza.
+system/system_model.py
+----------------------
+Causal business model evaluation engine.
 
-Antes:
-  evaluate() ignoraba el grafo y ejecutaba fórmulas hardcodeadas en secuencia fija.
-Ahora:
-  evaluate() hace topological_sort() del DAG y evalúa cada nodo en orden correcto.
-    Añadir un nuevo nodo al modelo solo requiere registrar su fórmula
-    y actualizar el grafo.
+``SystemModel.evaluate()`` propagates input values through the causal DAG in
+topological order. Each derived node is computed by a registered formula in
+``_NODE_FORMULAS``; adding a new causal variable requires only registering its
+formula and adding the corresponding edge to the graph — no changes to the
+traversal logic.
+
+Business parameters (``unit_cost``, etc.) are loaded from the organizational
+spec; ``config/settings.py`` is used as a fallback if the spec is unavailable.
 """
 
 from __future__ import annotations
@@ -28,7 +22,7 @@ import networkx as nx
 
 from system.system_graph import build_graph
 
-# ── Intentar cargar parámetros desde spec (Mejora 1), fallback a config ───────
+# ── Load business parameters from spec; fall back to config if unavailable ────
 try:
     from spec.spec_loader import get_spec
 
@@ -119,8 +113,7 @@ class SystemModel:
             elif node in _NODE_FORMULAS:
                 # Nodo calculado por fórmula registrada
                 values[node] = _NODE_FORMULAS[node](values)
-            # Nodos desconocidos se ignoran silenciosamente
-            # (extensible: se puede añadir logging aquí en Mejora 2)
+            # Unknown nodes are skipped silently
 
         # Eliminar variables internas del output
         return {k: v for k, v in values.items() if not k.startswith("_")}

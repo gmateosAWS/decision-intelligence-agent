@@ -1,10 +1,12 @@
 """
-app.py  – Mejora 3
--------------------
-Interactive REPL with:
+app.py
+------
+Interactive REPL entry point for the Decision Intelligence Agent.
+
+Features:
   • Multi-turn conversational memory via LangGraph SqliteSaver.
   • Session management: new / list / resume / info / delete.
-  • Observability layer from Mejora 2 (AgentObserver, JSONL logs).
+  • Structured observability via AgentObserver (JSONL logs, HTML dashboard).
   • LangSmith tracing (optional, via env vars).
 
 Session commands (type at the prompt)
@@ -94,7 +96,7 @@ def _show_dashboard(observer: AgentObserver) -> None:
 def main() -> None:  # noqa: C901
     print(_BANNER)
 
-    # -- Observability (Mejora 2) ----------------------------------------
+    # -- Observability --------------------------------------------------
     observer = AgentObserver(log_dir="logs")
 
     ls_val = os.getenv("LANGCHAIN_TRACING_V2", "false").lower()
@@ -103,7 +105,7 @@ def main() -> None:  # noqa: C901
         proj = os.getenv("LANGCHAIN_PROJECT", "default")
         print(f"  ✓ LangSmith tracing enabled (project: {proj})\n")
 
-    # -- Memory / checkpointing (Mejora 3) --------------------------------
+    # -- Memory / checkpointing -------------------------------------------
     checkpointer = get_checkpointer()
     graph = build_graph(checkpointer=checkpointer)
 

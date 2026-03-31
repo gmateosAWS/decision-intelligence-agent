@@ -1,7 +1,7 @@
 """
-config/settings.py  (MODIFIED — Mejora 1: spec-driven)
-────────────────────────────────────────────────────────
-This module is now a THIN ADAPTER over the organizational spec.
+config/settings.py
+------------------
+Thin adapter over the organizational spec.
 All numeric parameters are loaded from spec/organizational_model.yaml.
 
 Backward compatibility is fully preserved: all existing imports continue

@@ -1,7 +1,7 @@
 """
 memory/__init__.py
 ------------------
-Public API for the memory layer (Mejora 3).
+Public API for the conversational memory layer.
 
 Exports
 -------

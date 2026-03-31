@@ -1,31 +1,28 @@
 """
 agents/state.py
----------------------------
-– Mejora 3
-
-AgentState TypedDict – shared mutable state for the LangGraph nodes.
+---------------
+Shared mutable state (``AgentState`` TypedDict) passed between LangGraph
+nodes in the Decision Intelligence Agent pipeline.
 
 Fields
 ------
-  query      (str)                – user's original question
-  action     (str | None)         – tool selected by the planner
-  reasoning  (str | None)         – planner's explanation of its choice
-  price      (float | None)       – price extracted from the query (if any)
-  marketing  (float | None)       – marketing spend extracted from the query (if any
-  raw_result (dict | None)        – raw output from the analytical tool
-  answer     (str | None)         – synthesized natural-language response
-  run_id     (str | None)         – observability correlation ID
-  history    (List[Dict[str,str]])– accumulated (query, answer) turn pairs
-                                    (uses operator.add so LangGraph appends
-                                    rather than replacing the list)
-
-- Mejora 5 (params genérico)
-----------------------------
-Cambios vs Mejora 4:
-  • Eliminados los campos de dominio `price` y `marketing`.
-  • Añadido `params: Dict[str, float]` genérico — el planner lo rellena
-    con los valores de variables de decisión extraídos de la query.
-    Las tools leen de este dict y caen al default del spec si falta alguno.
+  query        (str)                 -- user's original question
+  action       (str | None)          -- tool selected by the planner
+  reasoning    (str | None)          -- planner's CoT reasoning for the choice
+  params       (Dict[str, float])    -- decision-variable values extracted from
+                                        the query; keys match spec variable names
+                                        exactly; tools fall back to spec defaults
+                                        for any missing key
+  raw_result   (dict | None)         -- raw output from the analytical tool
+  answer       (str | None)          -- final natural-language response
+  run_id       (str | None)          -- observability correlation ID
+  judge_score  (float | None)        -- quality score assigned by the judge
+  judge_passed (bool | None)         -- whether the draft passed without revision
+  judge_feedback (str | None)        -- judge's explanation of its verdict
+  judge_revised  (bool | None)       -- whether the answer was rewritten once
+  history      (List[Dict[str,str]]) -- accumulated (query, answer) turn pairs;
+                                        merged via operator.add so LangGraph
+                                        appends rather than replacing the list
 """
 
 from __future__ import annotations

@@ -1,11 +1,11 @@
 """
-system/system_graph.py  (MODIFIED — Mejora 1: spec-driven)
-───────────────────────────────────────────────────────────
-The causal DAG is no longer hardcoded.
-Edges are derived directly from causal_relationships in the spec YAML.
+system/system_graph.py
+----------------------
+Builds the causal Directed Acyclic Graph from the organizational spec.
 
-To add, remove or rewire causal links: edit spec/organizational_model.yaml.
-No code changes required.
+Edges are derived from ``causal_relationships`` in
+``spec/organizational_model.yaml``. To add, remove or rewire causal links,
+edit the spec — no code changes required.
 """
 
 import networkx as nx

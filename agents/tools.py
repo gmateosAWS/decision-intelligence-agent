@@ -1,17 +1,20 @@
 """
-agents/tools.py  – FIXED (type contract aligned with workflow.py)
-------------------------------------------------------------------
-Cambios respecto a Mejora 1:
-  • Las tres funciones aceptan ahora `state: dict` (AgentState) en lugar
-    de `query: str`, en consonancia con cómo las llama workflow.py:
-        raw_result = tool_fn(state)
-  • Todas devuelven `dict` en lugar de `str`, en consonancia con lo que
-    espera synthesizer_node:
-        raw_text = "\\n".join(f"  {k}: {v}" for k, v in raw.items())
-  • knowledge_tool extrae `state["query"]` correctamente antes de llamar
-    a retrieve_knowledge().
-  • optimization_tool y simulation_tool ya devolvían un dict internamente;
-    se eliminó el str() innecesario.
+agents/tools.py
+---------------
+Tool wrappers called by ``tool_node`` in the LangGraph workflow.
+
+Each function accepts the full ``AgentState`` dict and returns a plain
+``dict`` consumed by the synthesizer node.
+
+Tools
+-----
+- ``simulation_tool``   -- runs a Monte Carlo scenario; reads decision-variable
+                           values from ``state["params"]``, falling back to spec
+                           defaults for any missing key.
+- ``optimization_tool`` -- grid-searches the decision space to maximise expected
+                           profit; ignores ``params`` (always searches full range).
+- ``knowledge_tool``    -- similarity search over the FAISS knowledge index using
+                           ``state["query"]`` as the retrieval query.
 """
 
 from __future__ import annotations

@@ -1,25 +1,28 @@
 """
-agents/planner.py  – Mejora 3
--------------------------------
-Cambios respecto a Mejora 2:
-  • El prompt del sistema es el mismo.
-  • planner_node ahora recibe el historial de conversación
-    (state["history"]) y añade hasta 3 turnos anteriores como
-    mensajes de usuario/asistente previos al mensaje actual.
-    Esto permite que el LLM resuelva referencias como
-    "¿y si el precio fuese 28?" cuando la pregunta anterior
-    era sobre optimización de precios.
+agents/planner.py
+-----------------
+LLM planner node for the Decision Intelligence Agent.
 
-  – Mejora 5 (params genérico)
--------------------------------------------------
-Cambios vs Mejora 4:
-  • ToolSelection usa `params: Dict[str, float]` en lugar de campos
-    fijos `price` y `marketing`. El schema es agnóstico al dominio.
-  • El system prompt se genera dinámicamente desde el spec, listando
-    las variables de decisión por nombre. Cambiar el YAML actualiza
-    automáticamente lo que el planner sabe extraer.
-  • planner_node devuelve {"action", "reasoning", "params"} —
-    sin nombres de campo de dominio en el contrato de estado.
+Responsibilities
+----------------
+- Tool selection via structured output (Pydantic schema ``ToolSelection``),
+  eliminating fragile string parsing.
+- System prompt built dynamically from the organizational spec: decision
+  variable names, ranges and defaults are injected at runtime, so the
+  planner stays domain-agnostic without manual prompt updates.
+- Few-shot routing examples generated from the spec's first decision
+  variable, covering optimization, simulation and knowledge queries.
+- Chain-of-Thought reasoning enforced in the ``reasoning`` field: the LLM
+  must articulate what the user is asking, whether concrete variable values
+  are mentioned, whether the intent is exploratory or conceptual, and which
+  tool fits best — before committing to a choice.
+- Generic parameter extraction: any decision-variable values mentioned in
+  the query are captured in ``params: Dict[str, float]`` using the exact
+  variable names from the spec. Tools fall back to spec defaults for any
+  missing key.
+- Conversational context: the last ``_HISTORY_WINDOW`` turns from
+  ``state["history"]`` are prepended to the prompt so the LLM can resolve
+  cross-turn references without re-asking the user.
 """
 
 from __future__ import annotations
