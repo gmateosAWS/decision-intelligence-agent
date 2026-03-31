@@ -53,6 +53,7 @@ class RunRecord:
     action: Optional[str] = None
     reasoning: Optional[str] = None
     planner_latency_ms: Optional[float] = None
+    planner_model: Optional[str] = None
 
     # Tool
     tool_latency_ms: Optional[float] = None
@@ -62,6 +63,7 @@ class RunRecord:
     # Synthesizer
     synthesizer_latency_ms: Optional[float] = None
     answer_length: Optional[int] = None
+    synthesizer_model: Optional[str] = None
 
     # Judge
     judge_latency_ms: Optional[float] = None
@@ -69,6 +71,7 @@ class RunRecord:
     judge_passed: Optional[bool] = None
     judge_revised: Optional[bool] = None
     judge_feedback: Optional[str] = None
+    judge_model: Optional[str] = None
 
     # Overall
     total_latency_ms: Optional[float] = None
@@ -133,12 +136,14 @@ class AgentObserver:
         action: str,
         reasoning: str,
         latency_ms: float,
+        model: Optional[str] = None,
     ) -> None:
         """Record the planner's tool selection."""
         if self._run:
             self._run.action = action
             self._run.reasoning = reasoning
             self._run.planner_latency_ms = latency_ms
+            self._run.planner_model = model
         self._logger.info(
             "  PLANNER     action=%-14s  latency=%6.0f ms  reason=%s",
             action,
@@ -179,11 +184,17 @@ class AgentObserver:
         if error:
             self._logger.error("  TOOL ERROR: %s", error)
 
-    def record_synthesizer(self, answer: str, latency_ms: float) -> None:
+    def record_synthesizer(
+        self,
+        answer: str,
+        latency_ms: float,
+        model: Optional[str] = None,
+    ) -> None:
         """Record the synthesizer's output."""
         if self._run:
             self._run.synthesizer_latency_ms = latency_ms
             self._run.answer_length = len(answer)
+            self._run.synthesizer_model = model
         self._logger.info(
             "  SYNTHESIZER                       latency=%6.0f ms  answer_chars=%d",
             latency_ms,
@@ -199,6 +210,7 @@ class AgentObserver:
         revised: bool,
         final_answer: Optional[str] = None,
         error: Optional[str] = None,
+        model: Optional[str] = None,
     ) -> None:
         """Record online-judge evaluation and optional revision."""
         if self._run:
@@ -207,6 +219,7 @@ class AgentObserver:
             self._run.judge_passed = approved
             self._run.judge_revised = revised
             self._run.judge_feedback = feedback
+            self._run.judge_model = model
             if final_answer is not None:
                 self._run.answer_length = len(final_answer)
             if error and self._run.error is None:

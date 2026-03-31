@@ -24,6 +24,7 @@ Cambios vs Mejora 4:
 
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Literal
 
 from dotenv import load_dotenv
@@ -35,7 +36,9 @@ from spec.spec_loader import get_spec
 
 load_dotenv()
 
-_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+_PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
+
+_llm = ChatOpenAI(model=_PLANNER_MODEL, temperature=0)
 
 
 class DecisionParam(BaseModel):

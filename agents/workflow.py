@@ -16,16 +16,24 @@ Graph:  planner_node → tool_node → synthesizer_node → judge_node → END
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Dict, Optional
 
+from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
+from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
 from .judge import judge_node as _judge_node_impl
 from .planner import planner_node as _planner_node_impl
 from .state import AgentState
 from .tools import knowledge_tool, optimization_tool, simulation_tool
+
+load_dotenv()
+
+_PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
+_SYNTHESIZER_MODEL = os.getenv("SYNTHESIZER_MODEL", "gpt-4o-mini")
 
 # ---------------------------------------------------------------------------
 # Tool dispatch
@@ -57,6 +65,7 @@ def planner_node(
             action=result.get("action", "knowledge"),
             reasoning=result.get("reasoning", ""),
             latency_ms=elapsed_ms,
+            model=_PLANNER_MODEL,
         )
     return result
 
@@ -102,7 +111,6 @@ def synthesizer_node(
     The answer is judged in a later node before it is appended to history,
     so this node only returns the synthesized draft answer.
     """
-    from langchain_openai import ChatOpenAI
 
     obs = _get_observer(config)
     query = state.get("query", "")
@@ -122,7 +130,7 @@ def synthesizer_node(
     )
 
     t0 = time.perf_counter()
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+    llm = ChatOpenAI(model=_SYNTHESIZER_MODEL, temperature=0.2)
     try:
         response = llm.invoke(prompt)
         answer = response.content.strip()
@@ -132,7 +140,9 @@ def synthesizer_node(
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
     if obs:
-        obs.record_synthesizer(answer=answer, latency_ms=elapsed_ms)
+        obs.record_synthesizer(
+            answer=answer, latency_ms=elapsed_ms, model=_SYNTHESIZER_MODEL
+        )
 
     return _sanitize_for_state({"answer": answer})
 

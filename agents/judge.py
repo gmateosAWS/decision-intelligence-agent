@@ -113,6 +113,7 @@ def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, An
                 revised=False,
                 final_answer=answer,
                 error=str(exc),
+                model=_JUDGE_MODEL,
             )
         return {
             "judge_score": None,
@@ -147,6 +148,7 @@ def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, An
             latency_ms=elapsed_ms,
             revised=revised,
             final_answer=final_answer,
+            model=_JUDGE_MODEL,
         )
 
     return {
