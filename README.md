@@ -354,7 +354,7 @@ Validated scenario results:
 | Default   | EUR 25     | ~88 units | ~EUR 1,328      | 0%            |
 | Optimized | ~EUR 48.64 | ~55 units | ~EUR 2,139      | 0%            |
 
-The optimum reflects the trade-off between lower volume and higher margin per unit: even though demand drops from 88 to 55 units (-38%), the margin increase from EUR 15 to EUR 38.64 per unit (+158%) more than compensates.
+The optimum reflects the trade-off between lower volume and higher margin per unit: even though demand drops from 88 to 55 units (-38%), the margin increase from EUR 15 to EUR 48.64 per unit (+158%) more than compensates.
 
 ---
 
