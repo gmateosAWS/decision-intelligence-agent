@@ -20,9 +20,9 @@ Responsibilities
   the query are captured in ``params: Dict[str, float]`` using the exact
   variable names from the spec. Tools fall back to spec defaults for any
   missing key.
-- Conversational context: the last ``_HISTORY_WINDOW`` turns from
-  ``state["history"]`` are prepended to the prompt so the LLM can resolve
-  cross-turn references without re-asking the user.
+- Conversational context: the last ``HISTORY_WINDOW`` turns (env var,
+  default 3) from ``state["history"]`` are prepended to the prompt so the
+  LLM can resolve cross-turn references without re-asking the user.
 """
 
 from __future__ import annotations
@@ -63,8 +63,7 @@ class ToolSelection(BaseModel):
 _llm_structured = _llm.with_structured_output(ToolSelection)
 
 
-# Numero de turnos anteriores a incluir del historial (ajustable según necesidades)
-_HISTORY_WINDOW = 3
+_HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "3"))
 
 
 def _build_few_shot_examples(spec) -> str:
