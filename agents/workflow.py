@@ -31,10 +31,10 @@ from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
-from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 
 from .judge import judge_node as _judge_node_impl
+from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from .planner import planner_node as _planner_node_impl
 from .state import AgentState
 from .tools import knowledge_tool, optimization_tool, simulation_tool
@@ -42,7 +42,19 @@ from .tools import knowledge_tool, optimization_tool, simulation_tool
 load_dotenv()
 
 _PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
+_SYNTHESIZER_PROVIDER = os.getenv("SYNTHESIZER_PROVIDER", "openai")
 _SYNTHESIZER_MODEL = os.getenv("SYNTHESIZER_MODEL", "gpt-4o-mini")
+_FALLBACK_PROVIDER = os.getenv("FALLBACK_PROVIDER", "")
+_FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
+
+_synthesizer_llm = get_chat_model(
+    _SYNTHESIZER_PROVIDER, _SYNTHESIZER_MODEL, temperature=0.2
+)
+_synthesizer_fallback_llm = (
+    get_chat_model(_FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.2)
+    if _FALLBACK_PROVIDER and _FALLBACK_MODEL
+    else None
+)
 
 # ---------------------------------------------------------------------------
 # Tool dispatch
@@ -139,12 +151,18 @@ def synthesizer_node(
     )
 
     t0 = time.perf_counter()
-    llm = ChatOpenAI(model=_SYNTHESIZER_MODEL, temperature=0.2)
     try:
-        response = llm.invoke(prompt)
+        response = invoke_with_fallback(
+            _synthesizer_llm,
+            prompt,
+            fallback=_synthesizer_fallback_llm,
+        )
         answer = response.content.strip()
-    except Exception as exc:  # noqa: BLE001
-        answer = f"[Synthesizer error: {exc}]\n\nRaw result:\n{raw_text}"
+    except (LLMUnavailableError, Exception):  # noqa: BLE001
+        answer = (
+            "The synthesis service is temporarily unavailable. "
+            f"Raw result:\n{raw_text}"
+        )
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
 

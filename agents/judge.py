@@ -24,18 +24,31 @@ import time
 from typing import Any, Dict, Literal, Optional
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from .state import AgentState
 
 load_dotenv()
 
+_JUDGE_PROVIDER = os.getenv("JUDGE_PROVIDER", "openai")
 _JUDGE_MODEL = os.getenv("JUDGE_MODEL", "gpt-4o-mini")
 _JUDGE_THRESHOLD = float(os.getenv("JUDGE_THRESHOLD", "0.75"))
+_FALLBACK_PROVIDER = os.getenv("FALLBACK_PROVIDER", "")
+_FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 
-_judge_llm = ChatOpenAI(model=_JUDGE_MODEL, temperature=0)
-_revision_llm = ChatOpenAI(model=_JUDGE_MODEL, temperature=0.1)
+_judge_llm = get_chat_model(_JUDGE_PROVIDER, _JUDGE_MODEL, temperature=0)
+_revision_llm = get_chat_model(_JUDGE_PROVIDER, _JUDGE_MODEL, temperature=0.1)
+
+_fallback_judge_llm = None
+_fallback_revision_llm = None
+if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
+    _fallback_judge_llm = get_chat_model(
+        _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0
+    )
+    _fallback_revision_llm = get_chat_model(
+        _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.1
+    )
 
 
 class JudgeVerdict(BaseModel):
@@ -50,6 +63,11 @@ class JudgeVerdict(BaseModel):
 
 
 _judge_structured = _judge_llm.with_structured_output(JudgeVerdict)
+_fallback_judge_structured = (
+    _fallback_judge_llm.with_structured_output(JudgeVerdict)
+    if _fallback_judge_llm is not None
+    else None
+)
 
 
 def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, Any]:
@@ -69,38 +87,41 @@ def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, An
     raw_text = _format_raw_result(raw_result)
     t0 = time.perf_counter()
 
+    judge_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an online quality judge for a Decision Intelligence "
+                "assistant.\n"
+                "Evaluate the assistant answer strictly against the user"
+                "'s query and the raw tool output.\n"
+                "Do not reward style alone. Prefer factual grounding, "
+                "quantitative consistency, and decision usefulness.\n"
+                "Approve only if the answer is clearly grounded in the tool "
+                "result and directly answers the user.\n"
+                f"Use a strict approval threshold of {_JUDGE_THRESHOLD:.2f}."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"User query:\n{query}\n\n"
+                f"Selected tool: {action}\n\n"
+                f"Raw tool output:\n{raw_text}\n\n"
+                f"Assistant answer to evaluate:\n{answer}\n\n"
+                "Return a structured verdict. If the answer omits key "
+                "quantitative findings, overstates certainty, or adds claims "
+                "not supported by the tool output, request revision."
+            ),
+        },
+    ]
     try:
-        verdict = _judge_structured.invoke(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an online quality judge for a Decision Intelligence "
-                        "assistant.\n"
-                        "Evaluate the assistant answer strictly against the user"
-                        "'s query and the raw tool output.\n"
-                        "Do not reward style alone. Prefer factual grounding, "
-                        "quantitative consistency, and decision usefulness.\n"
-                        "Approve only if the answer is clearly grounded in the tool "
-                        "result and directly answers the user.\n"
-                        f"Use a strict approval threshold of {_JUDGE_THRESHOLD:.2f}."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"User query:\n{query}\n\n"
-                        f"Selected tool: {action}\n\n"
-                        f"Raw tool output:\n{raw_text}\n\n"
-                        f"Assistant answer to evaluate:\n{answer}\n\n"
-                        "Return a structured verdict. If the answer omits key "
-                        "quantitative findings, overstates certainty, or adds claims "
-                        "not supported by the tool output, request revision."
-                    ),
-                },
-            ]
+        verdict = invoke_with_fallback(
+            _judge_structured,
+            judge_messages,
+            fallback=_fallback_judge_structured,
         )
-    except Exception as exc:  # noqa: BLE001
+    except (LLMUnavailableError, Exception) as exc:  # noqa: BLE001
         # Fail open: preserve the original answer, but log that the judge failed.
         elapsed_ms = (time.perf_counter() - t0) * 1000
         feedback = f"Judge unavailable: {type(exc).__name__}: {exc}"
@@ -170,38 +191,41 @@ def _revise_answer(
     feedback: str,
 ) -> str:
     """Generate one grounded revision using the judge feedback."""
+    revision_messages = [
+        {
+            "role": "system",
+            "content": (
+                "You revise answers for a Decision Intelligence assistant.\n"
+                "Rewrite the answer so it is strictly grounded in the tool "
+                "output, directly answers the user's question, and stays "
+                "concise.\n"
+                "Do not introduce facts not present in the raw tool output.\n"
+                "If numbers exist, use them. If uncertainty exists, mention "
+                "it.\n"
+                "Answer in 3-5 sentences."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"User query:\n{query}\n\n"
+                f"Selected tool: {action}\n\n"
+                f"Raw tool output:\n{raw_text}\n\n"
+                f"Original answer:\n{original_answer}\n\n"
+                f"Judge feedback:\n{feedback}\n\n"
+                "Rewrite the answer now."
+            ),
+        },
+    ]
     try:
-        response = _revision_llm.invoke(
-            [
-                {
-                    "role": "system",
-                    "content": (
-                        "You revise answers for a Decision Intelligence assistant.\n"
-                        "Rewrite the answer so it is strictly grounded in the tool "
-                        "output, directly answers the user's question, and stays "
-                        "concise.\n"
-                        "Do not introduce facts not present in the raw tool output.\n"
-                        "If numbers exist, use them. If uncertainty exists, mention "
-                        "it.\n"
-                        "Answer in 3-5 sentences."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"User query:\n{query}\n\n"
-                        f"Selected tool: {action}\n\n"
-                        f"Raw tool output:\n{raw_text}\n\n"
-                        f"Original answer:\n{original_answer}\n\n"
-                        f"Judge feedback:\n{feedback}\n\n"
-                        "Rewrite the answer now."
-                    ),
-                },
-            ]
+        response = invoke_with_fallback(
+            _revision_llm,
+            revision_messages,
+            fallback=_fallback_revision_llm,
         )
         revised = (response.content or "").strip()
         return revised or original_answer
-    except Exception:
+    except (LLMUnavailableError, Exception):  # noqa: BLE001
         return original_answer
 
 
