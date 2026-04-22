@@ -28,20 +28,23 @@ Responsibilities
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 
+from agents.llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from agents.state import AgentState
 from spec.spec_loader import get_spec
 
 load_dotenv()
 
+_PLANNER_PROVIDER = os.getenv("PLANNER_PROVIDER", "openai")
 _PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
+_FALLBACK_PROVIDER = os.getenv("FALLBACK_PROVIDER", "")
+_FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 
-_llm = ChatOpenAI(model=_PLANNER_MODEL, temperature=0)
+_llm = get_chat_model(_PLANNER_PROVIDER, _PLANNER_MODEL, temperature=0)
 
 
 class DecisionParam(BaseModel):
@@ -59,9 +62,12 @@ class ToolSelection(BaseModel):
     params: List[DecisionParam] = []  # vacío si no se mencionan valores
 
 
-# Volver al modo por defecto (json_schema estricto, compatible con List[objeto])
 _llm_structured = _llm.with_structured_output(ToolSelection)
 
+_fallback_llm_structured: Optional[object] = None
+if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
+    _fallback_llm = get_chat_model(_FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0)
+    _fallback_llm_structured = _fallback_llm.with_structured_output(ToolSelection)
 
 _HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "3"))
 
@@ -165,17 +171,21 @@ def planner_node(state: AgentState) -> Dict:
     messages.append({"role": "user", "content": query})
 
     try:
-        selection: ToolSelection = _llm_structured.invoke(messages)
+        selection: ToolSelection = invoke_with_fallback(
+            _llm_structured,
+            messages,
+            fallback=_fallback_llm_structured,
+        )
         return {
             "action": selection.tool,
             "reasoning": selection.reasoning,
             "params": {p.variable: p.value for p in selection.params},
         }
-    except Exception as exc:
+    except (LLMUnavailableError, Exception) as exc:
         return {
             "action": "knowledge",
             "reasoning": (
-                f"Structured output failed ({exc}). " "Defaulting to knowledge tool."
+                f"Planner unavailable ({exc}). Defaulting to knowledge tool."
             ),
             "params": {},
         }

@@ -1,0 +1,334 @@
+diff --git a/agents/workflow.py b/agents/workflow.py
+index 2dc0826..100b510 100644
+--- a/agents/workflow.py
++++ b/agents/workflow.py
+@@ -5,12 +5,13 @@ Cambios respecto a Mejora 2:
+   • build_graph() ahora acepta un checkpointer opcional (SqliteSaver).
+     Si se pasa, el grafo se compila con persistencia: cada nodo escribe
+     su estado parcial y LangGraph puede reanudar hilos por thread_id.
+-  • synthesizer_node devuelve {answer, history} para que el turno quede
+-    almacenado en el estado acumulado.  LangGraph aplica operator.add
+-    sobre el campo history (definido en state.py).
+-  • El resto (observabilidad, tool dispatch) permanece igual que Mejora 2.
++  • synthesizer_node devuelve un borrador de respuesta.
++  • judge_node evalúa online la respuesta final, la aprueba o la revisa
++    una vez antes de devolverla al usuario.
++  • El historial se añade solo después del juez, para persistir la versión
++    final y no el borrador previo.
+ 
+-Graph:  planner_node → tool_node → synthesizer_node → END
++Graph:  planner_node → tool_node → synthesizer_node → judge_node → END
+ """
+ 
+ from __future__ import annotations
+@@ -21,6 +22,7 @@ from typing import Any, Dict, Optional
+ from langchain_core.runnables import RunnableConfig
+ from langgraph.graph import END, StateGraph
+ 
++from .judge import judge_node as _judge_node_impl
+ from .planner import planner_node as _planner_node_impl
+ from .state import AgentState
+ from .tools import knowledge_tool, optimization_tool, simulation_tool
+@@ -48,7 +50,7 @@ def planner_node(
+     """Calls the LLM planner and records timing via the observer."""
+     obs = _get_observer(config)
+     t0 = time.perf_counter()
+-    result = _planner_node_impl(state)
++    result = _sanitize_for_state(_planner_node_impl(state))
+     elapsed_ms = (time.perf_counter() - t0) * 1000
+     if obs:
+         obs.record_planner(
+@@ -73,7 +75,7 @@ def tool_node(
+     error: Optional[str] = None
+ 
+     try:
+-        raw_result = tool_fn(state)
++        raw_result = _sanitize_for_state(tool_fn(state))
+     except Exception as exc:  # noqa: BLE001
+         error = f"{type(exc).__name__}: {exc}"
+         raw_result = {"error": error}
+@@ -97,17 +99,15 @@ def synthesizer_node(
+     """
+     Converts the raw tool output into a business-oriented answer.
+ 
+-    Returns {answer, history} so that:
+-      • answer   is stored as usual.
+-      • history  is APPENDED (operator.add) with the current turn dict,
+-                 building the multi-turn conversation log.
++    The answer is judged in a later node before it is appended to history,
++    so this node only returns the synthesized draft answer.
+     """
+     from langchain_openai import ChatOpenAI
+ 
+     obs = _get_observer(config)
+     query = state.get("query", "")
+     action = state.get("action", "unknown")
+-    raw = state.get("raw_result") or {}
++    raw = _sanitize_for_state(state.get("raw_result") or {})
+ 
+     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
+     prompt = (
+@@ -134,9 +134,15 @@ def synthesizer_node(
+     if obs:
+         obs.record_synthesizer(answer=answer, latency_ms=elapsed_ms)
+ 
+-    # Append this turn to the accumulated history list
+-    new_turn = {"query": query, "answer": answer}
+-    return {"answer": answer, "history": [new_turn]}
++    return _sanitize_for_state({"answer": answer})
++
++
++def judge_node(
++    state: AgentState,
++    config: Optional[RunnableConfig] = None,
++) -> Dict:
++    """Evaluate and optionally revise the synthesized answer."""
++    return _sanitize_for_state(_judge_node_impl(state, config))
+ 
+ 
+ # ---------------------------------------------------------------------------
+@@ -146,7 +152,7 @@ def synthesizer_node(
+ 
+ def build_graph(checkpointer=None):
+     """
+-    Build and compile the 3-node LangGraph workflow.
++    Build and compile the 4-node LangGraph workflow.
+ 
+     Parameters
+     ----------
+@@ -155,18 +161,20 @@ def build_graph(checkpointer=None):
+         Pass a thread_id in the config to resume a conversation.
+ 
+     Flow:
+-        planner_node → tool_node → synthesizer_node → END
++        planner_node → tool_node → synthesizer_node → judge_node → END
+     """
+     builder = StateGraph(AgentState)
+ 
+     builder.add_node("planner", planner_node)
+     builder.add_node("tool", tool_node)
+     builder.add_node("synthesizer", synthesizer_node)
++    builder.add_node("judge", judge_node)
+ 
+     builder.set_entry_point("planner")
+     builder.add_edge("planner", "tool")
+     builder.add_edge("tool", "synthesizer")
+-    builder.add_edge("synthesizer", END)
++    builder.add_edge("synthesizer", "judge")
++    builder.add_edge("judge", END)
+ 
+     if checkpointer is not None:
+         return builder.compile(checkpointer=checkpointer)
+@@ -178,6 +186,32 @@ def build_graph(checkpointer=None):
+ # ---------------------------------------------------------------------------
+ 
+ 
++def _sanitize_for_state(value: Any) -> Any:
++    """Convert NumPy and other non-msgpack-friendly values to plain Python."""
++    if value is None or isinstance(value, (str, int, float, bool)):
++        return value
++    if isinstance(value, dict):
++        return {str(key): _sanitize_for_state(item) for key, item in value.items()}
++    if isinstance(value, (list, tuple, set)):
++        return [_sanitize_for_state(item) for item in value]
++
++    item_method = getattr(value, "item", None)
++    if callable(item_method):
++        try:
++            return _sanitize_for_state(item_method())
++        except Exception:  # noqa: BLE001
++            pass
++
++    tolist_method = getattr(value, "tolist", None)
++    if callable(tolist_method):
++        try:
++            return _sanitize_for_state(tolist_method())
++        except Exception:  # noqa: BLE001
++            pass
++
++    return str(value)
++
++
+ def _get_observer(config: Optional[RunnableConfig]):
+     """Extract the AgentObserver from the configurable dict."""
+     if config is None:
+diff --git a/app.py b/app.py
+index 49979b1..a2a7986 100644
+--- a/app.py
++++ b/app.py
+@@ -39,7 +39,7 @@ load_dotenv()
+ 
+ _BANNER = """
+ ╔══════════════════════════════════════════════════════════════╗
+-║      Decision Intelligence Agent  ·  v3 (memory)             ║
++║   Decision Intelligence Agent  ·  v4 (online judge)          ║
+ ╠══════════════════════════════════════════════════════════════╣
+ ║  Ask business questions about pricing and marketing.         ║
+ ║  Commands:                                                   ║
+@@ -116,9 +116,12 @@ def main() -> None:  # noqa: C901
+     while True:
+         try:
+             raw = input("Ask a business question: ").strip()
+-        except (EOFError, KeyboardInterrupt):
++        except EOFError:
+             print("\nGoodbye.")
+             break
++        except KeyboardInterrupt:
++            print("\n[Interrumpido en el prompt — escribe 'exit' para salir]\n")
++            continue
+ 
+         if not raw:
+             continue
+@@ -126,7 +129,7 @@ def main() -> None:  # noqa: C901
+         # ---- Built-in commands ----------------------------------------
+         lower = raw.lower()
+ 
+-        if lower == "exit":
++        if lower in {"exit", "quit", "q"}:
+             print("Goodbye.")
+             break
+ 
+@@ -193,8 +196,8 @@ def main() -> None:  # noqa: C901
+             observer.end_run(success=True)
+ 
+         except KeyboardInterrupt:
+-            print("\n[Interrupted]\n")
+-            observer.end_run(success=False, error="KeyboardInterrupt")
++            print("\n[Ejecución interrumpida por el usuario]\n")
++            observer.cancel_run(reason="KeyboardInterrupt")
+ 
+         except Exception as exc:  # noqa: BLE001
+             print(f"\n[Error] {exc}\n")
+diff --git a/evaluation/observer.py b/evaluation/observer.py
+index ae3fb3d..69b2297 100644
+--- a/evaluation/observer.py
++++ b/evaluation/observer.py
+@@ -63,6 +63,13 @@ class RunRecord:
+     synthesizer_latency_ms: Optional[float] = None
+     answer_length: Optional[int] = None
+ 
++    # Judge
++    judge_latency_ms: Optional[float] = None
++    judge_score: Optional[float] = None
++    judge_passed: Optional[bool] = None
++    judge_revised: Optional[bool] = None
++    judge_feedback: Optional[str] = None
++
+     # Overall
+     total_latency_ms: Optional[float] = None
+     success: bool = True
+@@ -183,6 +190,39 @@ class AgentObserver:
+             len(answer),
+         )
+ 
++    def record_judge(
++        self,
++        score: Optional[float],
++        approved: bool,
++        feedback: str,
++        latency_ms: float,
++        revised: bool,
++        final_answer: Optional[str] = None,
++        error: Optional[str] = None,
++    ) -> None:
++        """Record online-judge evaluation and optional revision."""
++        if self._run:
++            self._run.judge_latency_ms = latency_ms
++            self._run.judge_score = score
++            self._run.judge_passed = approved
++            self._run.judge_revised = revised
++            self._run.judge_feedback = feedback
++            if final_answer is not None:
++                self._run.answer_length = len(final_answer)
++            if error and self._run.error is None:
++                self._run.error = f"Judge error: {error}"
++
++        score_text = f"{score:.2f}" if score is not None else "n/a"
++        self._logger.info(
++            "  JUDGE       approved=%-5s  revised=%-5s  latency=%6.0f ms  score=%s",
++            approved,
++            revised,
++            latency_ms,
++            score_text,
++        )
++        if feedback:
++            self._logger.info("  JUDGE NOTE  %s", self._truncate(feedback, 100))
++
+     def end_run(
+         self,
+         success: bool = True,
+@@ -201,7 +241,7 @@ class AgentObserver:
+             self._run.success = False
+             self._run.error = error
+ 
+-        record = asdict(self._run)
++        record = self._sanitize_value(asdict(self._run))
+         self._append_jsonl(record)
+ 
+         icon = "✓" if self._run.success else "✗"
+@@ -213,8 +253,27 @@ class AgentObserver:
+             self._run.success,
+         )
+         self._run = None
++        self._run_start = None
+         return record
+ 
++    def cancel_run(self, reason: str = "Cancelled") -> None:
++        """Abort the current run without persisting a failed JSONL record."""
++        if not self._run:
++            return
++
++        elapsed_ms = None
++        if self._run_start is not None:
++            elapsed_ms = (time.perf_counter() - self._run_start) * 1000
++
++        self._logger.warning(
++            "◀ RUN CANCELLED  run_id=%-12s  total=%7s  reason=%s",
++            self._run.run_id,
++            f"{elapsed_ms:.0f} ms" if elapsed_ms is not None else "n/a",
++            reason,
++        )
++        self._run = None
++        self._run_start = None
++
+     # ------------------------------------------------------------------
+     # LangSmith helpers
+     # ------------------------------------------------------------------
+@@ -278,7 +337,36 @@ class AgentObserver:
+     def _append_jsonl(self, record: Dict) -> None:
+         path = self.log_dir / self.JSONL_FILENAME
+         with open(path, "a", encoding="utf-8") as f:
+-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
++            f.write(json.dumps(self._sanitize_value(record), ensure_ascii=False) + "\n")
++
++    @staticmethod
++    def _sanitize_value(value: Any) -> Any:
++        """Convert NumPy scalars/arrays and other exotic objects to plain Python."""
++        if value is None or isinstance(value, (str, int, float, bool)):
++            return value
++        if isinstance(value, dict):
++            return {
++                str(key): AgentObserver._sanitize_value(item)
++                for key, item in value.items()
++            }
++        if isinstance(value, (list, tuple, set)):
++            return [AgentObserver._sanitize_value(item) for item in value]
++
++        item_method = getattr(value, "item", None)
++        if callable(item_method):
++            try:
++                return AgentObserver._sanitize_value(item_method())
++            except Exception:  # noqa: BLE001
++                pass
++
++        tolist_method = getattr(value, "tolist", None)
++        if callable(tolist_method):
++            try:
++                return AgentObserver._sanitize_value(tolist_method())
++            except Exception:  # noqa: BLE001
++                pass
++
++        return str(value)
+ 
+     @staticmethod
+     def _derive_confidence(result: Dict) -> Optional[float]:
