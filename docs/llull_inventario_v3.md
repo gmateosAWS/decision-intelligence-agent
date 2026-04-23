@@ -26,7 +26,7 @@ Reemplazar el índice FAISS local por la extensión `pgvector` de PostgreSQL. El
 
 _Resuelve:_ FAISS local no soporta multi-tenancy, no tiene filtros nativos, no tiene replicación y no escala a miles de documentos por cliente. Para el volumen previsible del primer año de llull (decenas de miles de docs por cliente), pgvector es suficiente.
 
-### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]`
+### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]` ✅
 
 Documentar explícitamente en qué condiciones (volumen, latencia, features avanzadas como hybrid search) migraríamos el vector store a Qdrant. Tener el plan escrito no implica hacerlo — implica que cuando el síntoma aparezca, no hay que rediseñar desde cero.
 
@@ -38,7 +38,7 @@ Separar la memoria del agente en dos capas: Redis para estado activo de sesiones
 
 _Resuelve:_ cuando escale a cientos de sesiones concurrentes con turnos frecuentes, Postgres sufre por el patrón escritura-continua-de-blobs-pequeños + lecturas-muy-frecuentes. Es una optimización que se introduce cuando el síntoma aparece, no de entrada, pero la arquitectura lógica lo contempla desde el día 1.
 
-### 1.5 Spec as data — el spec vive en base de datos `[feature]`
+### 1.5 Spec as data — el spec vive en base de datos `[feature]` ✅
 
 El spec YAML deja de ser un fichero estático y pasa a ser un objeto de base de datos con historial de versiones, validación en tiempo real y edición programática desde la UI. Soporta versiones candidate/staging/production igual que un modelo, tiene diffs legibles entre versiones, y cada run del agente queda asociado a la versión exacta del spec con la que se ejecutó.
 

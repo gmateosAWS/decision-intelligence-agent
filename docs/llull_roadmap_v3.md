@@ -125,15 +125,15 @@ Al final de esta iteración, llull es un **servicio desplegable con API REST, pe
 
 Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que se empieza a construir el producto.
 
-### Paquete 1A — Base de persistencia (parcialmente completado)
+### Paquete 1A — Base de persistencia ✅
 
 | Item                              | Estado |
 | --------------------------------- | ------ |
 | **1.1** PostgreSQL                | ✅ Hecho (PostgresSaver, SQLAlchemy, Alembic, Docker Compose, dual-backend SQLite fallback) |
 | **1.2** pgvector                  | ✅ Hecho (knowledge_documents con vector(1536), cosine search, FAISS fallback) |
 | **8.1** Runs en Postgres          | ✅ Hecho (agent_runs table, dual-write JSONL+Postgres, metrics read from Postgres) |
-| **1.5** Spec as data              | ⬜ Siguiente (Feature B) |
-| **1.3** Ruta a Qdrant documentada | ⬜ Pendiente (ADR a escribir tras 1.5) |
+| **1.5** Spec as data              | ✅ Hecho (specs + spec_versions tables, spec_repository CRUD, DB-first loader, traceabilidad en runs) |
+| **1.3** Ruta a Qdrant documentada | ✅ Hecho (docs/adr-001-pgvector-over-qdrant.md) |
 
 ### Paquete 1B — API y servicio
 
