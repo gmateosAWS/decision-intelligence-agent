@@ -398,13 +398,12 @@ def _init_state() -> None:
 
 
 _init_state()
+_spec_source = _seed_spec()  # must run before any get_spec() call
 graph, _checkpointer = _load_agent_graph()
 
 # ---------------------------------------------------------------------------
 # Sidebar
 # ---------------------------------------------------------------------------
-
-_spec_source = _seed_spec()  # idempotent — runs once per process
 
 with st.sidebar:
     st.markdown("## ⚖️ llull")
