@@ -1,7 +1,11 @@
 """
 evaluation/metrics.py
 ---------------------
-Load and aggregate metrics from the JSONL run log.
+Load and aggregate metrics from the run log.
+
+Backend selection:
+  DATABASE_URL set  → reads from agent_runs table (Postgres)
+  DATABASE_URL unset → reads from JSONL file (original behaviour)
 
 Entry points
 ------------
@@ -13,10 +17,14 @@ Entry points
 from __future__ import annotations
 
 import json
+import logging
+import os
 import statistics
 from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # I/O
@@ -25,9 +33,56 @@ from typing import Dict, List, Optional
 
 def load_runs(log_path: str = "logs/agent_runs.jsonl") -> List[Dict]:
     """
-    Load all run records from a JSONL file.
-    Lines that are blank or malformed are silently skipped.
+    Load all run records.
+
+    Uses the Postgres agent_runs table when DATABASE_URL is set;
+    falls back to reading the JSONL file otherwise.
     """
+    if os.getenv("DATABASE_URL", ""):
+        try:
+            return _load_runs_postgres()
+        except Exception as exc:
+            logger.warning("Postgres load_runs failed (%s), falling back to JSONL", exc)
+    return _load_runs_jsonl(log_path)
+
+
+def _load_runs_postgres() -> List[Dict]:
+    from db.engine import get_session
+    from db.models import AgentRun
+
+    with get_session() as session:
+        rows = session.query(AgentRun).order_by(AgentRun.timestamp).all()
+        return [
+            {
+                "run_id": row.run_id,
+                "session_id": str(row.session_id) if row.session_id else None,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "query": row.query,
+                "action": row.action,
+                "reasoning": row.reasoning,
+                "planner_latency_ms": row.planner_latency_ms,
+                "planner_model": row.planner_model,
+                "tool_latency_ms": row.tool_latency_ms,
+                "confidence_score": row.confidence_score,
+                "synthesizer_latency_ms": row.synthesizer_latency_ms,
+                "answer_length": row.answer_length,
+                "synthesizer_model": row.synthesizer_model,
+                "judge_latency_ms": row.judge_latency_ms,
+                "judge_score": row.judge_score,
+                "judge_passed": row.judge_passed,
+                "judge_revised": row.judge_revised,
+                "judge_feedback": row.judge_feedback,
+                "judge_model": row.judge_model,
+                "total_latency_ms": row.total_latency_ms,
+                "success": row.success,
+                "error": row.error,
+            }
+            for row in rows
+        ]
+
+
+def _load_runs_jsonl(log_path: str) -> List[Dict]:
+    """Load all run records from a JSONL file, skipping blank/malformed lines."""
     path = Path(log_path)
     if not path.exists():
         return []

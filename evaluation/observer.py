@@ -5,7 +5,7 @@ AgentObserver: structured observability for every agent run.
 
 Architecture decision:
   - Console output  →  standard Python logging (human-readable)
-  - Persistent data →  append-only JSONL file (one record per run)
+  - Persistent data →  JSONL file (always) + agent_runs table (when DATABASE_URL set)
   - LangSmith       →  automatic when LANGCHAIN_TRACING_V2=true is set in .env
 
 Usage (in app.py):
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 import uuid
 from dataclasses import asdict, dataclass
@@ -256,6 +257,7 @@ class AgentObserver:
 
         record = self._sanitize_value(asdict(self._run))
         self._append_jsonl(record)
+        self._write_postgres(record)
 
         icon = "✓" if self._run.success else "✗"
         self._logger.info(
@@ -351,6 +353,52 @@ class AgentObserver:
         path = self.log_dir / self.JSONL_FILENAME
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(self._sanitize_value(record), ensure_ascii=False) + "\n")
+
+    def _write_postgres(self, record: Dict) -> None:
+        if not os.getenv("DATABASE_URL", ""):
+            return
+        try:
+            import uuid as _uuid
+
+            from db.engine import get_session
+            from db.models import AgentRun
+
+            sid_raw = record.get("session_id")
+            try:
+                sid = _uuid.UUID(sid_raw) if sid_raw else None
+            except (ValueError, AttributeError):
+                sid = (
+                    _uuid.uuid5(_uuid.NAMESPACE_DNS, str(sid_raw)) if sid_raw else None
+                )
+
+            with get_session() as session:
+                session.add(
+                    AgentRun(
+                        session_id=sid,
+                        run_id=record.get("run_id", ""),
+                        query=record.get("query", ""),
+                        action=record.get("action"),
+                        reasoning=record.get("reasoning"),
+                        planner_latency_ms=record.get("planner_latency_ms"),
+                        planner_model=record.get("planner_model"),
+                        tool_latency_ms=record.get("tool_latency_ms"),
+                        confidence_score=record.get("confidence_score"),
+                        synthesizer_latency_ms=record.get("synthesizer_latency_ms"),
+                        answer_length=record.get("answer_length"),
+                        synthesizer_model=record.get("synthesizer_model"),
+                        judge_latency_ms=record.get("judge_latency_ms"),
+                        judge_score=record.get("judge_score"),
+                        judge_passed=record.get("judge_passed"),
+                        judge_revised=record.get("judge_revised"),
+                        judge_feedback=record.get("judge_feedback"),
+                        judge_model=record.get("judge_model"),
+                        total_latency_ms=record.get("total_latency_ms"),
+                        success=record.get("success", True),
+                        error=record.get("error"),
+                    )
+                )
+        except Exception as exc:  # noqa: BLE001
+            self._logger.warning("Failed to write run to Postgres: %s", exc)
 
     @staticmethod
     def _sanitize_value(value: Any) -> Any:

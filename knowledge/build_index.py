@@ -1,30 +1,32 @@
 """
-knowledge/build_index.py  ← CORREGIDO
-──────────────────────────────────────
-Cambios:
-  1. Imports actualizados: langchain_openai,
-      langchain_community, langchain_core
-  2. Base de conocimiento ampliada: de 4 frases
-      a 20 documentos sustantivos
-     que cubren dominio, metodología, interpretación y arquitectura del sistema.
+knowledge/build_index.py
+------------------------
+Build the knowledge index from the DOCUMENTS list.
 
-Ejecutar tras cualquier cambio en los documentos:
+Backend selection:
+  DATABASE_URL set  → embed with OpenAI and INSERT into knowledge_documents (pgvector)
+  DATABASE_URL unset → build FAISS index locally (original behaviour)
+
+Run after any change to DOCUMENTS:
   python knowledge/build_index.py
 """
 
+from __future__ import annotations
+
+import os
+
 from dotenv import load_dotenv
-from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings
 
 load_dotenv()
 
-# ── Knowledge base ────────────────────────────────────────────────────────────
-# Documentos organizados por categoría para mejorar
-# la cobertura semántica del RAG.
+# ---------------------------------------------------------------------------
+# Knowledge base
+# ---------------------------------------------------------------------------
 
 DOCUMENTS = [
-    # ── Modelo de negocio ─────────────────────────────────────────────────────
+    # ── Business model ────────────────────────────────────────────────────
     Document(
         page_content=(
             "The business model represents a retail pricing scenario. "
@@ -55,7 +57,7 @@ DOCUMENTS = [
         ),
         metadata={"category": "business_model"},
     ),
-    # ── Relaciones causales ───────────────────────────────────────────────────
+    # ── Causal model ──────────────────────────────────────────────────────
     Document(
         page_content=(
             "Demand depends on both price and marketing spend. "
@@ -97,7 +99,7 @@ DOCUMENTS = [
         ),
         metadata={"category": "causal_model"},
     ),
-    # ── Modelo ML ─────────────────────────────────────────────────────────────
+    # ── ML model ──────────────────────────────────────────────────────────
     Document(
         page_content=(
             "The demand prediction model is a Random Forest regressor "
@@ -120,7 +122,7 @@ DOCUMENTS = [
         ),
         metadata={"category": "ml_model"},
     ),
-    # ── Simulación Monte Carlo ────────────────────────────────────────────────
+    # ── Simulation ────────────────────────────────────────────────────────
     Document(
         page_content=(
             "Monte Carlo simulation runs the system model hundreds of times "
@@ -166,7 +168,7 @@ DOCUMENTS = [
         ),
         metadata={"category": "simulation"},
     ),
-    # ── Optimización ──────────────────────────────────────────────────────────
+    # ── Optimization ──────────────────────────────────────────────────────
     Document(
         page_content=(
             "The optimisation tool performs a grid search over the price range "
@@ -200,7 +202,7 @@ DOCUMENTS = [
         ),
         metadata={"category": "optimization"},
     ),
-    # ── Elasticidad e interpretación ──────────────────────────────────────────
+    # ── Interpretation ────────────────────────────────────────────────────
     Document(
         page_content=(
             "Price elasticity of demand measures how sensitive demand "
@@ -223,7 +225,7 @@ DOCUMENTS = [
         ),
         metadata={"category": "interpretation"},
     ),
-    # ── Arquitectura del sistema ───────────────────────────────────────────────
+    # ── Architecture ──────────────────────────────────────────────────────
     Document(
         page_content=(
             "The system architecture follows a layered design: "
@@ -251,15 +253,66 @@ DOCUMENTS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+
 def build_knowledge_index(index_path: str = "knowledge_index") -> None:
-    """Construye y persiste el índice vectorial FAISS."""
-    print(f"Building knowledge index from {len(DOCUMENTS)} documents...")
+    """
+    Build the knowledge index.
+
+    Uses pgvector when DATABASE_URL is set, FAISS otherwise.
+    """
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url:
+        _build_pgvector(index_path)
+    else:
+        _build_faiss(index_path)
+
+
+# ---------------------------------------------------------------------------
+# pgvector backend
+# ---------------------------------------------------------------------------
+
+
+def _build_pgvector(index_path: str) -> None:
+    print(f"Building pgvector index from {len(DOCUMENTS)} documents...")
+    embeddings_model = OpenAIEmbeddings()
+
+    from db.engine import get_session
+    from db.models import KnowledgeDocument
+
+    texts = [doc.page_content for doc in DOCUMENTS]
+    vectors = embeddings_model.embed_documents(texts)
+
+    with get_session() as session:
+        # Clear existing documents before re-indexing
+        session.query(KnowledgeDocument).delete()
+        for doc, embedding in zip(DOCUMENTS, vectors):
+            session.add(
+                KnowledgeDocument(
+                    content=doc.page_content,
+                    category=doc.metadata.get("category"),
+                    embedding=embedding,
+                )
+            )
+    print(f"pgvector: inserted {len(DOCUMENTS)} documents into knowledge_documents.")
+
+
+# ---------------------------------------------------------------------------
+# FAISS backend (original behaviour)
+# ---------------------------------------------------------------------------
+
+
+def _build_faiss(index_path: str) -> None:
+    from langchain_community.vectorstores import FAISS
+
+    print(f"Building FAISS index from {len(DOCUMENTS)} documents...")
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_documents(DOCUMENTS, embeddings)
     vectorstore.save_local(index_path)
-    print(
-        f"Knowledge index saved to '{index_path}' " f"({len(DOCUMENTS)} docs indexed)."
-    )
+    print(f"FAISS index saved to '{index_path}' ({len(DOCUMENTS)} docs indexed).")
 
 
 if __name__ == "__main__":
