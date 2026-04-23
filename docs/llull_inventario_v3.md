@@ -14,13 +14,13 @@
 
 Todo lo relacionado con dónde y cómo se guarda la información que el sistema necesita para funcionar: sesiones, runs, specs, conocimiento, memoria conversacional.
 
-### 1.1 Migración de SQLite a PostgreSQL como núcleo de persistencia `[feature]`
+### 1.1 Migración de SQLite a PostgreSQL como núcleo de persistencia `[feature]` ✅
 
 Reemplazar `SqliteSaver` por `AsyncPostgresSaver` para el checkpointing del grafo LangGraph, y mover la tabla `agent_sessions` y los logs JSONL de runs a tablas Postgres. La arquitectura del prototipo está diseñada para que este cambio sea prácticamente una línea en `checkpointer.py`, pero en la práctica implica también definir el esquema relacional completo (sesiones, runs, usuarios, dominios) y una primera iteración de migraciones.
 
 _Resuelve:_ el prototipo no aguanta concurrencia real, no permite queries analíticas sobre runs históricos, y no sirve como base para multi-tenancy. Postgres es el punto de partida para todo lo demás en esta sección.
 
-### 1.2 Capa vectorial sobre pgvector `[feature]`
+### 1.2 Capa vectorial sobre pgvector `[feature]` ✅
 
 Reemplazar el índice FAISS local por la extensión `pgvector` de PostgreSQL. El knowledge layer pasa a ser una tabla más de Postgres, con filtros por metadata (tenant, dominio, categoría) como cláusulas WHERE. Elimina la necesidad de mantener un store separado y sincronizarlo con el resto del estado.
 
@@ -444,7 +444,7 @@ _Resuelve:_ algunos clientes grandes no aceptan multi-tenancy lógico por polít
 
 Todo lo que permite saber qué está pasando en el sistema, detectar problemas antes de que el cliente los sufra, y responder cuando algo falla.
 
-### 8.1 Migración de JSONL a tablas de runs en Postgres `[parche]`
+### 8.1 Migración de JSONL a tablas de runs en Postgres `[parche]` ✅
 
 El observer sigue funcionando igual, pero los runs se escriben a una tabla Postgres en lugar de a un fichero JSONL. Permite queries analíticas, filtros por tenant/usuario/dominio, y sirve como base para dashboards multi-usuario.
 
