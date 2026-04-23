@@ -1,21 +1,34 @@
 """
 spec/spec_loader.py
 ───────────────────
-Loads and parses the organizational model specification (YAML).
-Provides a typed, validated interface to the rest of the system.
+Loads and parses the organizational model specification.
+
+Backend selection (same dual-backend pattern as the rest of the system):
+  DATABASE_URL set  → reads from the 'specs' table (Postgres)
+  DATABASE_URL unset → reads from the YAML file (original behaviour)
 
 Design principle (spec-driven):
   The spec is the contract. Code components receive structured objects,
   never raw YAML dicts. This makes the boundary explicit and testable.
+
+Public API (unchanged):
+  get_spec()           -> OrganizationalModelSpec   (singleton, tries DB first)
+  reload_spec()        -> OrganizationalModelSpec   (force reload)
+  load_spec(path)      -> OrganizationalModelSpec   (always reads YAML file)
+  load_spec_from_db(domain_name) -> OrganizationalModelSpec
 """
 
 from __future__ import annotations
 
+import logging
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+logger = logging.getLogger(__name__)
 
 # Default path: spec/ directory next to this file
 SPEC_PATH = Path(__file__).parent / "organizational_model.yaml"
@@ -167,10 +180,8 @@ class OrganizationalModelSpec:
 # ── PARSER ────────────────────────────────────────────────────────────────────
 
 
-def load_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
-    """Load and parse the YAML spec file into a typed OrganizationalModelSpec."""
-    with open(path, "r", encoding="utf-8") as f:
-        raw: Dict = yaml.safe_load(f)
+def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
+    """Parse a raw YAML dict (already loaded) into a typed OrganizationalModelSpec."""
 
     # Decision variables
     decision_vars: List[DecisionVariable] = []
@@ -286,23 +297,76 @@ def load_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
     )
 
 
+def load_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
+    """Load and parse the YAML spec file into a typed OrganizationalModelSpec."""
+    with open(path, "r", encoding="utf-8") as f:
+        raw: Dict = yaml.safe_load(f)
+    return _parse_raw(raw)
+
+
+def load_spec_from_db(domain_name: str) -> OrganizationalModelSpec:
+    """
+    Load the active spec for *domain_name* from Postgres.
+
+    Raises RuntimeError if no active spec is found.
+    """
+    from spec.spec_repository import get_active_spec
+
+    spec_row = get_active_spec(domain_name)
+    if spec_row is None:
+        raise RuntimeError(
+            f"No active spec found for domain '{domain_name}' in the database. "
+            "Run seed_from_yaml() first or set DATABASE_URL='' to use the YAML file."
+        )
+    raw = spec_row.parsed_content
+    logger.debug(
+        "Loaded spec for domain '%s' v%s from DB", domain_name, spec_row.version
+    )
+    return _parse_raw(raw)
+
+
 # ── SINGLETON ─────────────────────────────────────────────────────────────────
 # The spec is loaded once at startup and shared across all components.
-# This avoids repeated I/O and ensures consistency within a process.
 
 _spec_instance: Optional[OrganizationalModelSpec] = None
 
 
 def get_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
-    """Return the singleton spec instance, loading it on first call."""
-    global _spec_instance
+    """
+    Return the singleton spec instance, loading it on first call.
+
+    Resolution order:
+      1. DATABASE_URL set → load from Postgres (active spec for the YAML domain)
+      2. Postgres unavailable or no active spec → fall back to YAML file
+    """
+    global _spec_instance  # noqa: PLW0603
     if _spec_instance is None:
-        _spec_instance = load_spec(path)
+        _spec_instance = _load_spec_with_fallback(path)
     return _spec_instance
+
+
+def _load_spec_with_fallback(path: Path) -> OrganizationalModelSpec:
+    database_url = os.getenv("DATABASE_URL", "")
+    if database_url:
+        try:
+            # Peek at the domain name from the YAML to know which domain to query
+            with open(path, "r", encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+            domain_name = raw["domain"]["name"]
+            spec = load_spec_from_db(domain_name)
+            logger.info("Spec loaded from DB: domain=%s v%s", domain_name, spec.version)
+            return spec
+        except Exception as exc:
+            logger.warning(
+                "Could not load spec from DB (%s) — falling back to YAML file", exc
+            )
+    spec = load_spec(path)
+    logger.info("Spec loaded from YAML file: %s", path)
+    return spec
 
 
 def reload_spec(path: Path = SPEC_PATH) -> OrganizationalModelSpec:
     """Force reload of the spec (useful in tests or hot-reload scenarios)."""
-    global _spec_instance
-    _spec_instance = load_spec(path)
+    global _spec_instance  # noqa: PLW0603
+    _spec_instance = _load_spec_with_fallback(path)
     return _spec_instance

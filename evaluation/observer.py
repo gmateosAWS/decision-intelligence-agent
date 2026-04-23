@@ -79,6 +79,10 @@ class RunRecord:
     success: bool = True
     error: Optional[str] = None
 
+    # Spec traceability
+    spec_id: Optional[str] = None
+    spec_version: Optional[str] = None
+
 
 # ---------------------------------------------------------------------------
 # Observer
@@ -114,6 +118,12 @@ class AgentObserver:
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def set_spec(self, spec_id: Optional[str], spec_version: Optional[str]) -> None:
+        """Record which spec version is active for the current run."""
+        if self._run:
+            self._run.spec_id = spec_id
+            self._run.spec_version = spec_version
 
     def start_run(self, query: str) -> str:
         """Open a new run.  Returns the run_id for correlation."""
@@ -372,6 +382,13 @@ class AgentObserver:
                 )
 
             with get_session() as session:
+                # Resolve spec_id UUID if present
+                spec_id_raw = record.get("spec_id")
+                try:
+                    spec_uuid = _uuid.UUID(spec_id_raw) if spec_id_raw else None
+                except (ValueError, AttributeError):
+                    spec_uuid = None
+
                 session.add(
                     AgentRun(
                         session_id=sid,
@@ -395,6 +412,8 @@ class AgentObserver:
                         total_latency_ms=record.get("total_latency_ms"),
                         success=record.get("success", True),
                         error=record.get("error"),
+                        spec_id=spec_uuid,
+                        spec_version=record.get("spec_version"),
                     )
                 )
         except Exception as exc:  # noqa: BLE001
