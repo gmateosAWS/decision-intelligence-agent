@@ -455,7 +455,11 @@ decision-intelligence-agent/
 +-- tests/
 |   +-- agents/
 |       +-- test_llm_factory.py     # Unit tests: provider factory, fallback, retry, graceful error
-+-- app.py                          # REPL entry point with observability
++-- docs/
+|   +-- llull_roadmap_v3.md         # Iteration plan with progress tracking (I1 → I2A → I2B → I3)
+|   +-- llull_inventario_v3.md      # Full backlog (97 items)
++-- app.py                          # REPL entry point (legacy, dev use)
++-- streamlit_app.py                # Web UI: chat + causal DAG + result charts
 +-- .env.example                    # Environment variable template
 +-- requirements.txt
 +-- README.md
@@ -550,7 +554,22 @@ Output: `knowledge_index/` directory -- FAISS index of 20 domain documents.
 
 ---
 
-## Run the Agent
+## Run the Web UI
+
+```bash
+streamlit run streamlit_app.py
+```
+
+The web interface provides:
+
+- **Chat** — conversational interface with the same multi-turn memory as the REPL
+- **Sidebar** — session management (new / resume with history restored), active LLM configuration, domain info, and a causal DAG visualization
+- **Results details** — inline charts per response: profit distribution (simulation), optimal values (optimization)
+- **Run details** — tool badge, per-node latency, judge score, planner reasoning (collapsed by default)
+
+---
+
+## Run the Agent (legacy REPL)
 
 ```bash
 python app.py
@@ -1019,3 +1038,4 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | `agents/llm_factory.py` — provider-agnostic LLM factory | `get_chat_model(provider, model)` returns a `BaseChatModel` for OpenAI or Anthropic; adding a new provider requires only a new branch in the factory, not changes across all nodes |
 | Automatic provider fallback (`FALLBACK_PROVIDER`) | If the primary LLM fails (any error), `invoke_with_fallback()` transparently retries with a secondary provider; the graph never sees the exception, enabling zero-downtime provider switching |
 | Exponential backoff on rate limits (HTTP 429) | `invoke_with_fallback()` retries up to `LLM_MAX_RETRIES` times with 2^n-second delays before escalating to the fallback provider; prevents cascading failures under API throttling |
+| Streamlit as a pure presentation layer | `streamlit_app.py` wraps the existing graph without touching agent code; all session persistence, observability, and LLM orchestration flows through the same stack as `app.py` |
