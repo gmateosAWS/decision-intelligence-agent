@@ -35,7 +35,7 @@ In this prototype:
 
 ### 1 - Spec-driven architecture
 
-The entire organizational model is declared in `spec/organizational_model.yaml`. This single file is the **source of truth** for all system components: the causal graph, the simulation engine, the optimizer, and the agent all read from it.
+The organizational model is stored as a **versioned database object** in the `specs` table (PostgreSQL). `spec/organizational_model.yaml` is the initial seed and the fallback when no database is available. The causal graph, simulation engine, optimizer, and agent all read from the active spec at runtime via `get_spec()`, which queries the database first and falls back to the YAML file when `DATABASE_URL` is not set.
 
 To adapt the system to a new domain or change a business parameter: **edit the spec**. No code changes required.
 
@@ -107,7 +107,7 @@ flowchart TD
     Agent["LangGraph Agent
 planner - tool - synthesizer - judge"]
     Spec["Organizational Spec
-spec/organizational_model.yaml"]
+specs table (DB) · YAML fallback"]
     SimTool[Simulation Tool]
     OptTool[Optimization Tool]
     KnowTool[RAG Knowledge Tool]
@@ -150,16 +150,19 @@ decision support, system explainability, and controlled LLM interaction:
 
 - **Spec-driven domain modeling** -- business variables, causal relationships,
   simulation settings, optimization targets, and synthetic demand-model coefficients
-  are declared in `spec/organizational_model.yaml`.
+  are stored as a versioned object in PostgreSQL (`specs` table); `spec/organizational_model.yaml`
+  is the initial seed and fallback when no database is configured.
 - **Deterministic analytical execution** -- optimization, Monte Carlo simulation,
   and graph propagation are performed by Python components, not by the LLM.
 - **Online answer validation** -- the synthesizer output passes through an
   LLM-based judge that checks grounding, responsiveness and quantitative consistency
   before the final answer is returned.
 - **Structured observability** -- every run captures tool choice, latencies,
-  confidence signals, judge verdicts and final outcome in JSONL logs and dashboards.
-- **Persistent conversational memory** -- session context is stored in SQLite so
-  the planner can resolve follow-up questions across multiple turns.
+  confidence signals, judge verdicts and final outcome in PostgreSQL (`agent_runs`) and JSONL logs.
+- **Spec traceability** -- each run records the `spec_id` and `spec_version` it executed under,
+  so every recommendation is tied to the exact domain model that produced it.
+- **Persistent conversational memory** -- session context is stored in PostgreSQL
+  (SQLite fallback) so the planner can resolve follow-up questions across multiple turns.
 - **Domain-agnostic parameter extraction** -- the planner extracts decision
   parameters generically from natural language using the decision-variable names
   defined in the spec.
@@ -205,7 +208,7 @@ The online judge evaluates that draft against the original query and the raw too
 
 ### Organizational Spec (`spec/`)
 
-`organizational_model.yaml` declares:
+`organizational_model.yaml` declares (and seeds the database with):
 
 - **Decision variables**: controllable inputs (price, marketing spend), with bounds and defaults
 - **Intermediate variables**: derived or ML-estimated (demand, revenue, cost)
@@ -215,7 +218,9 @@ The online judge evaluates that draft against the original query and the raw too
 - **Simulation configuration**: Monte Carlo runs, noise model
 - **Optimization configuration**: target, method, fixed variables
 
-`spec_loader.py` parses the YAML into typed Python dataclasses (`DecisionVariable`, `DemandModelSpec`, `DataGenerationSpec`, etc.) and exposes a singleton `get_spec()` used across all components.
+`spec_repository.py` provides CRUD operations (`create_spec`, `activate_spec`, `update_spec`, `seed_from_yaml`, etc.) for the `specs` and `spec_versions` tables. On first startup with Postgres, `seed_from_yaml()` imports the YAML as version `1.0.0` with status `active`; subsequent startups are no-ops.
+
+`spec_loader.py` exposes a singleton `get_spec()` that reads the active spec from the database when `DATABASE_URL` is set, and falls back to parsing `organizational_model.yaml` otherwise. The typed `OrganizationalModelSpec` dataclass is the same in both paths.
 
 ---
 
@@ -411,12 +416,20 @@ The agent is implemented as a **4-node LangGraph graph**:
 ```
 decision-intelligence-agent/
 +-- spec/
-|   +-- organizational_model.yaml   # Single source of truth for the domain model
-|   +-- spec_loader.py              # Typed YAML parser, singleton get_spec()
+|   +-- organizational_model.yaml   # Seed YAML + SQLite fallback (runtime source: specs table)
+|   +-- spec_loader.py              # get_spec(): DB-first, YAML fallback; typed dataclasses
+|   +-- spec_repository.py          # CRUD: create/activate/update/seed specs in DB
 |   +-- __init__.py
++-- db/
+|   +-- engine.py                   # SQLAlchemy engine, get_session() context manager
+|   +-- models.py                   # ORM: AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion
+|   +-- migrations/
+|       +-- env.py                  # Alembic env (psycopg3 URL normalisation)
+|       +-- versions/
+|           +-- 001_initial_schema.py   # agent_sessions, agent_runs, knowledge_documents
+|           +-- 002_spec_tables.py      # specs, spec_versions, spec FK on agent_runs
 +-- data/
 |   +-- generate_data.py            # Synthetic dataset -- all params read from spec
-|   +-- checkpoints.db              # SQLite: LangGraph state + agent_sessions
 +-- models/
 |   +-- train_demand_model.py       # RF training, evaluation metrics, model export
 +-- system/
@@ -428,8 +441,8 @@ decision-intelligence-agent/
 +-- optimization/
 |   +-- optimizer.py                # Grid search over price range
 +-- knowledge/
-|   +-- build_index.py              # FAISS index builder (20 docs, 6 categories)
-|   +-- retriever.py                # Lazy-loaded similarity search
+|   +-- build_index.py              # pgvector index builder (20 docs, 6 categories; FAISS fallback)
+|   +-- retriever.py                # Similarity search: pgvector primary, FAISS fallback
 +-- agents/
 |   +-- state.py                    # AgentState TypedDict
 |   +-- tools.py                    # Tool wrappers (spec-driven defaults + generic params)
@@ -439,27 +452,33 @@ decision-intelligence-agent/
 |   +-- workflow.py                 # LangGraph: planner -> tool -> synthesizer -> judge
 +-- memory/
 |   +-- __init__.py                 # Public exports
-|   +-- checkpointer.py             # SqliteSaver singleton + agent_sessions table
-|   +-- session_manager.py          # CRUD and session listing (CLI helpers)
+|   +-- checkpointer.py             # PostgresSaver (SqliteSaver fallback) + session helpers
+|   +-- session_manager.py          # CRUD: Postgres primary, SQLite fallback
 +-- evaluation/
 |   +-- __init__.py
-|   +-- observer.py                 # AgentObserver: run lifecycle, JSONL logging, judge metrics
-|   +-- metrics.py                  # load_runs / compute_metrics / print_report
+|   +-- observer.py                 # AgentObserver: run lifecycle, dual-write JSONL + Postgres
+|   +-- metrics.py                  # load_runs / compute_metrics (Postgres primary, JSONL fallback)
 |   +-- dashboard.py                # HTML dashboard generator + CLI entry point
 +-- config/
 |   +-- settings.py                 # Thin adapter over spec (backward-compatible)
 +-- logs/                           # Created at runtime
-|   +-- agent_runs.jsonl            # Append-only run log (one JSON per line)
+|   +-- agent_runs.jsonl            # Append-only run log (JSONL fallback / duplicate)
 |   +-- agent.log                   # Verbose debug log
 |   +-- dashboard.html              # Generated by evaluation/dashboard.py
 +-- tests/
 |   +-- agents/
-|       +-- test_llm_factory.py     # Unit tests: provider factory, fallback, retry, graceful error
+|   |   +-- test_llm_factory.py     # Unit tests: provider factory, fallback, retry, graceful error
+|   +-- spec/
+|       +-- test_spec_repository.py # Integration tests: spec CRUD + traceability (needs Postgres)
+|       +-- test_spec_loader_db.py  # Integration + unit: DB-first load + YAML fallback
 +-- docs/
 |   +-- llull_roadmap_v3.md         # Iteration plan with progress tracking (I1 → I2A → I2B → I3)
 |   +-- llull_inventario_v3.md      # Full backlog (97 items)
+|   +-- adr-001-pgvector-over-qdrant.md  # Architecture decision record: vector store choice
 +-- app.py                          # REPL entry point (legacy, dev use)
-+-- streamlit_app.py                # Web UI: chat + causal DAG + result charts
++-- streamlit_app.py                # Web UI: chat + causal DAG + result charts + spec version
++-- docker-compose.yml              # PostgreSQL 16 + pgvector
++-- alembic.ini                     # Alembic migration config
 +-- .env.example                    # Environment variable template
 +-- requirements.txt
 +-- README.md
@@ -485,11 +504,23 @@ source venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-**3. Configure API keys and model settings**
+**3. Start PostgreSQL and run migrations (optional but recommended)**
+
+```bash
+docker compose up -d        # starts PostgreSQL 16 + pgvector on port 5432
+alembic upgrade head        # creates all tables (agent_sessions, agent_runs, knowledge_documents, specs, spec_versions)
+```
+
+Without this step the system runs in SQLite/FAISS fallback mode automatically.
+
+**4. Configure API keys and model settings**
 
 Create a `.env` file in the project root (copy from `.env.example`):
 
 ```env
+# --- Database (optional — SQLite fallback if unset) ---
+DATABASE_URL=postgresql://llull:llull@localhost:5432/llull
+
 # --- API Keys ---
 OPENAI_API_KEY=your_openai_key
 ANTHROPIC_API_KEY=your_anthropic_key   # required if any node uses provider=anthropic
@@ -548,9 +579,10 @@ Output: `models/demand_model.pkl` -- also prints MAE, RMSE and R2 on the test se
 python knowledge/build_index.py
 ```
 
-Output: `knowledge_index/` directory -- FAISS index of 20 domain documents.
+With `DATABASE_URL` set: inserts 20 document embeddings into the `knowledge_documents` table (pgvector).  
+Without it: writes `knowledge_index/` directory (FAISS fallback).
 
-> The organizational spec (`spec/organizational_model.yaml`) is loaded automatically at runtime. No additional build step required.
+> **Organizational spec**: loaded automatically at runtime. If `DATABASE_URL` is set and the `specs` table is empty, the system seeds `spec/organizational_model.yaml` as version `1.0.0` on first startup — no manual step required.
 
 ---
 
@@ -563,7 +595,7 @@ streamlit run streamlit_app.py
 The web interface provides:
 
 - **Chat** — conversational interface with the same multi-turn memory as the REPL
-- **Sidebar** — session management (new / resume with history restored), active LLM configuration, domain info, and a causal DAG visualization
+- **Sidebar** — session management (new / resume with history restored), active LLM configuration, domain info, active spec version (with source: DB or YAML), and a causal DAG visualization
 - **Results details** — inline charts per response: profit distribution (simulation), optimal values (optimization)
 - **Run details** — tool badge, per-node latency, judge score, planner reasoning (collapsed by default)
 
@@ -624,10 +656,13 @@ app.py
        +-- tool_node         -> obs.record_tool()
        +-- synthesizer_node  -> obs.record_synthesizer()
        +-- judge_node        -> obs.record_judge()
-  +-- AgentObserver.end_run()                 writes to JSONL
+  +-- AgentObserver.set_spec(spec_id, version) attaches spec traceability
+  +-- AgentObserver.end_run()                 dual-writes: Postgres agent_runs + JSONL
 
+db/
+  +-- agent_runs   Postgres table (primary sink)
 logs/
-  +-- agent_runs.jsonl   one JSON record per run (append-only)
+  +-- agent_runs.jsonl   append-only fallback / duplicate
   +-- agent.log          verbose debug log
   +-- dashboard.html     generated on demand
 ```
@@ -636,8 +671,8 @@ logs/
 
 | Module                    | Responsibility                                                                                           |
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `evaluation/observer.py`  | `AgentObserver` -- wraps each run, records timing, confidence signals, judge verdicts, and writes JSONL |
-| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` -- aggregates run, latency, confidence and judge-quality metrics         |
+| `evaluation/observer.py`  | `AgentObserver` -- wraps each run, records timing, confidence signals, spec traceability, judge verdicts; dual-writes to Postgres + JSONL |
+| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` -- reads from Postgres (`agent_runs`) with JSONL fallback; aggregates latency, confidence and judge-quality metrics |
 | `evaluation/dashboard.py` | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point                          |
 
 ### RunRecord fields
@@ -667,6 +702,8 @@ logs/
 | `planner_model`          | planner node     | LLM model used for tool selection                                                             |
 | `synthesizer_model`      | synthesizer node | LLM model used for natural language synthesis                                                 |
 | `judge_model`            | judge node       | LLM model used for online answer validation                                                   |
+| `spec_id`                | observer         | UUID of the `specs` row active when this run executed                                         |
+| `spec_version`           | observer         | Semver string of the active spec (e.g. `1.0.0`); enables per-version performance analysis     |
 
 ### JSONL sample (new fields)
 
@@ -742,33 +779,33 @@ app.py (REPL)
 |
 +-- memory/
 |   +-- __init__.py          Public exports
-|   +-- checkpointer.py      SqliteSaver singleton + agent_sessions table
-|   +-- session_manager.py   CRUD and session listing (CLI helpers)
+|   +-- checkpointer.py      PostgresSaver (SqliteSaver fallback) + session helpers
+|   +-- session_manager.py   CRUD: Postgres primary, SQLite fallback
 |
 +-- agents/
 |   +-- state.py             adds `history` field (Annotated + operator.add)
 |   +-- planner.py           injects last 3 turns into LLM prompt
 |   +-- workflow.py          build_graph(checkpointer=...) with persistence
 |
-+-- data/
-    +-- checkpoints.db       SQLite: LangGraph tables + agent_sessions
++-- db/
+    +-- models.py            AgentSession ORM model (Postgres)
+    +-- engine.py            get_session() context manager
 ```
 
 ### `memory/checkpointer.py`
 
-| Responsibility             | Detail                                                             |
-| -------------------------- | ------------------------------------------------------------------ |
-| `get_checkpointer()`       | Singleton `SqliteSaver` pointing to `data/checkpoints.db`          |
-| `register_turn()`          | Upsert in `agent_sessions`: updates `last_active` and `turn_count` |
-| `_ensure_sessions_table()` | Creates the `agent_sessions` table if it does not exist            |
+| Responsibility             | Detail                                                                            |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| `get_checkpointer()`       | Returns `PostgresSaver` if `DATABASE_URL` is set, `SqliteSaver` otherwise         |
+| `register_turn()`          | Upsert in `agent_sessions` (Postgres or SQLite): updates `last_active` and `turn_count` |
 
-Schema of `agent_sessions`:
+The `agent_sessions` table is managed via SQLAlchemy ORM (`db/models.AgentSession`) in Postgres mode and via a raw SQLite schema in fallback mode. Both expose the same columns:
 
 ```sql
-session_id  TEXT PRIMARY KEY
+session_id  UUID / TEXT PRIMARY KEY
 title       TEXT    -- first 60 chars of the first query
-created_at  TEXT    -- ISO 8601 UTC
-last_active TEXT    -- ISO 8601 UTC, updated on each turn
+created_at  TIMESTAMPTZ / TEXT
+last_active TIMESTAMPTZ / TEXT, updated on each turn
 turn_count  INTEGER
 ```
 
@@ -1039,3 +1076,6 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Automatic provider fallback (`FALLBACK_PROVIDER`) | If the primary LLM fails (any error), `invoke_with_fallback()` transparently retries with a secondary provider; the graph never sees the exception, enabling zero-downtime provider switching |
 | Exponential backoff on rate limits (HTTP 429) | `invoke_with_fallback()` retries up to `LLM_MAX_RETRIES` times with 2^n-second delays before escalating to the fallback provider; prevents cascading failures under API throttling |
 | Streamlit as a pure presentation layer | `streamlit_app.py` wraps the existing graph without touching agent code; all session persistence, observability, and LLM orchestration flows through the same stack as `app.py` |
+| PostgreSQL as primary persistence with dual-backend fallback | Every stateful component (checkpointer, sessions, runs, knowledge, specs) targets Postgres when `DATABASE_URL` is set and falls back to SQLite/FAISS/YAML automatically; no code branches in business logic |
+| pgvector over dedicated vector DB | Knowledge embeddings stored in the existing Postgres instance (`knowledge_documents` table, `vector(1536)` column); avoids a second stateful service at current document volumes (see `docs/adr-001-pgvector-over-qdrant.md`) |
+| Spec stored and versioned in DB | The domain model is a first-class database object with history (`specs` + `spec_versions` tables); each agent run records `spec_id` and `spec_version` so recommendations are fully traceable to the exact domain model that produced them |
