@@ -4,8 +4,8 @@ streamlit_app.py
 Streamlit web UI for the Decision Intelligence Agent.
 
 Presentation layer only — invokes the same LangGraph graph as app.py without
-modifying any agent code.  Sessions are persisted via SqliteSaver so multi-turn
-memory works identically to the REPL.
+modifying any agent code.  Sessions are persisted via PostgresSaver (or SqliteSaver
+fallback) so multi-turn memory works identically to the REPL.
 
 Run:
     streamlit run streamlit_app.py
@@ -55,7 +55,7 @@ from system.system_graph import build_graph as build_causal_graph  # noqa: E402
 
 @st.cache_resource
 def _load_agent_graph():
-    """Build and cache the LangGraph agent with SqliteSaver checkpointer."""
+    """Build and cache the LangGraph agent with the active checkpointer backend."""
     checkpointer = get_checkpointer()
     graph = build_agent_graph(checkpointer=checkpointer)
     return graph, checkpointer
