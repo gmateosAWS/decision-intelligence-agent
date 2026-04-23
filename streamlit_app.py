@@ -45,12 +45,30 @@ st.set_page_config(
 from agents.workflow import build_graph as build_agent_graph  # noqa: E402
 from evaluation.observer import AgentObserver  # noqa: E402
 from memory import SessionManager, get_checkpointer, register_turn  # noqa: E402
-from spec.spec_loader import get_spec  # noqa: E402
+from spec.spec_loader import SPEC_PATH, get_spec  # noqa: E402
 from system.system_graph import build_graph as build_causal_graph  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Cached resources (initialized once per process)
 # ---------------------------------------------------------------------------
+
+
+@st.cache_resource
+def _seed_spec() -> str:
+    """Auto-seed the spec into Postgres on first startup. Returns a status string."""
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        return "yaml"
+    try:
+        from db.engine import check_connection
+        from spec.spec_repository import seed_from_yaml
+
+        if check_connection():
+            seed_from_yaml(SPEC_PATH)
+            return "db"
+    except Exception:  # noqa: BLE001
+        pass
+    return "yaml"
 
 
 @st.cache_resource
@@ -386,6 +404,8 @@ graph, _checkpointer = _load_agent_graph()
 # Sidebar
 # ---------------------------------------------------------------------------
 
+_spec_source = _seed_spec()  # idempotent — runs once per process
+
 with st.sidebar:
     st.markdown("## ⚖️ llull")
     st.caption("Prototype v1 · Inverence")
@@ -455,7 +475,8 @@ with st.sidebar:
         with st.expander("Domain", expanded=False):
             st.markdown(f"**{spec.domain_name}**")
             st.caption(spec.domain_description)
-            st.caption(f"Spec v{spec.version}")
+            _src_label = "DB" if _spec_source == "db" else "YAML"
+            st.caption(f"Spec v{spec.version} · source: {_src_label}")
             st.markdown(
                 f"- {len(spec.decision_variables)} decision variables  \n"
                 f"- {len(spec.intermediate_variables)} intermediate  \n"

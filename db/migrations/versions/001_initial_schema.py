@@ -35,13 +35,13 @@ def upgrade() -> None:
         sa.Column("title", sa.Text(), nullable=False, server_default=""),
         sa.Column(
             "created_at",
-            postgresql.TIMESTAMPTZ(),
+            sa.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
             "last_active",
-            postgresql.TIMESTAMPTZ(),
+            sa.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
@@ -60,7 +60,7 @@ def upgrade() -> None:
         sa.Column("run_id", sa.Text(), nullable=False),
         sa.Column(
             "timestamp",
-            postgresql.TIMESTAMPTZ(),
+            sa.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
@@ -116,7 +116,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "created_at",
-            postgresql.TIMESTAMPTZ(),
+            sa.TIMESTAMP(timezone=True),
             nullable=False,
             server_default=sa.text("now()"),
         ),
