@@ -7,47 +7,112 @@ Decision Intelligence Agent ("llull") — a spec-driven agent that models how an
 ## Core architecture
 
 ```
-spec/organizational_model.yaml  ← single source of truth for the domain
+spec/organizational_model.yaml  ← single source of truth (will move to DB in 1.5)
         │
         ├── system/system_graph.py     DAG built from spec's causal_relationships
         ├── system/system_model.py     topological evaluation engine (formula registry)
         ├── simulation/montecarlo.py   Monte Carlo with noise from spec
         ├── optimization/optimizer.py  grid search over decision variable bounds
-        ├── knowledge/retriever.py     FAISS RAG → migrating to pgvector
+        ├── knowledge/retriever.py     pgvector search (FAISS fallback)
         │
-        └── agents/
-             ├── state.py              AgentState TypedDict
-             ├── planner.py            LLM → structured ToolSelection + fallback policy
-             ├── llm_factory.py        get_chat_model() + invoke_with_fallback()
-             ├── tools.py              tool wrappers consuming spec defaults
-             ├── workflow.py           LangGraph: planner → tool → synthesizer → judge → END
-             └── judge.py             online quality gate + single-pass revision
+        ├── agents/
+        │    ├── state.py              AgentState TypedDict
+        │    ├── planner.py            LLM → structured ToolSelection + fallback policy
+        │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback()
+        │    ├── tools.py              tool wrappers consuming spec defaults
+        │    ├── workflow.py           LangGraph: planner → tool → synthesizer → judge → END
+        │    └── judge.py             online quality gate + single-pass revision
+        │
+        ├── db/
+        │    ├── engine.py             SQLAlchemy engine, get_session()
+        │    ├── models.py             AgentSession, AgentRun, KnowledgeDocument
+        │    └── migrations/           Alembic (001_initial_schema)
+        │
+        ├── memory/
+        │    ├── checkpointer.py       PostgresSaver (SQLite fallback)
+        │    └── session_manager.py    SQLAlchemy queries (SQLite fallback)
+        │
+        ├── evaluation/
+        │    ├── observer.py           dual-write: JSONL + Postgres
+        │    ├── metrics.py            reads from Postgres (JSONL fallback)
+        │    └── dashboard.py          HTML dashboard
+        │
+        └── config/settings.py        thin adapter over spec
 
-memory/checkpointer.py   SqliteSaver → migrating to PostgresSaver
-evaluation/observer.py    JSONL logging → adding Postgres writes
-config/settings.py        thin adapter over spec
-app.py                    REPL entry point (legacy)
-streamlit_app.py          Web UI (chat + DAG + charts)
-tests/                    unit tests
-docs/                     inventario + roadmap (versioned)
+app.py                    REPL (legacy)
+streamlit_app.py          Web UI
+docker-compose.yml        PostgreSQL 16 + pgvector
+alembic.ini               migration config
+tests/                    unit + integration tests
+docs/                     inventario + roadmap
 ```
 
 ## Design principles (non-negotiable)
 
-1. **Spec-driven**: domain knowledge in `spec/organizational_model.yaml` only
+1. **Spec-driven**: domain knowledge in spec YAML only (moving to DB in 1.5)
 2. **LLM orchestrates, never computes**: structured output selects tools
-3. **Tools are pure functions**: (spec, params) → result, no side effects
+3. **Tools are pure functions**: (spec, params) → result
 4. **The graph is the architecture**: LangGraph defines the flow
 5. **Provider-agnostic**: multi-provider via `llm_factory.py`
-6. **Product-grade from now on**: proper migrations, error handling, tests, Docker. No prototype patches.
+6. **Product-grade**: proper migrations, error handling, tests, Docker
+7. **Dual-backend**: Postgres primary, SQLite/FAISS fallback when `DATABASE_URL` not set
 
-## Testing policy
+## Database
 
-Every PR must include tests. `pytest`. Mock LLM calls in unit tests. `@pytest.mark.integration` for DB/API tests.
+PostgreSQL 16 with pgvector, managed via Docker Compose and Alembic.
+
+```env
+DATABASE_URL=postgresql://llull:llull@localhost:5432/llull
+```
+
+Three tables: `agent_sessions`, `agent_runs`, `knowledge_documents` (with vector(1536)).
+
+```bash
+docker compose up -d                    # start Postgres
+alembic upgrade head                    # run migrations
+```
+
+Without `DATABASE_URL`, the system falls back to SQLite + FAISS automatically.
+
+## LLM configuration
+
+```env
+PLANNER_PROVIDER=openai
+PLANNER_MODEL=gpt-4o-mini
+SYNTHESIZER_PROVIDER=openai
+SYNTHESIZER_MODEL=gpt-4o-mini
+JUDGE_PROVIDER=openai
+JUDGE_MODEL=gpt-4o-mini
+FALLBACK_PROVIDER=anthropic
+FALLBACK_MODEL=claude-sonnet-4-20250514
+LLM_MAX_RETRIES=2
+LLM_TIMEOUT=30
+HISTORY_WINDOW=3
+```
+
+## Build and run
+
+```bash
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+docker compose up -d                    # Postgres
+alembic upgrade head                    # migrations
+python data/generate_data.py
+python models/train_demand_model.py
+python knowledge/build_index.py         # inserts into pgvector (or FAISS)
+streamlit run streamlit_app.py          # web UI
+```
+
+## Testing
+
+```bash
+pytest                                  # unit tests
+pytest -m integration                   # DB tests (needs Docker)
+```
 
 ## Conventions
 
-`black` (88), `ruff`, type hints, numpy docstrings, no bare except, config via .env/YAML only.
+`black` (88), `ruff`, type hints, numpy docstrings, no bare except, config via .env/YAML.
 
 ## What NOT to change without discussion
 
@@ -55,203 +120,146 @@ Spec-driven principle, graph structure, `ToolSelection` schema, `_NODE_FORMULAS`
 
 ## Git workflow
 
-Feature branches: `feature/<item-id>-<desc>`. Commits: `[<item-id>] <desc>`. PRs into main.
+`feature/<item-id>-<desc>`, commits `[<item-id>] <desc>`, PRs into main.
 
 ## Completed items
 
-- [x] **Paquete 1D** ✅ — 5.5, 5.6, 12.4, 12.5, 5.7, 4.1
-- [x] **Paquete 1E** ✅ — 6.6 Streamlit UI
+### Paquete 1D ✅
+- [x] 5.5 History window configurable
+- [x] 5.6 Multi-provider LLM (OpenAI + Anthropic)
+- [x] 12.4 Fallback between providers
+- [x] 12.5 Rate limiting + graceful degradation
+- [x] 5.7 Planner fallback policy
+- [x] 4.1 Simulation params verified
 
-## Current work: Feature A — PostgreSQL migration (items 1.1 + 1.2 + 8.1)
+### Paquete 1E ✅
+- [x] 6.6 Streamlit UI
 
-**Branch**: `feature/1.1-postgresql-migration`
+### Paquete 1A (partial) ✅
+- [x] 1.1 PostgreSQL migration (PostgresSaver, SQLAlchemy, Alembic, dual-backend)
+- [x] 1.2 pgvector (knowledge_documents, cosine search, FAISS fallback)
+- [x] 8.1 Runs in Postgres (agent_runs table, dual-write, metrics from Postgres)
 
-Migrate ALL persistence from SQLite + FAISS to PostgreSQL + pgvector. Product-grade: Alembic migrations, Docker Compose, connection pooling, environment-based config.
+## Next: Feature B — Spec as data (item 1.5)
 
-### New infrastructure
+**Branch**: `feature/1.5-spec-as-data`
 
-**docker-compose.yml** in project root:
-```yaml
-services:
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      POSTGRES_DB: llull
-      POSTGRES_USER: llull
-      POSTGRES_PASSWORD: llull
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-volumes:
-  pgdata:
-```
+The spec YAML currently lives as a static file (`spec/organizational_model.yaml`). This feature makes it a database object: stored in Postgres, versioned, editable programmatically, with the YAML file as initial seed.
 
-**New env var**: `DATABASE_URL=postgresql://llull:llull@localhost:5432/llull`
+### Why this matters
 
-**New dependencies** for requirements.txt:
-```
-sqlalchemy[asyncio]>=2.0
-asyncpg>=0.29
-psycopg[binary]>=3.1
-alembic>=1.13
-langgraph-checkpoint-postgres>=1.0
-pgvector>=0.3
-```
+Without this, the spec is a file that someone edits manually and restarts the service. With it:
+- Multiple specs can coexist (one per domain/client)
+- Specs have version history (who changed what, when)
+- The DAG builder (I3) can edit specs through the UI
+- The conversational generator (I2A) can create specs programmatically
+- Each run is tied to the exact spec version used (traceability)
 
-### New directory: `db/`
+### Database changes
 
-```
-db/
-├── engine.py          SQLAlchemy engine singleton, URL from DATABASE_URL env var
-├── models.py          SQLAlchemy models for all tables
-└── migrations/        Alembic migrations
-    ├── env.py
-    └── versions/
-        └── 001_initial_schema.py
-```
+New Alembic migration `002_spec_tables.py`:
 
-### Database schema (3 tables)
-
-**agent_sessions** (replaces SQLite table in memory/checkpointer.py):
 ```sql
-CREATE TABLE agent_sessions (
-    session_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title        TEXT NOT NULL DEFAULT '',
-    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    last_active  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    turn_count   INTEGER NOT NULL DEFAULT 0
+CREATE TABLE specs (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    domain_name     TEXT NOT NULL,
+    version         TEXT NOT NULL,           -- semver: 1.2.0
+    status          TEXT NOT NULL DEFAULT 'draft',  -- draft / active / archived
+    yaml_content    TEXT NOT NULL,           -- full YAML as text
+    parsed_content  JSONB NOT NULL,          -- parsed YAML as JSON for querying
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by      TEXT,
+    description     TEXT,
+    UNIQUE(domain_name, version)
 );
+
+CREATE TABLE spec_versions (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    spec_id         UUID REFERENCES specs(id),
+    version         TEXT NOT NULL,
+    yaml_content    TEXT NOT NULL,
+    parsed_content  JSONB NOT NULL,
+    change_summary  TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    created_by      TEXT
+);
+CREATE INDEX idx_spec_versions_spec ON spec_versions(spec_id);
 ```
 
-**agent_runs** (item 8.1 — replaces JSONL in evaluation/observer.py):
+Add `spec_id` and `spec_version` columns to `agent_runs`:
 ```sql
-CREATE TABLE agent_runs (
-    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id             UUID REFERENCES agent_sessions(session_id),
-    run_id                 TEXT NOT NULL,
-    timestamp              TIMESTAMPTZ NOT NULL DEFAULT now(),
-    query                  TEXT NOT NULL,
-    action                 TEXT,
-    reasoning              TEXT,
-    planner_latency_ms     FLOAT,
-    tool_latency_ms        FLOAT,
-    synthesizer_latency_ms FLOAT,
-    judge_latency_ms       FLOAT,
-    total_latency_ms       FLOAT,
-    judge_score            FLOAT,
-    judge_passed           BOOLEAN,
-    judge_revised          BOOLEAN,
-    judge_feedback         TEXT,
-    confidence_score       FLOAT,
-    success                BOOLEAN NOT NULL DEFAULT true,
-    error                  TEXT,
-    answer_length          INTEGER,
-    planner_model          TEXT,
-    synthesizer_model      TEXT,
-    judge_model            TEXT,
-    fallback_triggered     BOOLEAN DEFAULT false,
-    raw_result             JSONB
-);
-CREATE INDEX idx_runs_session ON agent_runs(session_id);
-CREATE INDEX idx_runs_timestamp ON agent_runs(timestamp);
+ALTER TABLE agent_runs ADD COLUMN spec_id UUID REFERENCES specs(id);
+ALTER TABLE agent_runs ADD COLUMN spec_version TEXT;
 ```
 
-**knowledge_documents** (item 1.2 — replaces FAISS index):
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-CREATE TABLE knowledge_documents (
-    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    content    TEXT NOT NULL,
-    category   TEXT,
-    embedding  vector(1536),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX idx_knowledge_embedding ON knowledge_documents
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 5);
+### New files
+
+```
+db/models.py          — add Spec and SpecVersion models
+db/migrations/versions/002_spec_tables.py — migration
+spec/spec_repository.py — CRUD for specs:
+    create_spec(yaml_content, domain_name, version) -> Spec
+    get_active_spec(domain_name) -> Spec
+    get_spec_by_version(domain_name, version) -> Spec
+    list_specs(domain_name?) -> List[Spec]
+    update_spec(spec_id, yaml_content, new_version, change_summary) -> Spec
+    activate_spec(spec_id) -> Spec
+    seed_from_yaml(yaml_path) -> Spec   # imports the current YAML file as first version
 ```
 
 ### Files to modify
 
-**memory/checkpointer.py**:
-- Replace `SqliteSaver` with `PostgresSaver` from `langgraph-checkpoint-postgres`
-- Read `DATABASE_URL` from env
-- Keep `get_checkpointer()` interface so callers don't change
-- Keep SQLite as fallback: if `DATABASE_URL` not set, fall back to SQLite with a warning log. This lets devs run without Docker during development.
-
-**memory/session_manager.py**:
-- Replace `sqlite3` queries with SQLAlchemy queries against `agent_sessions` model
-- Same public API: `list_sessions()`, `get_session()`, `delete_session()`, `register_turn()`
-
-**knowledge/build_index.py**:
-- Replace FAISS creation with: generate embeddings via OpenAI, INSERT into `knowledge_documents` table
-- Keep the same `DOCUMENTS` list — just change the storage backend
-- If `DATABASE_URL` not set, fall back to FAISS with warning
-
-**knowledge/retriever.py**:
-- Replace FAISS load/search with pgvector cosine similarity query
-- Same public API: `retrieve_knowledge(query, k=3) -> str`
-- If `DATABASE_URL` not set, fall back to FAISS
+**spec/spec_loader.py**:
+- Add `load_spec_from_db(domain_name) -> OrganizationalModelSpec` that reads from Postgres
+- Keep `load_spec(path)` as fallback for when `DATABASE_URL` is not set
+- The singleton `get_spec()` tries DB first, YAML file second
 
 **evaluation/observer.py**:
-- Add parallel write to `agent_runs` table alongside existing JSONL
-- JSONL stays as backup for now (dual-write)
+- When writing a run to `agent_runs`, include `spec_id` and `spec_version`
 
-**evaluation/metrics.py**:
-- Add option to read from Postgres instead of JSONL
-- Default to Postgres if `DATABASE_URL` is set, JSONL otherwise
+**app.py / streamlit_app.py**:
+- On startup, if Postgres is available and the `specs` table is empty, auto-seed from the YAML file
+- Display the active spec version in the UI sidebar
 
-**streamlit_app.py**:
-- Update if it directly accesses SQLite or FAISS paths
+### Behavior
 
-**.env.example**:
-- Add `DATABASE_URL`
+- The YAML file (`spec/organizational_model.yaml`) becomes the seed, not the runtime source
+- On first run with Postgres: the system imports the YAML into the `specs` table as version `1.0.0` with status `active`
+- After that, the system reads from the DB. The YAML file is kept for reference and for SQLite fallback mode
+- Editing the spec creates a new version in `spec_versions` and a new row in `specs` with status `draft`
+- A spec must be explicitly activated (`status = 'active'`) to be used by the agent
+- Only one spec per domain can be `active` at a time
 
-### Implementation order
+### Tests
 
-1. `docker-compose.yml` — verify Postgres + pgvector starts
-2. `db/engine.py` — connection management
-3. `db/models.py` — SQLAlchemy models
-4. Alembic setup + initial migration
-5. `memory/checkpointer.py` → PostgresSaver
-6. `memory/session_manager.py` → SQLAlchemy
-7. `knowledge/build_index.py` → pgvector inserts
-8. `knowledge/retriever.py` → pgvector queries
-9. `evaluation/observer.py` → dual-write (JSONL + Postgres)
-10. `evaluation/metrics.py` → read from Postgres
-11. Update `streamlit_app.py` if needed
-12. Update `.env.example` and README
-13. Tests
+In `tests/spec/test_spec_repository.py` (integration, needs Postgres):
+- `test_create_spec_from_yaml`
+- `test_get_active_spec`
+- `test_update_creates_new_version`
+- `test_only_one_active_per_domain`
+- `test_seed_from_yaml_file`
+- `test_run_records_spec_version`
 
-### Tests required
-
-All DB tests marked `@pytest.mark.integration` (need Docker running):
-
-- `tests/db/test_engine.py`: `test_engine_connects`
-- `tests/db/test_models.py`: `test_session_crud`, `test_run_crud`, `test_knowledge_insert_and_search`
-- `tests/memory/test_checkpointer_postgres.py`: `test_saves_and_loads_state`
-- `tests/knowledge/test_retriever_pgvector.py`: `test_retrieve_relevant_docs`
-- `tests/memory/test_fallback_to_sqlite.py`: `test_sqlite_fallback_when_no_database_url`
+In `tests/spec/test_spec_loader_db.py`:
+- `test_load_spec_from_db_returns_typed_spec`
+- `test_fallback_to_yaml_when_no_db`
 
 ### What NOT to do
 
-- Don't remove SQLite/FAISS code — keep behind fallback (`DATABASE_URL` present = Postgres, absent = SQLite/FAISS)
-- Don't change the graph structure or tool interfaces
-- Don't change how the spec is loaded (that's 1.5, next feature)
+- Don't change the spec YAML format — the schema stays the same, it just lives in a DB now
+- Don't change `OrganizationalModelSpec` dataclass — it's the typed interface, unchanged
+- Don't remove the YAML file — it's the seed and the fallback
+- Don't build a UI for spec editing yet — that's the DAG builder in I3
 
 ### Post-completion
 
-After merge, update these files:
-- `CLAUDE.md` — mark 1.1, 1.2, 8.1 as completed, update architecture diagram
-- `docs/llull_roadmap_v3.md` — mark items as done in Paquete 1A
-- `docs/llull_inventario_v3.md` — no structural changes needed
-- Write `docs/adr-001-pgvector-over-qdrant.md` (item 1.3)
+After merge:
+- Update CLAUDE.md (mark 1.5 done, update architecture)
+- Update docs/llull_roadmap_v3.md (mark 1.5 done in Paquete 1A)
+- Write docs/adr-001-pgvector-over-qdrant.md (item 1.3)
+- Commit all doc updates together: `[docs] Update after Paquete 1A completion`
 
-## Next after Feature A
-
-- **Feature B (1.5)**: Spec as data in Postgres
-- **Paquete 1B**: FastAPI Agent Service
-- **Paquete 1C**: CI pipeline, Docker, test suites
+Then proceed to **Paquete 1B** (FastAPI Agent Service) or **Paquete 1C** (CI pipeline).
 
 Full roadmap: `docs/llull_roadmap_v3.md`
 Full backlog: `docs/llull_inventario_v3.md`

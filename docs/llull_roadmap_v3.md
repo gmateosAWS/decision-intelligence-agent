@@ -125,15 +125,15 @@ Al final de esta iteración, llull es un **servicio desplegable con API REST, pe
 
 Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que se empieza a construir el producto.
 
-### Paquete 1A — Base de persistencia
+### Paquete 1A — Base de persistencia (parcialmente completado)
 
-| Item                              | Justificación                                                                                                                                                                |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1.1** PostgreSQL                | Desbloquea casi todo. Es lo primero.                                                                                                                                         |
-| **1.2** pgvector                  | Se monta junto a 1.1 porque comparten infraestructura. El knowledge layer migra de FAISS a una tabla más de Postgres.                                                        |
-| **1.5** Spec as data              | Se monta junto a 1.1 porque define parte del schema. Desbloquea el DAG builder, el generador conversacional, y el versionado del spec. Es habilitador de la Iteración 2 y 3. |
-| **8.1** Runs en Postgres          | Se monta junto a 1.1 porque es parte del schema. Desbloquea judge offline y evaluaciones.                                                                                    |
-| **1.3** Ruta a Qdrant documentada | Un documento, no código. Se escribe ahora para que la decisión pgvector esté documentada como consciente.                                                                    |
+| Item                              | Estado |
+| --------------------------------- | ------ |
+| **1.1** PostgreSQL                | ✅ Hecho (PostgresSaver, SQLAlchemy, Alembic, Docker Compose, dual-backend SQLite fallback) |
+| **1.2** pgvector                  | ✅ Hecho (knowledge_documents con vector(1536), cosine search, FAISS fallback) |
+| **8.1** Runs en Postgres          | ✅ Hecho (agent_runs table, dual-write JSONL+Postgres, metrics read from Postgres) |
+| **1.5** Spec as data              | ⬜ Siguiente (Feature B) |
+| **1.3** Ruta a Qdrant documentada | ⬜ Pendiente (ADR a escribir tras 1.5) |
 
 ### Paquete 1B — API y servicio
 
