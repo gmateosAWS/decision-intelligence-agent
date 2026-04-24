@@ -8,4 +8,6 @@ __pycache__/
 logs/
 data/*
 !data/*.py
+*.zip
+*.patch
 
