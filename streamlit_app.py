@@ -398,8 +398,9 @@ def _init_state() -> None:
 
 
 _init_state()
-_spec_source = _seed_spec()  # must run before any get_spec() call
-graph, _checkpointer = _load_agent_graph()
+with st.spinner("Starting llull — loading spec and building agent…"):
+    _spec_source = _seed_spec()  # must run before any get_spec() call
+    graph, _checkpointer = _load_agent_graph()
 
 # ---------------------------------------------------------------------------
 # Sidebar

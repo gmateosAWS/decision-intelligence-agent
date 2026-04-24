@@ -320,9 +320,9 @@ CRUD completo sobre specs: crear, leer, actualizar, eliminar, validar, versionar
 
 _Resuelve:_ centraliza el gobierno del modelo de dominio. Cualquier componente que necesite saber cómo está modelado un dominio concreto pregunta aquí. Habilita spec-as-data (1.5).
 
-#### 6.1.e Agent Service `[feature]`
+#### 6.1.e Agent Service `[feature]` ✅ HECHO
 
-Orquestación LangGraph que consume los servicios anteriores como tools remotas. Expone al exterior los endpoints conversacionales: lanzar queries, gestionar sesiones, consultar historia de interacciones. Este es el servicio "cerebro" que razona; el resto son "músculo" que calcula.
+FastAPI monolito modular. 5 routers: `/v1/query`, `/v1/sessions`, `/v1/runs`, `/v1/specs`, `/healthz`+`/readyz`. Pydantic schemas, dependency injection (`get_db`, `get_graph`), CORS configurable, global exception handler (LLMUnavailableError → 503). 25 tests en `tests/api/`.
 
 _Resuelve:_ concentra la lógica agentic en un solo sitio y la separa limpiamente del cómputo analítico y de la gestión de modelo. Permite cambiar el planner, el synthesizer o el judge sin tocar los servicios de cómputo.
 
@@ -352,15 +352,15 @@ Introducción de un message broker (Kafka si ya hay infraestructura por CDC, o R
 
 _Resuelve:_ cualquier tarea pesada bloquea el camino crítico conversacional si no existe esta capa. Solo se introduce cuando una tarea real rompe el SLA — no de entrada — pero la arquitectura del agente (5.4) debe contemplarla desde el principio para que la migración sea aditiva.
 
-### 6.4 Endpoints administrativos y de diagnóstico `[parche]`
+### 6.4 Endpoints administrativos y de diagnóstico `[parche]` ✅ HECHO
 
-Endpoints de health (`/healthz`, `/readyz`), diagnóstico (`/debug/spec`, `/debug/state`), y administración (`/admin/sessions`, `/admin/runs`) con control de acceso estricto. Imprescindible para operar en cualquier entorno no-juguete.
+`/healthz` (liveness, siempre 200), `/readyz` (readiness, comprueba DB + spec), `/v1/debug/config` (config LLM sin secretos).
 
 _Resuelve:_ sin esto no hay Kubernetes probes, no hay diagnóstico rápido en incidentes, no hay administración sin acceso directo a la base de datos.
 
-### 6.5 Versionado de API `[parche]`
+### 6.5 Versionado de API `[parche]` ✅ HECHO
 
-Prefijo de versión en la URL (`/v1/...`) y política declarada de compatibilidad hacia atrás. Importante desde el primer día aunque solo haya una versión, para no tener que hacer breaking changes silenciosos después.
+Prefijo `/v1/` en todos los endpoints de negocio. Health endpoints en root. Breaking changes irán a `/v2/`.
 
 _Resuelve:_ cuando el primer cliente piloto tenga integraciones con llull, cualquier cambio incompatible sin versionado rompe su implementación.
 

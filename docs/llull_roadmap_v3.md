@@ -135,13 +135,13 @@ Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que s
 | **1.5** Spec as data              | ✅ Hecho (specs + spec_versions tables, spec_repository CRUD, DB-first loader, traceabilidad en runs) |
 | **1.3** Ruta a Qdrant documentada | ✅ Hecho (docs/adr-001-pgvector-over-qdrant.md) |
 
-### Paquete 1B — API y servicio
+### Paquete 1B — API y servicio ✅ COMPLETADO
 
-| Item                                       | Justificación                                                                                                                                                                                                |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **6.1.e** Agent Service (monolito modular) | Porta el prototipo a FastAPI como monolito modular. Todavía no extrae servicios — los módulos internos siguen importados en proceso. Expone los endpoints conversacionales, de sesiones, de runs y de specs. |
-| **6.4** Endpoints admin/health             | Imprescindible para cualquier despliegue real. Se añade junto al Agent Service.                                                                                                                              |
-| **6.5** Versionado de API                  | Se decide ahora (prefijo `/v1/`) para no tener que romper compatibilidad después.                                                                                                                            |
+| Item                                       | Estado |
+| ------------------------------------------ | ------ |
+| **6.1.e** Agent Service (monolito modular) | ✅ Hecho (FastAPI, 5 routers, Pydantic schemas, dependency injection, 25 tests) |
+| **6.4** Endpoints admin/health             | ✅ Hecho (/healthz, /readyz, /v1/debug/config) |
+| **6.5** Versionado de API                  | ✅ Hecho (prefijo /v1/ en todos los endpoints de negocio) |
 
 ### Paquete 1C — Disciplina de ingeniería
 
