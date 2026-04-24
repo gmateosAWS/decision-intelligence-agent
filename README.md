@@ -560,6 +560,9 @@ LLM_TIMEOUT=30        # per-call timeout in seconds
 
 # --- History ---
 HISTORY_WINDOW=3      # previous turns injected into the planner prompt
+
+# --- FastAPI / CORS ---
+CORS_ORIGINS=http://localhost:8501,http://localhost:3000,http://localhost:8000
 ```
 
 * Each node (`PLANNER`, `SYNTHESIZER`, `JUDGE`) can use a different provider and model independently — set `*_PROVIDER` to `"openai"` or `"anthropic"` and `*_MODEL` to the corresponding model identifier.
