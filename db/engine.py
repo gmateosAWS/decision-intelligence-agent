@@ -54,6 +54,7 @@ def get_engine() -> Engine:
             max_overflow=10,
             pool_pre_ping=True,
             future=True,
+            connect_args={"connect_timeout": 5},
         )
         logger.info("SQLAlchemy engine created: %s", url.split("@")[-1])
     return _engine
