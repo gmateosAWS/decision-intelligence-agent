@@ -13,10 +13,14 @@ from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 # Make sure the project root is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+# Load .env so DATABASE_URL is available when running alembic directly
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 from db.models import Base  # noqa: E402
 
