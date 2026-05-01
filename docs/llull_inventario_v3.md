@@ -14,19 +14,19 @@
 
 Todo lo relacionado con dónde y cómo se guarda la información que el sistema necesita para funcionar: sesiones, runs, specs, conocimiento, memoria conversacional.
 
-### 1.1 Migración de SQLite a PostgreSQL como núcleo de persistencia `[feature]` ✅
+### 1.1 Migración de SQLite a PostgreSQL como núcleo de persistencia `[feature]`
 
 Reemplazar `SqliteSaver` por `AsyncPostgresSaver` para el checkpointing del grafo LangGraph, y mover la tabla `agent_sessions` y los logs JSONL de runs a tablas Postgres. La arquitectura del prototipo está diseñada para que este cambio sea prácticamente una línea en `checkpointer.py`, pero en la práctica implica también definir el esquema relacional completo (sesiones, runs, usuarios, dominios) y una primera iteración de migraciones.
 
 _Resuelve:_ el prototipo no aguanta concurrencia real, no permite queries analíticas sobre runs históricos, y no sirve como base para multi-tenancy. Postgres es el punto de partida para todo lo demás en esta sección.
 
-### 1.2 Capa vectorial sobre pgvector `[feature]` ✅
+### 1.2 Capa vectorial sobre pgvector `[feature]`
 
 Reemplazar el índice FAISS local por la extensión `pgvector` de PostgreSQL. El knowledge layer pasa a ser una tabla más de Postgres, con filtros por metadata (tenant, dominio, categoría) como cláusulas WHERE. Elimina la necesidad de mantener un store separado y sincronizarlo con el resto del estado.
 
 _Resuelve:_ FAISS local no soporta multi-tenancy, no tiene filtros nativos, no tiene replicación y no escala a miles de documentos por cliente. Para el volumen previsible del primer año de llull (decenas de miles de docs por cliente), pgvector es suficiente.
 
-### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]` ✅
+### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]`
 
 Documentar explícitamente en qué condiciones (volumen, latencia, features avanzadas como hybrid search) migraríamos el vector store a Qdrant. Tener el plan escrito no implica hacerlo — implica que cuando el síntoma aparezca, no hay que rediseñar desde cero.
 
@@ -38,7 +38,7 @@ Separar la memoria del agente en dos capas: Redis para estado activo de sesiones
 
 _Resuelve:_ cuando escale a cientos de sesiones concurrentes con turnos frecuentes, Postgres sufre por el patrón escritura-continua-de-blobs-pequeños + lecturas-muy-frecuentes. Es una optimización que se introduce cuando el síntoma aparece, no de entrada, pero la arquitectura lógica lo contempla desde el día 1.
 
-### 1.5 Spec as data — el spec vive en base de datos `[feature]` ✅
+### 1.5 Spec as data — el spec vive en base de datos `[feature]`
 
 El spec YAML deja de ser un fichero estático y pasa a ser un objeto de base de datos con historial de versiones, validación en tiempo real y edición programática desde la UI. Soporta versiones candidate/staging/production igual que un modelo, tiene diffs legibles entre versiones, y cada run del agente queda asociado a la versión exacta del spec con la que se ejecutó.
 
@@ -174,22 +174,74 @@ Reemplazar grid search (que solo escala a 1-2 dimensiones) por Bayesian optimiza
 
 _Resuelve:_ con 3 o más variables de decisión, grid search es intratable por la maldición de la dimensionalidad. Sin esto, llull se limita a problemas de pricing simple.
 
-### 4.3 Mecanismo genérico de registro de tools externas con MCP (habilitador de modelos Inverence) `[feature]`
+### 4.3 Skills engine: registro dinámico de capacidades y exposición MCP `[feature]`
 
-Definir el contrato técnico de "tool del agente": interfaz Python limpia, declaración en el spec de cuándo usar cada una, paso de parámetros tipados, normalización del output, manejo de errores. El mecanismo es independiente de los modelos concretos que se envolverán con él. Cuando aparezcan los modelos analíticos propietarios de Inverence, envolverlos será aplicar este contrato sin tocar el núcleo del agente.
+**Nota terminológica — tools vs skills.**
 
-**MCP (Model Context Protocol) como protocolo estándar de exposición.** Las tools de llull — tanto las internas (simulación, optimización, knowledge, spec) como las externas (modelos de Inverence) — se exponen como **MCP servers**. Esto significa que no solo el agente de llull puede consumirlas: cualquier cliente MCP-compatible (Claude, GPT, Gemini, o cualquier harness que soporte el protocolo) puede invocar las capacidades analíticas de llull.
+En llull usamos una nomenclatura precisa:
 
-Esto tiene dos implicaciones estratégicas:
+- **Tool**: función atómica que hace una cosa concreta. Es técnica, interna, tiene firma tipada. Ejemplos: `monte_carlo_simulation`, `grid_search_optimization`, `pgvector_retrieval`. Es lo que el planner selecciona y ejecuta. Son las piezas de cómputo.
+- **Skill**: capacidad de dominio con significado de negocio, que puede involucrar una o más tools orquestadas. Es lo que el spec declara, lo que el usuario entiende, y lo que se expone al mundo exterior via MCP. Ejemplos: "Proyección de demanda con modelo bayesiano", "Optimización de pricing bajo restricciones", "Análisis de impacto causal sobre ingresos".
 
-- **llull como proveedor de capacidades analíticas**, no solo como producto cerrado. Un cliente que ya tenga Conway u otro agente en su stack puede conectar llull como fuente de simulación, optimización y prescripción sin renunciar a su agente existente. Amplía el mercado potencial.
-- **Portabilidad de integraciones.** Si un cliente deja de usar el agente de llull pero quiere seguir usando su motor de simulación o sus modelos, puede hacerlo a través de MCP. Esto es coherente con el principio de portabilidad del item 3.7 y con la posición "own your intelligence".
+Una skill puede ser una tool simple (la skill "simulación de escenarios" envuelve la tool `monte_carlo_simulation`), o puede ser una orquestación de varias tools (la skill "proyección de demanda" podría invocar ingesta de datos del cliente + modelo bayesiano de Inverence + post-procesamiento estadístico).
 
-Una vez APIficado el sistema (ver 6.1), las tools externas no son funciones Python importadas sino clientes de servicios remotos expuestos via MCP. Cada modelo de Inverence vive en su propio servicio, mantenido por su propio equipo, con su propio ciclo de vida, y el agente lo consume igual que a cualquier otra tool MCP.
+Esta distinción importa por tres razones: (1) los modelos de Inverence se productifican como **skills**, no como tools — un modelo bayesiano de demanda no es una función atómica, es una capacidad compuesta; (2) cuando haya múltiples agentes, cada uno tendrá acceso a un subconjunto de skills declarado en su configuración; (3) el MCP server expone **skills** al mundo exterior, no tools internas.
 
-_Resuelve:_ desacopla la capacidad de integrar modelos externos de conocer los modelos concretos. Posiciona a llull en el ecosistema abierto (MCP) en lugar de en un jardín cerrado propietario. Permite planificar ahora la pieza de ingeniería sin depender de información que no se tiene todavía.
+**El skills engine tiene tres partes:**
 
-**Dependencia externa no resuelta:** el catálogo real de modelos de Inverence — qué hay, en qué tecnologías, en qué estado de documentación, con qué interfaces actuales, en qué estado operativo (código vivo, conocimiento tácito, papers internos). Hasta conocer eso, no se pueden estimar ni planificar las integraciones concretas. Es razonable priorizar un inventario de esos modelos como primera tarea de descubrimiento al entrar en el puesto, y dejar la integración concreta fuera del primer ciclo de planificación.
+**Parte 1 — Contrato técnico de skill.**
+
+Definir la interfaz estándar que toda skill debe implementar:
+
+```yaml
+# En el spec, sección skills:
+skills:
+  - name: demand_forecast_bayesian
+    description: "Bayesian demand forecast using Inverence proprietary model"
+    provider: inverence               # internal | inverence | external
+    endpoint: null                    # null = in-process, URL = remote service
+    mcp_exposed: true                 # exponer como MCP server
+    params_schema:
+      product_id: { type: string, required: true }
+      horizon_months: { type: integer, default: 6, min: 1, max: 24 }
+    output_schema:
+      forecast: { type: array, items: float }
+      confidence_interval: { type: object }
+    when_to_use: "User asks about future demand or sales projections"
+    autonomy: human_confirms          # auto | human_confirms | human_approves
+```
+
+Interfaz Python: toda skill implementa `execute(params: dict, spec: OrganizationalModelSpec) -> SkillResult`, donde `SkillResult` tiene `data`, `metadata`, `confidence`, y `explanation`.
+
+**Parte 2 — Registro dinámico y descubrimiento.**
+
+El planner descubre las skills disponibles **del spec, no del código**. Añadir una skill nueva es: (1) implementar la interfaz, (2) declararla en el spec, (3) reiniciar. El planner la descubre automáticamente en el prompt system con su `description` y `when_to_use`.
+
+Esto es lo que permite que los modelos de Inverence se integren sin tocar el núcleo del agente: se envuelven en la interfaz de skill, se declaran en el spec, y el planner los usa como cualquier otra skill.
+
+**Parte 3 — Exposición como MCP servers.**
+
+Las skills marcadas con `mcp_exposed: true` se exponen automáticamente como MCP servers sobre la API FastAPI. El flujo:
+
+```
+Cliente MCP externo → MCP Server de llull → API REST → skill → tool(s) internos
+```
+
+Esto permite que un cliente con Conway, GPT, Gemini o cualquier otro agente MCP-compatible consuma las capacidades analíticas de llull sin usar el agente de llull. **llull como proveedor de capacidades analíticas, no solo como producto cerrado.**
+
+**Flujo de productificación de modelos de Inverence:**
+
+1. **Descubrimiento**: inventariar el modelo (tech stack, inputs, outputs, documentación, estado operativo)
+2. **Envoltura**: contenedorizar el modelo con la interfaz de skill estándar (`execute(params, spec) -> SkillResult`)
+3. **Registro**: declarar la skill en el spec del dominio correspondiente
+4. **Exposición**: automática via MCP si `mcp_exposed: true`
+5. **Orquestación**: el planner del agente la selecciona cuando la pregunta del usuario lo requiere
+
+Este flujo es el mismo para todos los modelos, independientemente de su tecnología interna (R, Python, MATLAB, lo que sea). La interfaz de skill estandariza el acceso.
+
+*Resuelve:* desacopla la capacidad de integrar modelos externos de conocer los modelos concretos. Posiciona a llull como plataforma de productificación del conocimiento acumulado de Inverence. Permite que los 30 años de modelos bayesianos, series temporales e inferencia estadística sean accesibles via interfaz conversacional y via MCP estándar.
+
+**Dependencia externa no resuelta:** el catálogo real de modelos de Inverence — qué hay, en qué tecnologías, en qué estado de documentación, con qué interfaces actuales, en qué estado operativo (código vivo, conocimiento tácito, papers internos). Hasta conocer eso, no se pueden estimar ni planificar las integraciones concretas. Es razonable priorizar un inventario de esos modelos como primera tarea de descubrimiento al incorporarse al equipo, y dejar la integración concreta fuera del primer ciclo de planificación.
 
 ### 4.4 Motor de simulación paralelizado (intra-proceso) `[feature]`
 
@@ -320,9 +372,9 @@ CRUD completo sobre specs: crear, leer, actualizar, eliminar, validar, versionar
 
 _Resuelve:_ centraliza el gobierno del modelo de dominio. Cualquier componente que necesite saber cómo está modelado un dominio concreto pregunta aquí. Habilita spec-as-data (1.5).
 
-#### 6.1.e Agent Service `[feature]` ✅ HECHO
+#### 6.1.e Agent Service `[feature]`
 
-FastAPI monolito modular. 5 routers: `/v1/query`, `/v1/sessions`, `/v1/runs`, `/v1/specs`, `/healthz`+`/readyz`. Pydantic schemas, dependency injection (`get_db`, `get_graph`), CORS configurable, global exception handler (LLMUnavailableError → 503). 25 tests en `tests/api/`.
+Orquestación LangGraph que consume los servicios anteriores como tools remotas. Expone al exterior los endpoints conversacionales: lanzar queries, gestionar sesiones, consultar historia de interacciones. Este es el servicio "cerebro" que razona; el resto son "músculo" que calcula.
 
 _Resuelve:_ concentra la lógica agentic en un solo sitio y la separa limpiamente del cómputo analítico y de la gestión de modelo. Permite cambiar el planner, el synthesizer o el judge sin tocar los servicios de cómputo.
 
@@ -352,15 +404,15 @@ Introducción de un message broker (Kafka si ya hay infraestructura por CDC, o R
 
 _Resuelve:_ cualquier tarea pesada bloquea el camino crítico conversacional si no existe esta capa. Solo se introduce cuando una tarea real rompe el SLA — no de entrada — pero la arquitectura del agente (5.4) debe contemplarla desde el principio para que la migración sea aditiva.
 
-### 6.4 Endpoints administrativos y de diagnóstico `[parche]` ✅ HECHO
+### 6.4 Endpoints administrativos y de diagnóstico `[parche]`
 
-`/healthz` (liveness, siempre 200), `/readyz` (readiness, comprueba DB + spec), `/v1/debug/config` (config LLM sin secretos).
+Endpoints de health (`/healthz`, `/readyz`), diagnóstico (`/debug/spec`, `/debug/state`), y administración (`/admin/sessions`, `/admin/runs`) con control de acceso estricto. Imprescindible para operar en cualquier entorno no-juguete.
 
 _Resuelve:_ sin esto no hay Kubernetes probes, no hay diagnóstico rápido en incidentes, no hay administración sin acceso directo a la base de datos.
 
-### 6.5 Versionado de API `[parche]` ✅ HECHO
+### 6.5 Versionado de API `[parche]`
 
-Prefijo `/v1/` en todos los endpoints de negocio. Health endpoints en root. Breaking changes irán a `/v2/`.
+Prefijo de versión en la URL (`/v1/...`) y política declarada de compatibilidad hacia atrás. Importante desde el primer día aunque solo haya una versión, para no tener que hacer breaking changes silenciosos después.
 
 _Resuelve:_ cuando el primer cliente piloto tenga integraciones con llull, cualquier cambio incompatible sin versionado rompe su implementación.
 
@@ -444,7 +496,7 @@ _Resuelve:_ algunos clientes grandes no aceptan multi-tenancy lógico por polít
 
 Todo lo que permite saber qué está pasando en el sistema, detectar problemas antes de que el cliente los sufra, y responder cuando algo falla.
 
-### 8.1 Migración de JSONL a tablas de runs en Postgres `[parche]` ✅
+### 8.1 Migración de JSONL a tablas de runs en Postgres `[parche]`
 
 El observer sigue funcionando igual, pero los runs se escriben a una tabla Postgres en lugar de a un fichero JSONL. Permite queries analíticas, filtros por tenant/usuario/dominio, y sirve como base para dashboards multi-usuario.
 

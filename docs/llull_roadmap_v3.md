@@ -125,23 +125,23 @@ Al final de esta iteración, llull es un **servicio desplegable con API REST, pe
 
 Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que se empieza a construir el producto.
 
-### Paquete 1A — Base de persistencia ✅
+### Paquete 1A — Base de persistencia
 
-| Item                              | Estado |
-| --------------------------------- | ------ |
-| **1.1** PostgreSQL                | ✅ Hecho (PostgresSaver, SQLAlchemy, Alembic, Docker Compose, dual-backend SQLite fallback) |
-| **1.2** pgvector                  | ✅ Hecho (knowledge_documents con vector(1536), cosine search, FAISS fallback) |
-| **8.1** Runs en Postgres          | ✅ Hecho (agent_runs table, dual-write JSONL+Postgres, metrics read from Postgres) |
-| **1.5** Spec as data              | ✅ Hecho (specs + spec_versions tables, spec_repository CRUD, DB-first loader, traceabilidad en runs) |
-| **1.3** Ruta a Qdrant documentada | ✅ Hecho (docs/adr-001-pgvector-over-qdrant.md) |
+| Item                              | Justificación                                                                                                                                                                |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1.1** PostgreSQL                | Desbloquea casi todo. Es lo primero.                                                                                                                                         |
+| **1.2** pgvector                  | Se monta junto a 1.1 porque comparten infraestructura. El knowledge layer migra de FAISS a una tabla más de Postgres.                                                        |
+| **1.5** Spec as data              | Se monta junto a 1.1 porque define parte del schema. Desbloquea el DAG builder, el generador conversacional, y el versionado del spec. Es habilitador de la Iteración 2 y 3. |
+| **8.1** Runs en Postgres          | Se monta junto a 1.1 porque es parte del schema. Desbloquea judge offline y evaluaciones.                                                                                    |
+| **1.3** Ruta a Qdrant documentada | Un documento, no código. Se escribe ahora para que la decisión pgvector esté documentada como consciente.                                                                    |
 
-### Paquete 1B — API y servicio ✅ COMPLETADO
+### Paquete 1B — API y servicio
 
-| Item                                       | Estado |
-| ------------------------------------------ | ------ |
-| **6.1.e** Agent Service (monolito modular) | ✅ Hecho (FastAPI, 5 routers, Pydantic schemas, dependency injection, 25 tests) |
-| **6.4** Endpoints admin/health             | ✅ Hecho (/healthz, /readyz, /v1/debug/config) |
-| **6.5** Versionado de API                  | ✅ Hecho (prefijo /v1/ en todos los endpoints de negocio) |
+| Item                                       | Justificación                                                                                                                                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **6.1.e** Agent Service (monolito modular) | Porta el prototipo a FastAPI como monolito modular. Todavía no extrae servicios — los módulos internos siguen importados en proceso. Expone los endpoints conversacionales, de sesiones, de runs y de specs. |
+| **6.4** Endpoints admin/health             | Imprescindible para cualquier despliegue real. Se añade junto al Agent Service.                                                                                                                              |
+| **6.5** Versionado de API                  | Se decide ahora (prefijo `/v1/`) para no tener que romper compatibilidad después.                                                                                                                            |
 
 ### Paquete 1C — Disciplina de ingeniería
 
@@ -203,7 +203,7 @@ Es el paso de sistema con base técnica seria a sistema que demuestra valor con 
 | **3.3** Validación automática del spec     | Impide que un spec mal formado llegue al runtime. Condición necesaria para que 3.2 sea usable por no-técnicos.                                                                                                                                                                                     |
 | **3.5** Políticas de autonomía en el spec  | Añadir `autonomy_policy` al spec. Es un parche pequeño con impacto alto: el primer cliente querrá saber quién controla qué.                                                                                                                                                                        |
 | **3.7** Portabilidad del modelo de dominio | Principio de diseño + endpoints de exportación: spec, modelos, mappings, runs, evaluaciones en formatos abiertos (YAML, JSON, ONNX, Parquet). Se implementa en I2A porque informa el diseño de todo lo que toca datos de cliente. Argumento comercial directo: "en llull tu conocimiento es tuyo". |
-| **4.3** Registro de tools externas con MCP | El contrato técnico de tools, expuestas como MCP servers. Independiente de conocer los modelos de Inverence concretos. Posiciona a llull en el ecosistema abierto y permite que clientes con otros agentes (Conway, GPT) consuman las capacidades analíticas de llull.                             |
+| **4.3** Skills engine + exposición MCP | Contrato técnico de skills (tools vs skills), registro dinámico en el spec, exposición como MCP servers. Incluye el flujo de productificación de modelos de Inverence. Posiciona a llull como plataforma de capacidades analíticas consumible por cualquier agente MCP-compatible. |
 
 ### Paquete 2A.3 — Evaluación y calidad
 
@@ -410,7 +410,7 @@ Estos items son reales y necesarios, pero su timing depende de señales externas
 │  │ Mapping Layer LLM │ │ Validación auto. │ │ Test suites v2         │   │
 │  │ Great Expectations│ │ Políticas auton. │ │ Judge offline          │   │
 │  │ Data bindings     │ │ Portabilidad (*) │ │ Eval. pre-promoción    │   │
-│  │                   │ │ Tools MCP (*)    │ │                        │   │
+│  │                   │ │ Skills+MCP (*)   │ │                        │   │
 │  └───────────────────┘ └──────────────────┘ └────────────────────────┘   │
 │  ┌──────────────────────────────────────────────────────────────────┐    │
 │  │ Mejoras: versionado spec · spec como artefacto · prompt reg.     │    │
