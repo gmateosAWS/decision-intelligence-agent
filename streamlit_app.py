@@ -137,9 +137,9 @@ def _dag_figure(G: nx.DiGraph) -> go.Figure:
     # Node traces by type
     _COLOURS = {"decision": "#3b82f6", "intermediate": "#94a3b8", "target": "#22c55e"}
     _LABELS = {
-        "decision": "Decision variable",
-        "intermediate": "Intermediate",
-        "target": "Target",
+        "decision": "Variable de decisión",
+        "intermediate": "Intermedia",
+        "target": "Objetivo",
     }
 
     traces = [edge_trace]
@@ -208,8 +208,8 @@ def _simulation_figure(raw: Dict[str, Any]) -> go.Figure:
             mode="lines",
             line=dict(color="#3b82f6", width=1.5),
             fillcolor="rgba(59,130,246,0.12)",
-            name="Distribution",
-            hovertemplate="Profit: %{x:,.0f}<extra></extra>",
+            name="Distribución",
+            hovertemplate="Beneficio: %{x:,.0f}<extra></extra>",
         )
     )
     fig.add_trace(
@@ -219,14 +219,14 @@ def _simulation_figure(raw: Dict[str, Any]) -> go.Figure:
             fill="tozeroy",
             mode="none",
             fillcolor="rgba(59,130,246,0.30)",
-            name="P10–P90 range",
+            name="Rango P10–P90",
             hoverinfo="skip",
         )
     )
     fig.add_vline(
         x=mean,
         line=dict(color="#22c55e", width=2, dash="solid"),
-        annotation_text=f"Mean {mean:,.0f}",
+        annotation_text=f"Media {mean:,.0f}",
         annotation_position="top right",
     )
     fig.add_vline(
@@ -249,62 +249,71 @@ def _simulation_figure(raw: Dict[str, Any]) -> go.Figure:
         plot_bgcolor="rgba(0,0,0,0)",
         showlegend=False,
         xaxis=dict(
-            title="Profit (EUR)", tickformat=",.0f", gridcolor="rgba(128,128,128,0.15)"
+            title="Beneficio (EUR)",
+            tickformat=",.0f",
+            gridcolor="rgba(128,128,128,0.15)",
         ),
         yaxis=dict(showticklabels=False, gridcolor="rgba(128,128,128,0.1)"),
     )
     return fig
 
 
-def _render_result_details(action: str, raw_result: Dict[str, Any]) -> None:
-    """Render result visualizations inside an expander below the answer."""
+# Tool label map (shared between history render and new response render)
+_TOOL_LABELS: Dict[str, str] = {
+    "optimization": "🟢 Optimización",
+    "simulation": "🔵 Simulación",
+    "knowledge": "🟣 Conocimiento",
+}
+
+
+def _render_result_cards(action: str, raw_result: Dict[str, Any]) -> None:
+    """Render result metrics and chart directly below the answer."""
     if not raw_result or action == "knowledge":
         return
 
-    with st.expander("Results details", expanded=False):
-        if action == "simulation":
-            c1, c2, c3, c4 = st.columns(4)
-            ep = raw_result.get("expected_profit")
-            p10 = raw_result.get("profit_p10")
-            p90 = raw_result.get("profit_p90")
-            risk = raw_result.get("downside_risk_pct")
-            if ep is not None:
-                c1.metric("Expected profit", f"€{ep:,.0f}")
-            if p10 is not None:
-                c2.metric("P10 (pessimistic)", f"€{p10:,.0f}")
-            if p90 is not None:
-                c3.metric("P90 (optimistic)", f"€{p90:,.0f}")
-            if risk is not None:
-                c4.metric("Downside risk", f"{risk:.1f}%")
+    if action == "simulation":
+        c1, c2, c3, c4 = st.columns(4)
+        ep = raw_result.get("expected_profit")
+        p10 = raw_result.get("profit_p10")
+        p90 = raw_result.get("profit_p90")
+        risk = raw_result.get("downside_risk_pct")
+        if ep is not None:
+            c1.metric("Beneficio esperado", f"€{ep:,.0f}")
+        if p10 is not None:
+            c2.metric("P10 (pesimista)", f"€{p10:,.0f}")
+        if p90 is not None:
+            c3.metric("P90 (optimista)", f"€{p90:,.0f}")
+        if risk is not None:
+            c4.metric("Riesgo a la baja", f"{risk:.1f}%")
 
-            st.plotly_chart(
-                _simulation_figure(raw_result),
-                width="stretch",
-                config={"displayModeBar": False},
-            )
+        st.plotly_chart(
+            _simulation_figure(raw_result),
+            use_container_width=True,
+            config={"displayModeBar": False},
+        )
 
-            ed = raw_result.get("expected_demand")
-            ds = raw_result.get("demand_std")
-            nr = raw_result.get("n_runs")
-            if ed is not None:
-                extra = f"  ·  σ demand {ds:,.1f}" if ds is not None else ""
-                nr_txt = f"  ·  {nr:,} simulation runs" if nr is not None else ""
-                st.caption(f"Expected demand: {ed:,.1f} units{extra}{nr_txt}")
+        ed = raw_result.get("expected_demand")
+        ds = raw_result.get("demand_std")
+        nr = raw_result.get("n_runs")
+        if ed is not None:
+            extra = f"  ·  σ demanda {ds:,.1f}" if ds is not None else ""
+            nr_txt = f"  ·  {nr:,} simulaciones" if nr is not None else ""
+            st.caption(f"Demanda esperada: {ed:,.1f} unidades{extra}{nr_txt}")
 
-        elif action == "optimization":
-            spec = get_spec()
-            cols = st.columns(len(spec.decision_variables) + 1)
-            for i, dv in enumerate(spec.decision_variables):
-                val = raw_result.get(f"optimal_{dv.name}") or raw_result.get(dv.name)
-                if val is not None:
-                    cols[i].metric(f"Optimal {dv.name}", f"{val:,.2f} {dv.unit}")
-            ep = raw_result.get("expected_profit")
-            if ep is not None:
-                cols[-1].metric("Expected profit", f"€{ep:,.0f}")
+    elif action == "optimization":
+        spec = get_spec()
+        cols = st.columns(len(spec.decision_variables) + 1)
+        for i, dv in enumerate(spec.decision_variables):
+            val = raw_result.get(f"optimal_{dv.name}") or raw_result.get(dv.name)
+            if val is not None:
+                cols[i].metric(f"Óptimo {dv.name}", f"{val:,.2f} {dv.unit}")
+        ep = raw_result.get("expected_profit")
+        if ep is not None:
+            cols[-1].metric("Beneficio esperado", f"€{ep:,.0f}")
 
-            risk = raw_result.get("downside_risk_pct")
-            if risk is not None:
-                st.caption(f"Downside risk at optimum: {risk:.1f}%")
+        risk = raw_result.get("downside_risk_pct")
+        if risk is not None:
+            st.caption(f"Riesgo a la baja en el óptimo: {risk:.1f}%")
 
 
 def _render_run_details(metadata: Dict[str, Any]) -> None:
@@ -317,29 +326,29 @@ def _render_run_details(metadata: Dict[str, Any]) -> None:
     total_ms = metadata.get("total_ms")
     latencies = metadata.get("latencies", {})
 
-    with st.expander("Run details", expanded=False):
+    with st.expander("Detalles técnicos", expanded=False):
         col1, col2 = st.columns([1, 2])
         with col1:
-            _TOOL_COLOURS = {
+            _TOOL_ICONS = {
                 "optimization": "🟢",
                 "simulation": "🔵",
                 "knowledge": "🟣",
             }
-            icon = _TOOL_COLOURS.get(action, "⚪")
-            st.markdown(f"**Tool used:** {icon} `{action}`")
+            icon = _TOOL_ICONS.get(action, "⚪")
+            st.markdown(f"**Herramienta:** {icon} `{action}`")
             if total_ms is not None:
-                st.markdown(f"**Total latency:** `{total_ms:,.0f} ms`")
+                st.markdown(f"**Latencia total:** `{total_ms:,.0f} ms`")
             if judge_score is not None:
-                verdict = "✅ passed" if judge_passed else "✏️ revised"
-                st.markdown(f"**Judge:** `{judge_score:.2f}` — {verdict}")
+                verdict = "✅ aprobado" if judge_passed else "✏️ revisado"
+                st.markdown(f"**Juez:** `{judge_score:.2f}` — {verdict}")
             elif judge_revised is not None:
                 st.markdown(
-                    f"**Judge:** {'✅ passed' if judge_passed else '✏️ revised'}"
+                    f"**Juez:** {'✅ aprobado' if judge_passed else '✏️ revisado'}"
                 )
 
         with col2:
             if reasoning:
-                st.markdown("**Planner reasoning:**")
+                st.markdown("**Razonamiento del planificador:**")
                 st.caption(reasoning)
 
         if latencies:
@@ -398,7 +407,7 @@ def _init_state() -> None:
 
 
 _init_state()
-with st.spinner("Starting llull — loading spec and building agent…"):
+with st.spinner("Iniciando llull — cargando especificación y construyendo agente…"):
     _spec_source = _seed_spec()  # must run before any get_spec() call
     graph, _checkpointer = _load_agent_graph()
 
@@ -408,31 +417,30 @@ with st.spinner("Starting llull — loading spec and building agent…"):
 
 with st.sidebar:
     st.markdown("## ⚖️ llull")
-    st.caption("Prototype v1 · Inverence")
+    st.caption("Inverence")
     st.divider()
 
     # --- Session management ---
-    st.subheader("Session")
+    st.subheader("Sesión")
 
-    if st.button("＋ New session", use_container_width=True):
+    if st.button("＋ Nueva sesión", use_container_width=True):
         _new_session()
         st.rerun()
 
     sessions = SessionManager.list_sessions()
     if sessions:
-        # Build display labels; skip the current session
         opts = {}
         for s in sessions:
-            label = f"{s['title'][:28]}…  ({s['turn_count']} turns)"
+            label = f"{s['title'][:28]}…  ({s['turn_count']} turnos)"
             opts[label] = s["session_id"]
 
         chosen_label = st.selectbox(
-            "Resume a previous session",
-            options=["— select —"] + list(opts.keys()),
+            "Retomar una sesión anterior",
+            options=["— seleccionar —"] + list(opts.keys()),
             key="resume_selector",
         )
-        if chosen_label != "— select —":
-            if st.button("↩ Resume selected", use_container_width=True):
+        if chosen_label != "— seleccionar —":
+            if st.button("↩ Retomar seleccionada", use_container_width=True):
                 _resume_session(opts[chosen_label])
                 st.rerun()
 
@@ -442,66 +450,91 @@ with st.sidebar:
     if session_row:
         st.info(
             f"**`{sid[:8]}…`**  \n"
-            f"Turns: {session_row['turn_count']}  \n"
-            f"Active: {session_row['last_active'][:10]}"
+            f"Turnos: {session_row['turn_count']}  \n"
+            f"Activa: {session_row['last_active'][:10]}"
         )
     else:
-        st.info(f"**`{sid[:8]}…`**  \n*New — no turns yet*")
+        st.info(f"**`{sid[:8]}…`**  \n*Nueva — sin turnos aún*")
 
     st.divider()
 
-    # --- LLM config ---
-    with st.expander("LLM configuration", expanded=False):
-        rows = [
-            ("Planner", "PLANNER_PROVIDER", "PLANNER_MODEL"),
-            ("Synthesizer", "SYNTHESIZER_PROVIDER", "SYNTHESIZER_MODEL"),
-            ("Judge", "JUDGE_PROVIDER", "JUDGE_MODEL"),
-        ]
-        for node, pvar, mvar in rows:
-            prov = os.getenv(pvar, "openai")
-            model = os.getenv(mvar, "gpt-4o-mini")
-            st.markdown(f"**{node}** · `{prov}` / `{model}`")
+    # --- LLM config (planner only) ---
+    with st.expander("Configuración LLM", expanded=False):
+        prov = os.getenv("PLANNER_PROVIDER", "openai")
+        model = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
+        st.markdown(f"**Planificador** · `{prov}` / `{model}`")
         fb_prov = os.getenv("FALLBACK_PROVIDER", "")
         fb_model = os.getenv("FALLBACK_MODEL", "")
         if fb_prov:
             st.caption(f"Fallback: `{fb_prov}` / `{fb_model}`")
         retries = os.getenv("LLM_MAX_RETRIES", "2")
         timeout = os.getenv("LLM_TIMEOUT", "30")
-        st.caption(f"Retries: {retries} · Timeout: {timeout}s")
+        st.caption(f"Reintentos: {retries} · Timeout: {timeout}s")
 
     # --- Domain info ---
     try:
         spec = get_spec()
-        with st.expander("Domain", expanded=False):
+        with st.expander("Dominio", expanded=False):
             st.markdown(f"**{spec.domain_name}**")
             st.caption(spec.domain_description)
             _src_label = "DB" if _spec_source == "db" else "YAML"
-            st.caption(f"Spec v{spec.version} · source: {_src_label}")
-            st.markdown(
-                f"- {len(spec.decision_variables)} decision variables  \n"
-                f"- {len(spec.intermediate_variables)} intermediate  \n"
-                f"- {len(spec.target_variables)} target"
-            )
+            st.caption(f"Spec v{spec.version} · {_src_label}")
+            st.divider()
+            st.markdown("**Variables de decisión**")
             for dv in spec.decision_variables:
-                st.caption(f"`{dv.name}` [{dv.bounds_min}–{dv.bounds_max} {dv.unit}]")
+                st.markdown(
+                    f"- `{dv.name}` · {dv.bounds_min}–{dv.bounds_max} {dv.unit}"
+                )
+            if spec.target_variables:
+                st.markdown("**Objetivos**")
+                for tv in spec.target_variables:
+                    st.markdown(f"- `{tv.name}`")
     except Exception:  # noqa: BLE001
         pass
 
     # --- Causal DAG ---
-    with st.expander("Causal DAG", expanded=False):
+    with st.expander("DAG causal", expanded=False):
         try:
             G = _load_causal_graph()
             fig_dag = _dag_figure(G)
             st.plotly_chart(fig_dag, width="stretch", config={"displayModeBar": False})
         except Exception as e:  # noqa: BLE001
-            st.warning(f"DAG unavailable: {e}")
+            st.warning(f"DAG no disponible: {e}")
 
 # ---------------------------------------------------------------------------
 # Main chat area
 # ---------------------------------------------------------------------------
 
-st.title("llull — Decision Intelligence Agent")
-st.caption("Ask business questions about pricing, marketing, and profitability.")
+_EXAMPLE_QUERIES = [
+    (
+        "💰 Precio óptimo",
+        "¿Cuál es la combinación óptima de precio y marketing para maximizar el beneficio?",  # noqa: E501
+    ),
+    (
+        "📊 Simular escenario",
+        "Simula el beneficio con precio 45 € y marketing en 8.000 €",
+    ),
+    (
+        "📈 Análisis de riesgo",
+        "¿Cuánto riesgo tengo si bajo el precio a 35 € con marketing de 5.000 €?",
+    ),
+]
+
+# Welcome block — hidden once conversation starts or a card query is pending
+if not st.session_state.messages and not st.session_state.get("_pending_query"):
+    st.markdown("# ⚖️ llull")
+    st.markdown(
+        "**Tu consejero de decisiones de negocio.**  \n"
+        "Analiza el impacto de tus decisiones comerciales antes de tomarlas."
+    )
+    st.divider()
+    col1, col2, col3 = st.columns(3)
+    for col, (label, query) in zip([col1, col2, col3], _EXAMPLE_QUERIES):
+        with col:
+            if st.button(label, key=f"card_{label}", use_container_width=True):
+                st.session_state["_pending_query"] = query
+                st.rerun()
+    st.divider()
 
 # Render conversation history
 for msg in st.session_state.messages:
@@ -511,14 +544,37 @@ for msg in st.session_state.messages:
             meta = msg["metadata"]
             action = meta.get("action", "")
             raw_result = meta.get("raw_result", {})
-            _render_result_details(action, raw_result)
+            total_ms = meta.get("total_ms")
+            tool_label = _TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
+            if tool_label and total_ms:
+                st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+            elif total_ms:
+                st.caption(f"{total_ms:,.0f} ms")
+            _render_result_cards(action, raw_result)
             _render_run_details(meta)
 
 # ---------------------------------------------------------------------------
-# Chat input
+# Chat input and agent invocation
 # ---------------------------------------------------------------------------
 
-if prompt := st.chat_input("Ask a business question…"):
+_SPINNER_STEPS = [
+    "Analizando tu pregunta…",
+    "Consultando el modelo causal…",
+    "Generando respuesta…",
+]
+
+_chat_input = st.chat_input("Pregunta sobre tu negocio…")
+
+# Pick up pending query from example cards, or use typed input
+if "_pending_query" in st.session_state:
+    prompt = st.session_state["_pending_query"]
+    del st.session_state["_pending_query"]
+elif _chat_input:
+    prompt = _chat_input
+else:
+    prompt = None
+
+if prompt:
     # Show user message immediately
     st.session_state.messages.append(
         {"role": "user", "content": prompt, "metadata": None}
@@ -526,66 +582,86 @@ if prompt := st.chat_input("Ask a business question…"):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Invoke the agent
+    # Invoke the agent with staged status messages
     with st.chat_message("assistant"):
-        with st.spinner("Thinking…"):
-            observer: AgentObserver = st.session_state.observer
-            run_id = observer.start_run(prompt)
-            t0 = time.perf_counter()
+        _status = st.empty()
+        _status.caption(f"⏳ {_SPINNER_STEPS[0]}")
 
-            try:
-                cfg = observer.langsmith_config()
-                cfg["configurable"]["observer"] = observer
-                cfg["configurable"]["thread_id"] = st.session_state.session_id
+        observer: AgentObserver = st.session_state.observer
+        run_id = observer.start_run(prompt)
+        t0 = time.perf_counter()
 
-                result = graph.invoke(
-                    {"query": prompt, "run_id": run_id},
-                    config=cfg,
-                )
+        _status.caption(f"⏳ {_SPINNER_STEPS[1]}")
 
-                total_ms = (time.perf_counter() - t0) * 1000
-                run_record = observer.end_run(success=True) or {}
+        try:
+            cfg = observer.langsmith_config()
+            cfg["configurable"]["observer"] = observer
+            cfg["configurable"]["thread_id"] = st.session_state.session_id
 
-                answer = result.get("answer") or "*(no answer generated)*"
+            result = graph.invoke(
+                {"query": prompt, "run_id": run_id},
+                config=cfg,
+            )
 
-                metadata: Dict[str, Any] = {
-                    "action": result.get("action"),
-                    "reasoning": result.get("reasoning"),
-                    "raw_result": result.get("raw_result") or {},
-                    "judge_score": result.get("judge_score"),
-                    "judge_passed": result.get("judge_passed"),
-                    "judge_revised": result.get("judge_revised"),
-                    "total_ms": total_ms,
-                    "latencies": {
-                        "planner": run_record.get("planner_latency_ms"),
-                        "tool": run_record.get("tool_latency_ms"),
-                        "synthesizer": run_record.get("synthesizer_latency_ms"),
-                        "judge": run_record.get("judge_latency_ms"),
-                    },
-                }
+            _status.caption(f"⏳ {_SPINNER_STEPS[2]}")
+            total_ms = (time.perf_counter() - t0) * 1000
+            run_record = observer.end_run(success=True) or {}
 
-                register_turn(
-                    st.session_state.session_id,
-                    prompt,
-                    is_new=st.session_state.is_new_session,
-                )
-                st.session_state.is_new_session = False
+            answer = result.get("answer") or "*(no answer generated)*"
 
-            except Exception as exc:  # noqa: BLE001
-                answer = f"⚠️ The agent encountered an error: {exc}"
-                metadata = {
-                    "action": "error",
-                    "raw_result": {},
-                    "reasoning": str(exc),
-                    "total_ms": (time.perf_counter() - t0) * 1000,
-                    "latencies": {},
-                }
-                observer.end_run(success=False, error=str(exc))
+            metadata: Dict[str, Any] = {
+                "action": result.get("action"),
+                "reasoning": result.get("reasoning"),
+                "raw_result": result.get("raw_result") or {},
+                "judge_score": result.get("judge_score"),
+                "judge_passed": result.get("judge_passed"),
+                "judge_revised": result.get("judge_revised"),
+                "total_ms": total_ms,
+                "latencies": {
+                    "planner": run_record.get("planner_latency_ms"),
+                    "tool": run_record.get("tool_latency_ms"),
+                    "synthesizer": run_record.get("synthesizer_latency_ms"),
+                    "judge": run_record.get("judge_latency_ms"),
+                },
+            }
 
+            register_turn(
+                st.session_state.session_id,
+                prompt,
+                is_new=st.session_state.is_new_session,
+            )
+            st.session_state.is_new_session = False
+
+        except Exception as exc:  # noqa: BLE001
+            answer = f"⚠️ El agente encontró un error: {exc}"
+            metadata = {
+                "action": "error",
+                "raw_result": {},
+                "reasoning": str(exc),
+                "total_ms": (time.perf_counter() - t0) * 1000,
+                "latencies": {},
+            }
+            observer.end_run(success=False, error=str(exc))
+
+        _status.empty()
+
+        # Answer text
         st.markdown(answer)
+
+        # Badge: tool used + latency
         action = metadata.get("action", "")
+        total_ms = metadata.get("total_ms")
+        tool_label = _TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
+        if tool_label and total_ms:
+            st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+        elif total_ms:
+            st.caption(f"{total_ms:,.0f} ms")
+
+        # Result cards (direct, outside expander)
         raw_result = metadata.get("raw_result", {})
-        _render_result_details(action, raw_result)
+        _render_result_cards(action, raw_result)
+
+        # Technical details (collapsed)
         _render_run_details(metadata)
 
     st.session_state.messages.append(
