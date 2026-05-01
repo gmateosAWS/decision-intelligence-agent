@@ -35,11 +35,10 @@ def _database_url() -> str:
             "DATABASE_URL is not set. "
             "Start PostgreSQL and add DATABASE_URL to .env to use Postgres persistence."
         )
-    # Normalise to the psycopg3 driver (postgresql+psycopg://) so SQLAlchemy
-    # doesn't attempt to load the legacy psycopg2 package.
+    # Normalise to the psycopg2 driver so SQLAlchemy uses psycopg2-binary.
     if url.startswith("postgresql://") or url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+psycopg://", 1)
-        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
     return url
 
 

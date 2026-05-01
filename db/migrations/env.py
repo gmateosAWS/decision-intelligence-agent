@@ -36,12 +36,10 @@ def _get_url() -> str:
     url = os.getenv("DATABASE_URL", "")
     if not url:
         raise RuntimeError("DATABASE_URL must be set to run Alembic migrations.")
-    # SQLAlchemy 2 uses the psycopg3 driver via postgresql+psycopg://
-    # Accept plain postgresql:// and auto-upgrade the scheme so Alembic
-    # doesn't try to load the legacy psycopg2 driver.
+    # Normalise to the psycopg2 driver (postgresql+psycopg2://).
     if url.startswith("postgresql://") or url.startswith("postgres://"):
-        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
-        url = url.replace("postgres://", "postgresql+psycopg://", 1)
+        url = url.replace("postgresql://", "postgresql+psycopg2://", 1)
+        url = url.replace("postgres://", "postgresql+psycopg2://", 1)
     return url
 
 
