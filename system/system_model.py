@@ -30,17 +30,30 @@ logger = logging.getLogger(__name__)
 def _ensure_data(data_path: str) -> None:
     if not Path(data_path).exists():
         logger.info("Sales data not found at '%s' — generating dataset...", data_path)
-        from data.generate_data import generate
+        try:
+            from data.generate_data import generate
 
-        generate(data_path)
+            generate(data_path)
+        except Exception as exc:
+            raise RuntimeError(
+                f"Bootstrap failed: could not generate training data at '{data_path}'. "
+                f"Cause: {exc}"
+            ) from exc
 
 
 def _ensure_model(model_path: str) -> None:
     if not Path(model_path).exists():
         logger.info("Demand model not found at '%s' — training...", model_path)
-        from models.train_demand_model import train
+        try:
+            from models.train_demand_model import train
 
-        train()
+            train()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Bootstrap failed: could not train demand model. "
+                f"Ensure data/sales.csv exists and dependencies are installed. "
+                f"Cause: {exc}"
+            ) from exc
 
 
 # ── Load business parameters from spec; fall back to config if unavailable ────
