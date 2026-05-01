@@ -15,12 +15,33 @@ spec; ``config/settings.py`` is used as a fallback if the spec is unavailable.
 
 from __future__ import annotations
 
+import logging
 import pickle
+from pathlib import Path
 from typing import Dict
 
 import networkx as nx
 
 from system.system_graph import build_graph
+
+logger = logging.getLogger(__name__)
+
+
+def _ensure_data(data_path: str) -> None:
+    if not Path(data_path).exists():
+        logger.info("Sales data not found at '%s' — generating dataset...", data_path)
+        from data.generate_data import generate
+
+        generate(data_path)
+
+
+def _ensure_model(model_path: str) -> None:
+    if not Path(model_path).exists():
+        logger.info("Demand model not found at '%s' — training...", model_path)
+        from models.train_demand_model import train
+
+        train()
+
 
 # ── Load business parameters from spec; fall back to config if unavailable ────
 try:
@@ -64,6 +85,10 @@ class SystemModel:
         else:
             model_path = "models/demand_model.pkl"
             self.unit_cost = _FALLBACK_UNIT_COST
+
+        # ── Bootstrap: generate data and train model if missing ──────────────
+        _ensure_data("data/sales.csv")
+        _ensure_model(model_path)
 
         # ── Cargar modelo ML ──────────────────────────────────────────────────
         with open(model_path, "rb") as f:

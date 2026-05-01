@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,32 @@ _INDEX_PATH = "knowledge_index"
 
 # FAISS singleton (only used when DATABASE_URL is not set)
 _faiss_vectorstore = None
+
+# Guard so the pgvector count-check runs only once per process
+_pgvector_index_ready = False
+
+
+def _ensure_pgvector_index() -> None:
+    global _pgvector_index_ready  # noqa: PLW0603
+    if _pgvector_index_ready:
+        return
+    try:
+        from sqlalchemy import text
+
+        from db.engine import get_session
+
+        with get_session() as session:
+            count = session.execute(
+                text("SELECT COUNT(*) FROM knowledge_documents")
+            ).scalar()
+        if count == 0:
+            logger.info("knowledge_documents is empty — building pgvector index...")
+            from knowledge.build_index import build_knowledge_index
+
+            build_knowledge_index()
+        _pgvector_index_ready = True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not verify pgvector knowledge index: %s", exc)
 
 
 def retrieve_knowledge(query: str, k: int = 3) -> str:
@@ -47,6 +74,7 @@ def retrieve_knowledge(query: str, k: int = 3) -> str:
 
 
 def _retrieve_pgvector(query: str, k: int) -> str:
+    _ensure_pgvector_index()
     try:
         from langchain_openai import OpenAIEmbeddings
         from sqlalchemy import text
@@ -86,6 +114,12 @@ def _retrieve_pgvector(query: str, k: int) -> str:
 def _get_faiss_vectorstore():
     global _faiss_vectorstore  # noqa: PLW0603
     if _faiss_vectorstore is None:
+        if not Path(_INDEX_PATH).exists():
+            logger.info("FAISS index not found at '%s' — building...", _INDEX_PATH)
+            from knowledge.build_index import build_knowledge_index
+
+            build_knowledge_index()
+
         from langchain_community.vectorstores import FAISS
         from langchain_openai import OpenAIEmbeddings
 
