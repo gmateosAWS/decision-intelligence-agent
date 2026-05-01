@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llull — Roadmap visual</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
+
+:root {
+  --bg: #FAFAF8;
+  --bg2: #F0EFEB;
+  --text: #2C2C2A;
+  --text2: #6B6A66;
+  --text3: #9C9A92;
+  --border: rgba(0,0,0,0.08);
+
+  --purple-50: #EEEDFE; --purple-200: #AFA9EC; --purple-600: #534AB7; --purple-800: #3C3489;
+  --teal-50: #E1F5EE; --teal-200: #5DCAA5; --teal-600: #0F6E56; --teal-800: #085041;
+  --coral-50: #FAECE7; --coral-200: #F0997B; --coral-600: #993C1D; --coral-800: #712B13;
+  --blue-50: #E6F1FB; --blue-200: #85B7EB; --blue-600: #185FA5; --blue-800: #0C447C;
+  --green-50: #EAF3DE; --green-200: #97C459; --green-600: #3B6D11; --green-800: #27500A;
+  --amber-50: #FAEEDA; --amber-200: #EF9F27; --amber-600: #854F0B; --amber-800: #633806;
+  --red-50: #FCEBEB; --red-200: #F09595; --red-600: #A32D2D; --red-800: #791F1F;
+  --pink-50: #FBEAF0; --pink-200: #ED93B1; --pink-600: #993556; --pink-800: #72243E;
+  --gray-50: #F1EFE8; --gray-200: #B4B2A9; --gray-600: #5F5E5A; --gray-800: #444441;
+  --done-bg: #E8F5E9; --done-border: rgba(76,175,80,0.2); --done-text: #2E7D32;
+  --wip-bg: #FFF3E0; --wip-border: rgba(255,152,0,0.2); --wip-text: #E65100;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1A1A18; --bg2: #2A2A27; --text: #E8E6DE; --text2: #9C9A92; --text3: #6B6A66;
+    --border: rgba(255,255,255,0.08);
+    --done-bg: rgba(76,175,80,0.1); --done-border: rgba(76,175,80,0.2); --done-text: #81C784;
+    --wip-bg: rgba(255,152,0,0.1); --wip-border: rgba(255,152,0,0.2); --wip-text: #FFB74D;
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); padding: 32px 24px; max-width: 780px; margin: 0 auto; }
+
+h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3px; }
+.subtitle { font-size: 13px; color: var(--text2); margin-bottom: 8px; }
+.updated { font-size: 11px; color: var(--text3); margin-bottom: 32px; }
+
+.timeline { position: relative; padding-left: 28px; }
+.timeline::before { content: ''; position: absolute; left: 8px; top: 24px; bottom: 60px; width: 2px; background: var(--border); border-radius: 1px; }
+
+.iteration { position: relative; margin-bottom: 28px; }
+.iteration::before { content: ''; position: absolute; left: -22px; top: 18px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid; background: var(--bg); z-index: 1; }
+
+.iter-proto::before { border-color: var(--gray-600); background: var(--gray-200); }
+.iter-1::before { border-color: var(--purple-600); background: var(--purple-200); }
+.iter-2a::before { border-color: var(--teal-600); background: var(--teal-200); }
+.iter-2b::before { border-color: var(--blue-600); background: var(--blue-200); }
+.iter-3::before { border-color: var(--coral-600); background: var(--coral-200); }
+.iter-beyond::before { border-color: var(--gray-600); background: var(--gray-50); }
+
+.iter-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; flex-wrap: wrap; }
+.iter-name { font-size: 16px; font-weight: 500; }
+.iter-tag { font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.3px; }
+
+.iter-desc { font-size: 13px; color: var(--text2); margin-bottom: 12px; line-height: 1.5; }
+
+.packages { display: flex; flex-wrap: wrap; gap: 8px; }
+.pkg { border-radius: 8px; padding: 10px 14px; flex: 1; min-width: 200px; border: 1px solid transparent; }
+.pkg-label { font-size: 12px; font-weight: 500; margin-bottom: 4px; }
+.pkg-items { font-size: 12px; line-height: 1.6; }
+.pkg-items span { opacity: 0.75; }
+
+.status-done { background: var(--done-bg) !important; border-color: var(--done-border) !important; }
+.status-done .pkg-label { color: var(--done-text) !important; }
+.status-done .pkg-items { color: var(--done-text) !important; }
+.status-done .pkg-label::before { content: '✅ '; }
+
+.status-wip { background: var(--wip-bg) !important; border-color: var(--wip-border) !important; }
+.status-wip .pkg-label { color: var(--wip-text) !important; }
+.status-wip .pkg-items { color: var(--wip-text) !important; }
+.status-wip .pkg-label::before { content: '🔧 '; }
+
+.pkg-persist { background: var(--teal-50); border-color: rgba(15,110,86,0.12); }
+.pkg-persist .pkg-label { color: var(--teal-800); }
+.pkg-persist .pkg-items { color: var(--teal-600); }
+
+.pkg-api { background: var(--blue-50); border-color: rgba(24,95,165,0.12); }
+.pkg-api .pkg-label { color: var(--blue-800); }
+.pkg-api .pkg-items { color: var(--blue-600); }
+
+.pkg-eng { background: var(--green-50); border-color: rgba(59,109,17,0.12); }
+.pkg-eng .pkg-label { color: var(--green-800); }
+.pkg-eng .pkg-items { color: var(--green-600); }
+
+.pkg-data { background: var(--coral-50); border-color: rgba(153,60,29,0.12); }
+.pkg-data .pkg-label { color: var(--coral-800); }
+.pkg-data .pkg-items { color: var(--coral-600); }
+
+.pkg-domain { background: var(--amber-50); border-color: rgba(133,79,11,0.12); }
+.pkg-domain .pkg-label { color: var(--amber-800); }
+.pkg-domain .pkg-items { color: var(--amber-600); }
+
+.pkg-eval { background: var(--green-50); border-color: rgba(59,109,17,0.12); }
+.pkg-eval .pkg-label { color: var(--green-800); }
+.pkg-eval .pkg-items { color: var(--green-600); }
+
+.pkg-sec { background: var(--red-50); border-color: rgba(163,45,45,0.12); }
+.pkg-sec .pkg-label { color: var(--red-800); }
+.pkg-sec .pkg-items { color: var(--red-600); }
+
+.pkg-ops { background: var(--blue-50); border-color: rgba(24,95,165,0.12); }
+.pkg-ops .pkg-label { color: var(--blue-800); }
+.pkg-ops .pkg-items { color: var(--blue-600); }
+
+.pkg-product { background: var(--pink-50); border-color: rgba(153,53,86,0.12); }
+.pkg-product .pkg-label { color: var(--pink-800); }
+.pkg-product .pkg-items { color: var(--pink-600); }
+
+.pkg-ml { background: var(--purple-50); border-color: rgba(83,74,183,0.12); }
+.pkg-ml .pkg-label { color: var(--purple-800); }
+.pkg-ml .pkg-items { color: var(--purple-600); }
+
+.pkg-scale { background: var(--teal-50); border-color: rgba(15,110,86,0.12); }
+.pkg-scale .pkg-label { color: var(--teal-800); }
+.pkg-scale .pkg-items { color: var(--teal-600); }
+
+.pkg-gov { background: var(--amber-50); border-color: rgba(133,79,11,0.12); }
+.pkg-gov .pkg-label { color: var(--amber-800); }
+.pkg-gov .pkg-items { color: var(--amber-600); }
+
+.pkg-obs { background: var(--green-50); border-color: rgba(59,109,17,0.12); }
+.pkg-obs .pkg-label { color: var(--green-800); }
+.pkg-obs .pkg-items { color: var(--green-600); }
+
+.pkg-gray { background: var(--gray-50); border-color: rgba(0,0,0,0.06); }
+.pkg-gray .pkg-label { color: var(--gray-800); }
+.pkg-gray .pkg-items { color: var(--gray-600); }
+
+.review-badge { display: inline-block; background: var(--amber-50); color: var(--amber-800); font-size: 12px; font-weight: 500; padding: 4px 14px; border-radius: 12px; border: 1px solid rgba(133,79,11,0.15); margin: 8px 0 20px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+.footer-notes { margin-top: 20px; font-size: 12px; color: var(--text3); line-height: 1.6; }
+
+@media (prefers-color-scheme: dark) {
+  .pkg-persist { background: rgba(15,110,86,0.1); border-color: rgba(93,202,165,0.15); }
+  .pkg-persist .pkg-label { color: var(--teal-200); } .pkg-persist .pkg-items { color: var(--teal-200); }
+  .pkg-api { background: rgba(24,95,165,0.1); border-color: rgba(133,183,235,0.15); }
+  .pkg-api .pkg-label { color: var(--blue-200); } .pkg-api .pkg-items { color: var(--blue-200); }
+  .pkg-eng { background: rgba(59,109,17,0.1); border-color: rgba(151,196,89,0.15); }
+  .pkg-eng .pkg-label { color: var(--green-200); } .pkg-eng .pkg-items { color: var(--green-200); }
+  .pkg-data { background: rgba(153,60,29,0.1); border-color: rgba(240,153,123,0.15); }
+  .pkg-data .pkg-label { color: var(--coral-200); } .pkg-data .pkg-items { color: var(--coral-200); }
+  .pkg-domain { background: rgba(133,79,11,0.1); border-color: rgba(239,159,39,0.15); }
+  .pkg-domain .pkg-label { color: var(--amber-200); } .pkg-domain .pkg-items { color: var(--amber-200); }
+  .pkg-sec { background: rgba(163,45,45,0.1); border-color: rgba(240,149,149,0.15); }
+  .pkg-sec .pkg-label { color: var(--red-200); } .pkg-sec .pkg-items { color: var(--red-200); }
+  .pkg-ops { background: rgba(24,95,165,0.1); border-color: rgba(133,183,235,0.15); }
+  .pkg-ops .pkg-label { color: var(--blue-200); } .pkg-ops .pkg-items { color: var(--blue-200); }
+  .pkg-product { background: rgba(153,53,86,0.1); border-color: rgba(237,147,177,0.15); }
+  .pkg-product .pkg-label { color: var(--pink-200); } .pkg-product .pkg-items { color: var(--pink-200); }
+  .pkg-ml { background: rgba(83,74,183,0.1); border-color: rgba(175,169,236,0.15); }
+  .pkg-ml .pkg-label { color: var(--purple-200); } .pkg-ml .pkg-items { color: var(--purple-200); }
+  .pkg-scale { background: rgba(15,110,86,0.1); border-color: rgba(93,202,165,0.15); }
+  .pkg-scale .pkg-label { color: var(--teal-200); } .pkg-scale .pkg-items { color: var(--teal-200); }
+  .pkg-gov { background: rgba(133,79,11,0.1); border-color: rgba(239,159,39,0.15); }
+  .pkg-gov .pkg-label { color: var(--amber-200); } .pkg-gov .pkg-items { color: var(--amber-200); }
+  .pkg-eval, .pkg-obs { background: rgba(59,109,17,0.1); border-color: rgba(151,196,89,0.15); }
+  .pkg-eval .pkg-label, .pkg-obs .pkg-label { color: var(--green-200); }
+  .pkg-eval .pkg-items, .pkg-obs .pkg-items { color: var(--green-200); }
+  .pkg-gray { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
+  .pkg-gray .pkg-label { color: var(--gray-200); } .pkg-gray .pkg-items { color: var(--gray-200); }
+  .review-badge { background: rgba(133,79,11,0.15); color: var(--amber-200); border-color: rgba(239,159,39,0.2); }
+}
+</style>
+</head>
+<body>
+
+<h1>llull — roadmap visual</h1>
+<p class="subtitle">Del prototipo al producto · 4 iteraciones con criterio de entrega · 97 items</p>
+<p class="updated">Actualizado: 1 de mayo de 2026</p>
+
+<div class="timeline">
+
+<!-- PROTOTIPO -->
+<div class="iteration iter-proto">
+<div class="iter-header">
+<span class="iter-name">Prototipo actual</span>
+</div>
+<p class="iter-desc">REPL · SQLite · FAISS · LangGraph · Spec YAML estático · Observabilidad JSONL</p>
+</div>
+
+<!-- ITERACIÓN 1 -->
+<div class="iteration iter-1">
+<div class="iter-header">
+<span class="iter-name">Iteración 1 — Fundación productiva</span>
+<span class="iter-tag" style="background:var(--purple-50);color:var(--purple-800)">18 items</span>
+</div>
+<p class="iter-desc">Servicio desplegable con API REST, PostgreSQL, pgvector, specs versionados en BD, pipeline CI, interfaz web y primeros tests del agente.</p>
+<div class="packages">
+<div class="pkg pkg-persist status-done">
+<div class="pkg-label">Persistencia (1A)</div>
+<div class="pkg-items">PostgreSQL + pgvector<br>Spec as data · Runs en Postgres<br>ADR pgvector vs Qdrant</div>
+</div>
+<div class="pkg pkg-api status-done">
+<div class="pkg-label">API y servicio (1B)</div>
+<div class="pkg-items">Agent Service (FastAPI)<br>Endpoints admin/health<br>Versionado /v1/</div>
+</div>
+<div class="pkg pkg-eng status-wip">
+<div class="pkg-label">Ingeniería (1C)</div>
+<div class="pkg-items">Pipeline CI (GitHub Actions)<br>Dockerfile multi-stage<br>Test suites v1</div>
+</div>
+</div>
+<div class="packages" style="margin-top:8px">
+<div class="pkg pkg-gray status-done">
+<div class="pkg-label">Parches (1D)</div>
+<div class="pkg-items">Multi-turno · Multi-proveedor LLM (OpenAI+Anthropic) · Rate limiting · Fallback · Planner robustness</div>
+</div>
+</div>
+<div class="packages" style="margin-top:8px">
+<div class="pkg pkg-product status-done">
+<div class="pkg-label">UI (1E)</div>
+<div class="pkg-items">Streamlit: chat + DAG causal + gráficos resultados · Dashboard observabilidad · Deploy Community Cloud</div>
+</div>
+</div>
+</div>
+
+<!-- ITERACIÓN 2A -->
+<div class="iteration iter-2a">
+<div class="iter-header">
+<span class="iter-name">Iteración 2A — Datos reales y calidad</span>
+<span class="iter-tag" style="background:var(--teal-50);color:var(--teal-800)">17 items</span>
+</div>
+<p class="iter-desc">Validar con datos reales en entorno controlado. Un consultor de Inverence puede probar llull con datos de un cliente candidato.</p>
+<div class="packages">
+<div class="pkg pkg-data">
+<div class="pkg-label">Datos reales</div>
+<div class="pkg-items">Conectores batch (Excel, CSV, SQL)<br>Data Mapping Layer + LLM<br>Great Expectations · Data bindings</div>
+</div>
+<div class="pkg pkg-domain">
+<div class="pkg-label">Modelo de dominio</div>
+<div class="pkg-items">Generador conversacional de specs<br>Validación automática · Autonomía<br>Portabilidad (own your intelligence)<br>Skills engine + MCP servers</div>
+</div>
+<div class="pkg pkg-eval">
+<div class="pkg-label">Evaluación y calidad</div>
+<div class="pkg-items">Datasets de evaluación<br>Test suites v2 · Judge offline<br>Evaluación pre-promoción</div>
+</div>
+</div>
+<div class="packages" style="margin-top:8px">
+<div class="pkg pkg-gray">
+<div class="pkg-label">Mejoras del agente</div>
+<div class="pkg-items">Versionado semántico spec · Spec como artefacto de despliegue · Prompt registry</div>
+</div>
+</div>
+</div>
+
+<!-- REVIEW CHECKPOINT -->
+<div style="padding-left:4px">
+<span class="review-badge">Punto de revisión — validar antes de abrir al exterior</span>
+</div>
+
+<!-- ITERACIÓN 2B -->
+<div class="iteration iter-2b">
+<div class="iter-header">
+<span class="iter-name">Iteración 2B — Seguridad enterprise y operación</span>
+<span class="iter-tag" style="background:var(--blue-50);color:var(--blue-800)">13 items</span>
+</div>
+<p class="iter-desc">Preparar para cliente externo. Pasa la primera due diligence de seguridad de un cliente grande como Quirón.</p>
+<div class="packages">
+<div class="pkg pkg-sec">
+<div class="pkg-label">Seguridad enterprise</div>
+<div class="pkg-items">Multi-tenancy (RLS) · SSO (OIDC+SAML)<br>Cifrado tránsito/reposo · Vault<br>Audit log · Mitigaciones AI-native</div>
+</div>
+<div class="pkg pkg-ops">
+<div class="pkg-label">Operación productiva</div>
+<div class="pkg-items">Kubernetes + Helm · Entornos<br>Rolling deployment · OTel<br>Prometheus · Grafana · Backup/DR</div>
+</div>
+</div>
+</div>
+
+<!-- ITERACIÓN 3 -->
+<div class="iteration iter-3">
+<div class="iter-header">
+<span class="iter-name">Iteración 3 — Producto diferencial</span>
+<span class="iter-tag" style="background:var(--coral-50);color:var(--coral-800)">~25 items</span>
+</div>
+<p class="iter-desc">La capacidad diferencial más visible. Se presenta al mercado como producto, no como piloto.</p>
+<div class="packages">
+<div class="pkg pkg-product">
+<div class="pkg-label">DAG builder y onboarding</div>
+<div class="pkg-items">Editor visual (React Flow)<br>Spec Service extraído<br>Proceso onboarding documentado</div>
+</div>
+<div class="pkg pkg-domain">
+<div class="pkg-label">Analítica avanzada</div>
+<div class="pkg-items">Optimización multi-variable<br>Paralelización Monte Carlo<br>Scenario comparison · Análisis causal</div>
+</div>
+<div class="pkg pkg-ml">
+<div class="pkg-label">MLOps</div>
+<div class="pkg-items">MLflow tracking + registry<br>DVC datasets · Pipeline reprod.<br>Validación pre-promoción</div>
+</div>
+</div>
+<div class="packages" style="margin-top:8px">
+<div class="pkg pkg-scale">
+<div class="pkg-label">Escalado</div>
+<div class="pkg-items">Redis memoria<br>WebSockets<br>Async tools</div>
+</div>
+<div class="pkg pkg-gov">
+<div class="pkg-label">Gobernanza</div>
+<div class="pkg-items">RBAC + OPA<br>Lineage e2e<br>Autonomía runtime</div>
+</div>
+<div class="pkg pkg-obs">
+<div class="pkg-label">Observabilidad</div>
+<div class="pkg-items">Loki · Alerting<br>Dashboard multi-tenant<br>Coste por tenant</div>
+</div>
+</div>
+<div class="packages" style="margin-top:8px">
+<div class="pkg pkg-gray">
+<div class="pkg-label">Agente</div>
+<div class="pkg-items">Memoria de dominio · Guardrails · Presupuestos · Documentación operativa</div>
+</div>
+</div>
+</div>
+
+<!-- MÁS ALLÁ -->
+<div class="iteration iter-beyond">
+<div class="iter-header">
+<span class="iter-name">Más allá — bajo demanda</span>
+</div>
+<p class="iter-desc" style="margin-bottom:4px">CDC + Kafka · Ontologías · Multi-agente · Extracción servicios · Event-driven · Despliegues dedicados · Drift + reentrenamiento · Terraform · SDK · Gen. spec desde datos</p>
+<p class="iter-desc" style="font-style:italic">Cada item tiene una señal documentada que lo activa</p>
+</div>
+
+</div>
+
+<!-- LEGEND -->
+<div class="legend">
+<div class="legend-item"><div class="legend-dot" style="background:var(--teal-200)"></div>Persistencia / datos</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--blue-200)"></div>API / operación</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--green-200)"></div>Ingeniería / eval</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--amber-200)"></div>Dominio / spec</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--red-200)"></div>Seguridad</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--coral-200)"></div>Producto</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--purple-200)"></div>MLOps</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--done-text)"></div>✅ Completado</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--wip-text)"></div>🔧 En progreso</div>
+</div>
+
+<div class="footer-notes">
+Cada iteración entrega valor demostrable independientemente · Las iteraciones tienen criterio de entrega, no fecha · Items fuera de alcance se activan cuando aparece la señal documentada
+</div>
+
+</body>
+</html>
