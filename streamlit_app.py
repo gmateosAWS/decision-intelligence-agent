@@ -43,6 +43,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 
 from agents.workflow import build_graph as build_agent_graph  # noqa: E402
+from evaluation.metrics import compute_metrics, load_runs  # noqa: E402
 from evaluation.observer import AgentObserver  # noqa: E402
 from memory import SessionManager, get_checkpointer, register_turn  # noqa: E402
 from spec.spec_loader import SPEC_PATH, get_spec  # noqa: E402
@@ -258,11 +259,17 @@ def _simulation_figure(raw: Dict[str, Any]) -> go.Figure:
     return fig
 
 
-# Tool label map (shared between history render and new response render)
+# Tool label map shared between history render and new response render
 _TOOL_LABELS: Dict[str, str] = {
     "optimization": "🟢 Optimización",
     "simulation": "🔵 Simulación",
     "knowledge": "🟣 Conocimiento",
+}
+
+_TOOL_COLORS: Dict[str, str] = {
+    "optimization": "#22c55e",
+    "simulation": "#3b82f6",
+    "knowledge": "#a855f7",
 }
 
 
@@ -359,6 +366,117 @@ def _render_run_details(metadata: Dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Observability dashboard
+# ---------------------------------------------------------------------------
+
+
+def _render_dashboard() -> None:
+    """Render the observability dashboard from evaluation/metrics.py."""
+    st.caption("Dashboard de Observabilidad")
+
+    runs = load_runs()
+    metrics = compute_metrics(runs)
+
+    if not metrics:
+        st.info("No hay datos de ejecución todavía.")
+        return
+
+    # KPI cards
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total ejecuciones", metrics["total_runs"])
+    sr = metrics.get("success_rate", 0.0)
+    c2.metric("Tasa de éxito", f"{sr * 100:.1f}%")
+    avg_lat = metrics.get("avg_total_latency_ms")
+    c3.metric("Latencia media", f"{avg_lat:,.0f} ms" if avg_lat is not None else "—")
+    avg_conf = metrics.get("avg_confidence_score")
+    c4.metric("Confianza media", f"{avg_conf:.2f}" if avg_conf is not None else "—")
+
+    st.divider()
+
+    col_l, col_r = st.columns(2)
+
+    # Tool distribution — donut chart
+    with col_l:
+        dist = metrics.get("tool_distribution", {})
+        if dist:
+            fig = go.Figure(
+                data=[
+                    go.Pie(
+                        labels=list(dist.keys()),
+                        values=list(dist.values()),
+                        hole=0.5,
+                        marker_colors=[
+                            _TOOL_COLORS.get(k, "#94a3b8") for k in dist.keys()
+                        ],
+                    )
+                ]
+            )
+            fig.update_layout(
+                title="Distribución de herramientas",
+                height=280,
+                margin=dict(l=10, r=10, t=40, b=10),
+                paper_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(
+                fig, use_container_width=True, config={"displayModeBar": False}
+            )
+
+    # Latency breakdown — bar chart
+    with col_r:
+        _node_cfg = [
+            ("Planner", "avg_planner_latency_ms", "#3b82f6"),
+            ("Tool", "avg_tool_latency_ms", "#22c55e"),
+            ("Synthesizer", "avg_synthesizer_latency_ms", "#f59e0b"),
+            ("Judge", "avg_judge_latency_ms", "#ef4444"),
+        ]
+        valid = [(n, metrics.get(k), c) for n, k, c in _node_cfg if metrics.get(k)]
+        if valid:
+            fig = go.Figure(
+                data=[
+                    go.Bar(
+                        x=[v[0] for v in valid],
+                        y=[v[1] for v in valid],
+                        marker_color=[v[2] for v in valid],
+                    )
+                ]
+            )
+            fig.update_layout(
+                title="Latencia media por nodo (ms)",
+                height=280,
+                margin=dict(l=10, r=10, t=40, b=10),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(gridcolor="rgba(128,128,128,0.15)"),
+            )
+            st.plotly_chart(
+                fig, use_container_width=True, config={"displayModeBar": False}
+            )
+
+    st.divider()
+
+    # Recent runs table
+    recent = metrics.get("recent_runs", [])
+    if recent:
+        st.markdown("**Últimas ejecuciones**")
+        rows = []
+        for r in reversed(recent):
+            ts = (r.get("timestamp") or "")[:19].replace("T", " ")
+            lat = r.get("total_latency_ms")
+            judge = r.get("judge_score")
+            rows.append(
+                {
+                    "Timestamp": ts,
+                    "Query": (r.get("query") or "")[:60],
+                    "Tool": r.get("action") or "—",
+                    "Latencia (ms)": f"{lat:,.0f}" if lat is not None else "—",
+                    "Judge": f"{judge:.2f}" if judge is not None else "—",
+                    "OK": "✓" if r.get("success", True) else "✗",
+                }
+            )
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+
+
+# ---------------------------------------------------------------------------
 # Session state helpers
 # ---------------------------------------------------------------------------
 
@@ -418,6 +536,9 @@ with st.spinner("Iniciando llull — cargando especificación y construyendo age
 with st.sidebar:
     st.markdown("## ⚖️ llull")
     st.caption("Inverence")
+    if st.button("🏠 Inicio", use_container_width=True):
+        _new_session()
+        st.rerun()
     st.divider()
 
     # --- Session management ---
@@ -502,59 +623,87 @@ with st.sidebar:
             st.warning(f"DAG no disponible: {e}")
 
 # ---------------------------------------------------------------------------
-# Main chat area
+# Example queries for the welcome block
 # ---------------------------------------------------------------------------
 
 _EXAMPLE_QUERIES = [
     (
-        "💰 Precio óptimo",
+        "¿Qué precio maximiza el beneficio?",
+        "Optimización — busca el valor óptimo explorando combinaciones de precio y marketing",  # noqa: E501
         "¿Cuál es la combinación óptima de precio y marketing para maximizar el beneficio?",  # noqa: E501
     ),
     (
-        "📊 Simular escenario",
-        "Simula el beneficio con precio 45 € y marketing en 8.000 €",
+        "Simula el impacto de fijar precio a 25€",
+        "Simulación Monte Carlo — ejecuta 500 escenarios con incertidumbre para ver la distribución de resultados",  # noqa: E501
+        "Simula el beneficio con precio 25 € y marketing en 8.000 €",
     ),
     (
-        "📈 Análisis de riesgo",
-        "¿Cuánto riesgo tengo si bajo el precio a 35 € con marketing de 5.000 €?",
+        "¿Cómo afecta el marketing a la demanda?",
+        "Consulta al modelo causal — recorre el DAG para explicar relaciones entre variables",  # noqa: E501
+        "¿Cómo afecta el nivel de marketing a la demanda según el modelo causal?",
     ),
 ]
 
-# Welcome block — hidden once conversation starts or a card query is pending
-if not st.session_state.messages and not st.session_state.get("_pending_query"):
+# ---------------------------------------------------------------------------
+# Main area — persistent header + tabs
+# ---------------------------------------------------------------------------
+
+# Header: full when no conversation, compact when active
+if st.session_state.messages:
+    st.markdown("### ⚖️ llull — Decision Intelligence Agent")
+    st.caption("Tu consejero de decisiones de negocio.")
+else:
     st.markdown("# ⚖️ llull")
     st.markdown(
         "**Tu consejero de decisiones de negocio.**  \n"
         "Analiza el impacto de tus decisiones comerciales antes de tomarlas."
     )
-    st.divider()
-    col1, col2, col3 = st.columns(3)
-    for col, (label, query) in zip([col1, col2, col3], _EXAMPLE_QUERIES):
-        with col:
-            if st.button(label, key=f"card_{label}", use_container_width=True):
-                st.session_state["_pending_query"] = query
-                st.rerun()
-    st.divider()
 
-# Render conversation history
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        if msg["role"] == "assistant" and msg.get("metadata"):
-            meta = msg["metadata"]
-            action = meta.get("action", "")
-            raw_result = meta.get("raw_result", {})
-            total_ms = meta.get("total_ms")
-            tool_label = _TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
-            if tool_label and total_ms:
-                st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
-            elif total_ms:
-                st.caption(f"{total_ms:,.0f} ms")
-            _render_result_cards(action, raw_result)
-            _render_run_details(meta)
+tab_chat, tab_dashboard = st.tabs(["💬 Chat", "📊 Dashboard"])
+
+with tab_chat:
+    # Welcome cards — hidden once conversation starts or a card query is pending
+    if not st.session_state.messages and not st.session_state.get("_pending_query"):
+        st.divider()
+        col1, col2, col3 = st.columns(3)
+        for col, (card_title, card_desc, query) in zip(
+            [col1, col2, col3], _EXAMPLE_QUERIES
+        ):
+            with col:
+                with st.container(border=True):
+                    st.markdown(f"**{card_title}**")
+                    st.caption(card_desc)
+                    if st.button(
+                        "▶ Preguntar",
+                        key=f"card_{card_title}",
+                        use_container_width=True,
+                    ):
+                        st.session_state["_pending_query"] = query
+                        st.rerun()
+        st.divider()
+
+    # Conversation history
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg["role"] == "assistant" and msg.get("metadata"):
+                meta = msg["metadata"]
+                action = meta.get("action", "")
+                raw_result = meta.get("raw_result", {})
+                total_ms = meta.get("total_ms")
+                tool_label = _TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
+                if tool_label and total_ms:
+                    st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+                elif total_ms:
+                    st.caption(f"{total_ms:,.0f} ms")
+                _render_result_cards(action, raw_result)
+                _render_run_details(meta)
+
+with tab_dashboard:
+    _render_dashboard()
 
 # ---------------------------------------------------------------------------
-# Chat input and agent invocation
+# Chat input and agent invocation (outside tabs — always accessible)
 # ---------------------------------------------------------------------------
 
 _SPINNER_STEPS = [

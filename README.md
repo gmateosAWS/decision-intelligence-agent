@@ -492,7 +492,7 @@ decision-intelligence-agent/
 |   +-- llull_inventario_v3.md      # Full backlog (97 items)
 |   +-- adr-001-pgvector-over-qdrant.md  # Architecture decision record: vector store choice
 +-- app.py                          # REPL entry point (legacy, dev use)
-+-- streamlit_app.py                # Web UI: chat + causal DAG + result charts + spec version
++-- streamlit_app.py                # Web UI: Chat tab + Dashboard tab (observability), persistent header, bordered example cards
 +-- docker-compose.yml              # PostgreSQL 16 + pgvector
 +-- alembic.ini                     # Alembic migration config
 +-- .env.example                    # Environment variable template
@@ -613,10 +613,11 @@ streamlit run streamlit_app.py
 
 The web interface provides:
 
-- **Welcome block** — title, subtitle, and 3 clickable example queries that auto-submit; disappears once the conversation starts
-- **Chat** — conversational interface with staged status messages (*analizando → consultando → generando*) and a tool+latency badge below each response
-- **Results** — simulation profit distribution and optimization metric cards shown directly below the answer (no click needed); technical details (latencies, judge verdict, planner reasoning) in a collapsed expander
-- **Sidebar** — session management (new / resume with history restored), LLM planner config, domain info with decision variables and bounds, and a causal DAG visualization
+- **Persistent header** — shows the full title when the conversation is empty, switches to a compact header once a conversation is active
+- **Welcome block** — 3 bordered example cards (title + description caption + "▶ Preguntar" button) covering optimization, simulation and knowledge queries; disappears once the conversation starts
+- **Chat tab** — conversational interface with staged status messages (*analizando → consultando → generando*) and a tool+latency badge below each response; simulation and optimization results rendered directly below each answer
+- **Dashboard tab** — observability view: KPI cards (total runs, success rate, avg latency, avg confidence), tool distribution donut chart, per-node latency bar chart, recent runs table; powered by `evaluation/metrics.py`
+- **Sidebar** — 🏠 Inicio button (clears conversation and returns to welcome block), session management (new / resume with history restored), LLM planner config, domain info with decision variables and bounds, and a causal DAG visualization
 
 ---
 
