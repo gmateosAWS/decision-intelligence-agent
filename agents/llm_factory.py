@@ -23,9 +23,10 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from langchain_core.language_models import BaseChatModel
+if TYPE_CHECKING:
+    from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
 

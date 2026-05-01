@@ -28,14 +28,15 @@ Responsibilities
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Literal, Optional
+from typing import Dict, List, Literal
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from agents.llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
-from agents.state import AgentState
 from spec.spec_loader import get_spec
+
+from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
+from .state import AgentState
 
 load_dotenv()
 
@@ -44,7 +45,9 @@ _PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
 _FALLBACK_PROVIDER = os.getenv("FALLBACK_PROVIDER", "")
 _FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 
-_llm = get_chat_model(_PLANNER_PROVIDER, _PLANNER_MODEL, temperature=0)
+_llm = None
+_llm_structured = None
+_fallback_llm_structured = None
 
 
 class DecisionParam(BaseModel):
@@ -62,14 +65,20 @@ class ToolSelection(BaseModel):
     params: List[DecisionParam] = []  # vacío si no se mencionan valores
 
 
-_llm_structured = _llm.with_structured_output(ToolSelection)
-
-_fallback_llm_structured: Optional[object] = None
-if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
-    _fallback_llm = get_chat_model(_FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0)
-    _fallback_llm_structured = _fallback_llm.with_structured_output(ToolSelection)
-
 _HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "3"))
+
+
+def _init_planner_llms() -> None:
+    global _llm, _llm_structured, _fallback_llm_structured
+    if _llm is not None:
+        return
+    _llm = get_chat_model(_PLANNER_PROVIDER, _PLANNER_MODEL, temperature=0)
+    _llm_structured = _llm.with_structured_output(ToolSelection)
+    if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
+        _fallback_llm = get_chat_model(
+            _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0
+        )
+        _fallback_llm_structured = _fallback_llm.with_structured_output(ToolSelection)
 
 
 def _build_few_shot_examples(spec) -> str:
@@ -154,6 +163,7 @@ def planner_node(state: AgentState) -> Dict:
 
     Returns: {action, reasoning, params}
     """
+    _init_planner_llms()
     query = state["query"]
     history: List[Dict[str, str]] = state.get("history") or []
 

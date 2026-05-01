@@ -47,14 +47,22 @@ _SYNTHESIZER_MODEL = os.getenv("SYNTHESIZER_MODEL", "gpt-4o-mini")
 _FALLBACK_PROVIDER = os.getenv("FALLBACK_PROVIDER", "")
 _FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 
-_synthesizer_llm = get_chat_model(
-    _SYNTHESIZER_PROVIDER, _SYNTHESIZER_MODEL, temperature=0.2
-)
-_synthesizer_fallback_llm = (
-    get_chat_model(_FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.2)
-    if _FALLBACK_PROVIDER and _FALLBACK_MODEL
-    else None
-)
+_synthesizer_llm = None
+_synthesizer_fallback_llm = None
+
+
+def _get_synthesizer_llms():
+    global _synthesizer_llm, _synthesizer_fallback_llm
+    if _synthesizer_llm is None:
+        _synthesizer_llm = get_chat_model(
+            _SYNTHESIZER_PROVIDER, _SYNTHESIZER_MODEL, temperature=0.2
+        )
+        if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
+            _synthesizer_fallback_llm = get_chat_model(
+                _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.2
+            )
+    return _synthesizer_llm, _synthesizer_fallback_llm
+
 
 # ---------------------------------------------------------------------------
 # Tool dispatch
@@ -150,12 +158,13 @@ def synthesizer_node(
         "Answer in 3-5 sentences. Be specific and quantitative."
     )
 
+    _syn_llm, _syn_fallback = _get_synthesizer_llms()
     t0 = time.perf_counter()
     try:
         response = invoke_with_fallback(
-            _synthesizer_llm,
+            _syn_llm,
             prompt,
-            fallback=_synthesizer_fallback_llm,
+            fallback=_syn_fallback,
         )
         answer = response.content.strip()
     except (LLMUnavailableError, Exception):  # noqa: BLE001

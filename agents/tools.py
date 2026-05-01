@@ -27,8 +27,14 @@ from simulation.scenario_runner import run_scenario
 from spec.spec_loader import get_spec
 from system.system_model import SystemModel
 
-# SystemModel loads the ML model once at import time (singleton pattern)
-system_model = SystemModel()
+_system_model = None
+
+
+def _get_system_model() -> SystemModel:
+    global _system_model
+    if _system_model is None:
+        _system_model = SystemModel()
+    return _system_model
 
 
 def optimization_tool(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -41,7 +47,7 @@ def optimization_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     profit_std, profit_p10, profit_p90, expected_demand,
     demand_std, downside_risk_pct, n_runs.
     """
-    result: Dict[str, Any] = optimize_price(system_model)
+    result: Dict[str, Any] = optimize_price(_get_system_model())
     return result
 
 
@@ -79,7 +85,7 @@ def simulation_tool(state: Dict[str, Any]) -> Dict[str, Any]:
         spec.fixed_variables.get("marketing_spend", 10_000.0),
     )
 
-    return run_scenario(system_model, price, marketing)
+    return run_scenario(_get_system_model(), price, marketing)
 
 
 def knowledge_tool(state: Dict[str, Any]) -> Dict[str, Any]:

@@ -37,18 +37,12 @@ _JUDGE_THRESHOLD = float(os.getenv("JUDGE_THRESHOLD", "0.75"))
 _FALLBACK_PROVIDER = os.getenv("FALLBACK_PROVIDER", "")
 _FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 
-_judge_llm = get_chat_model(_JUDGE_PROVIDER, _JUDGE_MODEL, temperature=0)
-_revision_llm = get_chat_model(_JUDGE_PROVIDER, _JUDGE_MODEL, temperature=0.1)
-
+_judge_llm = None
+_revision_llm = None
 _fallback_judge_llm = None
 _fallback_revision_llm = None
-if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
-    _fallback_judge_llm = get_chat_model(
-        _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0
-    )
-    _fallback_revision_llm = get_chat_model(
-        _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.1
-    )
+_judge_structured = None
+_fallback_judge_structured = None
 
 
 class JudgeVerdict(BaseModel):
@@ -62,12 +56,26 @@ class JudgeVerdict(BaseModel):
     feedback: str
 
 
-_judge_structured = _judge_llm.with_structured_output(JudgeVerdict)
-_fallback_judge_structured = (
-    _fallback_judge_llm.with_structured_output(JudgeVerdict)
-    if _fallback_judge_llm is not None
-    else None
-)
+def _init_llms() -> None:
+    global _judge_llm, _revision_llm, _fallback_judge_llm, _fallback_revision_llm
+    global _judge_structured, _fallback_judge_structured
+    if _judge_llm is not None:
+        return
+    _judge_llm = get_chat_model(_JUDGE_PROVIDER, _JUDGE_MODEL, temperature=0)
+    _revision_llm = get_chat_model(_JUDGE_PROVIDER, _JUDGE_MODEL, temperature=0.1)
+    if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
+        _fallback_judge_llm = get_chat_model(
+            _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0
+        )
+        _fallback_revision_llm = get_chat_model(
+            _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.1
+        )
+    _judge_structured = _judge_llm.with_structured_output(JudgeVerdict)
+    _fallback_judge_structured = (
+        _fallback_judge_llm.with_structured_output(JudgeVerdict)
+        if _fallback_judge_llm is not None
+        else None
+    )
 
 
 def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, Any]:
@@ -77,6 +85,7 @@ def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, An
     Returns updated state fields including the final answer, judge metadata,
     and the turn appended to conversation history.
     """
+    _init_llms()
     obs = _get_observer(config)
 
     query = state.get("query", "")
@@ -191,6 +200,7 @@ def _revise_answer(
     feedback: str,
 ) -> str:
     """Generate one grounded revision using the judge feedback."""
+    _init_llms()
     revision_messages = [
         {
             "role": "system",
