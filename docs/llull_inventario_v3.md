@@ -416,11 +416,13 @@ Prefijo de versión en la URL (`/v1/...`) y política declarada de compatibilida
 
 _Resuelve:_ cuando el primer cliente piloto tenga integraciones con llull, cualquier cambio incompatible sin versionado rompe su implementación.
 
-### 6.6 Interfaz web con Streamlit `[feature]`
+### 6.6 Interfaz web con Streamlit `[feature]` ✅ COMPLETADO
 
 Sustituir el REPL de terminal (`app.py`) por una aplicación web Streamlit que permita interactuar con el agente de forma visual. La interfaz incluye: chat conversacional con historial, sidebar con info de sesión y modelo activo, visualización del DAG causal del spec (networkx → plotly), y gráficos de resultados de simulación/optimización (distribuciones, comparativas). La lógica del agente no cambia — Streamlit es una capa de presentación que invoca el mismo grafo LangGraph.
 
 No reemplaza la API REST (6.1.e) sino que la complementa: Streamlit es la interfaz para demos, consultores y usuarios internos; la API es para integraciones programáticas.
+
+**Implementado:** `streamlit_app.py`. UX polish para demo con dirección: welcome block con 3 cards de ejemplo, mensajes staged durante el procesamiento, badge tool+latencia bajo cada respuesta, gráficos y métricas mostrados directamente (sin expander), detalles técnicos en expander colapsado. Desplegado en Streamlit Community Cloud con Neon (pgvector). Self-bootstrap: genera datos, entrena modelo y construye índice de conocimiento en el primer arranque.
 
 _Resuelve:_ el REPL es suficiente para desarrollo pero no para mostrar el producto a clientes, consultores o dirección. Una interfaz visual reduce la barrera de entrada y hace tangible lo que el agente puede hacer. Además, es la pieza que permite hacer demos en vivo sin necesidad de explicar la línea de comandos.
 

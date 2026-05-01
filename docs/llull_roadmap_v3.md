@@ -167,7 +167,10 @@ Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que s
 
 | Item                                  | Estado |
 | ------------------------------------- | ------ |
-| **6.6** Interfaz web con Streamlit    | ✅ Hecho (`streamlit_app.py`, 574 líneas, chat + DAG + gráficos) |
+| **6.6** Interfaz web con Streamlit    | ✅ Hecho (`streamlit_app.py`, chat + DAG + gráficos + gestión de sesiones) |
+| UX polish para demo con dirección     | ✅ Hecho (welcome block, staged spinner, badge tool+latencia, results directo) |
+| Despliegue Community Cloud            | ✅ Hecho (psycopg2-binary, `.python-version`, deps fijadas, self-bootstrap) |
+| fix: lazy LLM init                    | ✅ Hecho (elimina `KeyError: 'agents.llm_factory'` en cold start) |
 
 ### Items que no entran en la Iteración 1 y por qué
 

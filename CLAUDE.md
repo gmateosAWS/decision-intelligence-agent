@@ -158,7 +158,10 @@ Spec-driven principle, graph structure, `ToolSelection` schema, `_NODE_FORMULAS`
 - [x] 5.5, 5.6, 12.4, 12.5, 5.7, 4.1
 
 ### Paquete 1E ✅
-- [x] 6.6 Streamlit UI
+- [x] 6.6 Streamlit UI (chat + DAG + result charts + session management)
+- [x] UX polish: welcome block with 3 example cards, staged spinner, tool+latency badge, results rendered directly (no expander)
+- [x] Community Cloud deployment: psycopg2-binary, `.python-version` (3.12), pinned deps, self-bootstrap (data/model/knowledge index on first run)
+- [x] fix: lazy LLM + SystemModel init in agent modules (eliminates `KeyError: 'agents.llm_factory'` on cold start)
 
 ### Paquete 1A ✅
 - [x] 1.1 PostgreSQL, 1.2 pgvector, 8.1 runs in Postgres, 1.5 spec as data, 1.3 ADR

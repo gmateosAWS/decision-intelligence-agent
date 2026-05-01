@@ -424,7 +424,7 @@ decision-intelligence-agent/
 |   +-- engine.py                   # SQLAlchemy engine, get_session() context manager
 |   +-- models.py                   # ORM: AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion
 |   +-- migrations/
-|       +-- env.py                  # Alembic env (psycopg3 URL normalisation)
+|       +-- env.py                  # Alembic env (psycopg2 URL normalisation)
 |       +-- versions/
 |           +-- 001_initial_schema.py   # agent_sessions, agent_runs, knowledge_documents
 |           +-- 002_spec_tables.py      # specs, spec_versions, spec FK on agent_runs
@@ -613,10 +613,10 @@ streamlit run streamlit_app.py
 
 The web interface provides:
 
-- **Chat** — conversational interface with the same multi-turn memory as the REPL
-- **Sidebar** — session management (new / resume with history restored), active LLM configuration, domain info, active spec version (with source: DB or YAML), and a causal DAG visualization
-- **Results details** — inline charts per response: profit distribution (simulation), optimal values (optimization)
-- **Run details** — tool badge, per-node latency, judge score, planner reasoning (collapsed by default)
+- **Welcome block** — title, subtitle, and 3 clickable example queries that auto-submit; disappears once the conversation starts
+- **Chat** — conversational interface with staged status messages (*analizando → consultando → generando*) and a tool+latency badge below each response
+- **Results** — simulation profit distribution and optimization metric cards shown directly below the answer (no click needed); technical details (latencies, judge verdict, planner reasoning) in a collapsed expander
+- **Sidebar** — session management (new / resume with history restored), LLM planner config, domain info with decision variables and bounds, and a causal DAG visualization
 
 ---
 
