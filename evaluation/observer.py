@@ -373,14 +373,6 @@ class AgentObserver:
             from db.engine import get_session
             from db.models import AgentRun
 
-            sid_raw = record.get("session_id")
-            try:
-                sid = _uuid.UUID(sid_raw) if sid_raw else None
-            except (ValueError, AttributeError):
-                sid = (
-                    _uuid.uuid5(_uuid.NAMESPACE_DNS, str(sid_raw)) if sid_raw else None
-                )
-
             with get_session() as session:
                 # Resolve spec_id UUID if present
                 spec_id_raw = record.get("spec_id")
@@ -391,7 +383,7 @@ class AgentObserver:
 
                 session.add(
                     AgentRun(
-                        session_id=sid,
+                        session_id=None,  # hex8 observer id ≠ agent_sessions PK
                         run_id=record.get("run_id", ""),
                         query=record.get("query", ""),
                         action=record.get("action"),
