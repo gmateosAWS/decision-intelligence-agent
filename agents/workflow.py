@@ -149,6 +149,9 @@ def synthesizer_node(
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
     prompt = (
         "You are a business intelligence assistant.\n\n"
+        "IMPORTANT: Always respond in the same language as the user's query. "
+        "If the user asks in Spanish, respond entirely in Spanish. "
+        "If the user asks in English, respond in English. Never mix languages.\n\n"
         f"The user asked: {query}\n\n"
         f"The {action} tool returned:\n{raw_text}\n\n"
         "Provide a clear, concise business interpretation:\n"

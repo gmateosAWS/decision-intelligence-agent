@@ -14,6 +14,7 @@ Run:
 from __future__ import annotations
 
 import os
+import re
 import time
 import uuid
 from typing import Any, Dict, List, Optional
@@ -257,6 +258,21 @@ def _simulation_figure(raw: Dict[str, Any]) -> go.Figure:
         yaxis=dict(showticklabels=False, gridcolor="rgba(128,128,128,0.1)"),
     )
     return fig
+
+
+def _sanitize_markdown(text: str) -> str:
+    """Close unclosed inline markdown delimiters to prevent style bleed."""
+    # Close unclosed triple-backtick code fences first
+    if len(re.findall(r"```", text)) % 2 == 1:
+        text = text.rstrip() + "\n```"
+    # Close unclosed inline backticks (excluding fence regions)
+    no_fences = re.sub(r"```[\s\S]*?```", "", text)
+    if no_fences.count("`") % 2 == 1:
+        text += "`"
+    # Close unclosed bold markers
+    if len(re.findall(r"\*\*", text)) % 2 == 1:
+        text += "**"
+    return text
 
 
 # Tool label map shared between history render and new response render
@@ -534,9 +550,15 @@ with st.spinner("Iniciando llull — cargando especificación y construyendo age
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown("## ⚖️ llull")
+    st.markdown(
+        '<span style="font-family: Georgia, serif; font-size: 28px; '
+        'font-weight: 400; letter-spacing: -1px;">'
+        '||<span style="font-weight: 700;">u</span>||</span>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("**llull**")
     st.caption("Inverence")
-    if st.button("🏠 Inicio", use_container_width=True):
+    if st.button("Inicio", use_container_width=True, type="secondary"):
         _new_session()
         st.rerun()
     st.divider()
@@ -579,15 +601,34 @@ with st.sidebar:
 
     st.divider()
 
-    # --- LLM config (planner only) ---
+    # --- LLM config ---
     with st.expander("Configuración LLM", expanded=False):
-        prov = os.getenv("PLANNER_PROVIDER", "openai")
-        model = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
-        st.markdown(f"**Planificador** · `{prov}` / `{model}`")
+        _llm_nodes = [
+            (
+                "Planificador",
+                "PLANNER_PROVIDER",
+                "PLANNER_MODEL",
+                "openai",
+                "gpt-4o-mini",
+            ),
+            (
+                "Sintetizador",
+                "SYNTHESIZER_PROVIDER",
+                "SYNTHESIZER_MODEL",
+                "openai",
+                "gpt-4o-mini",
+            ),  # noqa: E501
+            ("Juez", "JUDGE_PROVIDER", "JUDGE_MODEL", "openai", "gpt-4o-mini"),
+        ]
+        for label, prov_key, model_key, def_prov, def_model in _llm_nodes:
+            prov = os.getenv(prov_key, def_prov)
+            model = os.getenv(model_key, def_model)
+            st.markdown(f"**{label}** · `{prov}` / `{model}`")
         fb_prov = os.getenv("FALLBACK_PROVIDER", "")
         fb_model = os.getenv("FALLBACK_MODEL", "")
         if fb_prov:
-            st.caption(f"Fallback: `{fb_prov}` / `{fb_model}`")
+            st.divider()
+            st.markdown(f"**Fallback** · `{fb_prov}` / `{fb_model}`")
         retries = os.getenv("LLM_MAX_RETRIES", "2")
         timeout = os.getenv("LLM_TIMEOUT", "30")
         st.caption(f"Reintentos: {retries} · Timeout: {timeout}s")
@@ -622,6 +663,36 @@ with st.sidebar:
         except Exception as e:  # noqa: BLE001
             st.warning(f"DAG no disponible: {e}")
 
+    # --- Ayuda inmersiva ---
+    with st.expander("ℹ️ ¿Cómo funciona llull?", expanded=False):
+        st.markdown(
+            "#### Datos del modelo\n"
+            "Los datos que alimentan las respuestas provienen de un modelo de negocio "
+            "definido en el spec. Este modelo describe las variables de decisión "
+            "(precio, marketing), las relaciones causales entre ellas (el DAG), y los "
+            "rangos válidos. Los datos de entrenamiento del modelo de demanda son "
+            "sintéticos en esta demo.\n\n"
+            "#### DAG causal\n"
+            "El grafo dirigido acíclico (DAG) representa cómo unas variables afectan "
+            "a otras en el negocio. Por ejemplo: el precio afecta a la demanda, la "
+            "demanda afecta a los ingresos, y los ingresos junto con los costes "
+            "determinan el beneficio. El agente recorre este grafo para razonar sobre "
+            "el impacto de las decisiones.\n\n"
+            "#### Simulación Monte Carlo\n"
+            "Cuando el agente simula, ejecuta cientos de escenarios con variaciones "
+            "aleatorias (ruido) para estimar la distribución de resultados posibles. "
+            "Esto permite evaluar no solo el resultado esperado, sino también el "
+            "riesgo (¿cuánto puedo perder en el peor caso?).\n\n"
+            "#### Optimización\n"
+            "El optimizador busca los valores de las variables de decisión que "
+            "maximizan el objetivo (beneficio) dentro de los rangos permitidos. Prueba "
+            "combinaciones de precio y marketing para encontrar el punto óptimo.\n\n"
+            "#### Knowledge base\n"
+            "El agente tiene acceso a una base de conocimiento con documentos sobre el "
+            "dominio del negocio. Cuando la pregunta es conceptual o no requiere "
+            "cálculo, consulta estos documentos para responder."
+        )
+
 # ---------------------------------------------------------------------------
 # Example queries for the welcome block
 # ---------------------------------------------------------------------------
@@ -650,10 +721,10 @@ _EXAMPLE_QUERIES = [
 
 # Header: full when no conversation, compact when active
 if st.session_state.messages:
-    st.markdown("### ⚖️ llull — Decision Intelligence Agent")
+    st.markdown("### llull — Decision Intelligence Agent")
     st.caption("Tu consejero de decisiones de negocio.")
 else:
-    st.markdown("# ⚖️ llull")
+    st.markdown("# llull")
     st.markdown(
         "**Tu consejero de decisiones de negocio.**  \n"
         "Analiza el impacto de tus decisiones comerciales antes de tomarlas."
@@ -670,22 +741,32 @@ with tab_chat:
             [col1, col2, col3], _EXAMPLE_QUERIES
         ):
             with col:
-                with st.container(border=True):
-                    st.markdown(f"**{card_title}**")
-                    st.caption(card_desc)
-                    if st.button(
-                        "▶ Preguntar",
-                        key=f"card_{card_title}",
-                        use_container_width=True,
-                    ):
-                        st.session_state["_pending_query"] = query
-                        st.rerun()
+                st.markdown(
+                    f'<div style="background: rgba(108,142,245,0.06); '
+                    f"border: 1px solid rgba(108,142,245,0.15); "
+                    f"border-radius: 10px; padding: 20px 20px 10px;"
+                    f'">'
+                    f'<p style="font-size: 16px; font-weight: bold; margin: 0 0 6px;">'
+                    f"{card_title}</p>"
+                    f'<p style="font-size: 13px; color: #888; margin: 0;">'
+                    f"{card_desc}</p>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                if st.button(
+                    "Preguntar",
+                    key=f"card_{card_title}",
+                    use_container_width=True,
+                    type="primary",
+                ):
+                    st.session_state["_pending_query"] = query
+                    st.rerun()
         st.divider()
 
     # Conversation history
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            st.markdown(_sanitize_markdown(msg["content"]))
             if msg["role"] == "assistant" and msg.get("metadata"):
                 meta = msg["metadata"]
                 action = meta.get("action", "")
@@ -795,7 +876,7 @@ if prompt:
         _status.empty()
 
         # Answer text
-        st.markdown(answer)
+        st.markdown(_sanitize_markdown(answer))
 
         # Badge: tool used + latency
         action = metadata.get("action", "")

@@ -614,10 +614,10 @@ streamlit run streamlit_app.py
 The web interface provides:
 
 - **Persistent header** — shows the full title when the conversation is empty, switches to a compact header once a conversation is active
-- **Welcome block** — 3 bordered example cards (title + description caption + "▶ Preguntar" button) covering optimization, simulation and knowledge queries; disappears once the conversation starts
-- **Chat tab** — conversational interface with staged status messages (*analizando → consultando → generando*) and a tool+latency badge below each response; simulation and optimization results rendered directly below each answer
+- **Welcome block** — 3 styled example cards (CSS-inline, primary-button "Preguntar") covering optimization, simulation and knowledge queries; disappears once the conversation starts
+- **Chat tab** — conversational interface with staged status messages (*analizando → consultando → generando*), tool+latency badge, and simulation/optimization result cards rendered directly below each answer; markdown sanitized to prevent style bleed
 - **Dashboard tab** — observability view: KPI cards (total runs, success rate, avg latency, avg confidence), tool distribution donut chart, per-node latency bar chart, recent runs table; powered by `evaluation/metrics.py`
-- **Sidebar** — 🏠 Inicio button (clears conversation and returns to welcome block), session management (new / resume with history restored), LLM planner config, domain info with decision variables and bounds, and a causal DAG visualization
+- **Sidebar** — `||u||` serif logo, Inicio button (clears session), session management (new / resume with history restored), full LLM config (planner + synthesizer + judge + fallback), domain info, causal DAG visualization, immersive help expander (¿Cómo funciona llull?)
 
 ---
 

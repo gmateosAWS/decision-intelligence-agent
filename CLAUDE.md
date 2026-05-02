@@ -163,7 +163,8 @@ Spec-driven principle, graph structure, `ToolSelection` schema, `_NODE_FORMULAS`
 - [x] Community Cloud deployment: psycopg2-binary, `.python-version` (3.12), pinned deps, self-bootstrap (data/model/knowledge index on first run)
 - [x] fix: lazy LLM + SystemModel init in agent modules (eliminates `KeyError: 'agents.llm_factory'` on cold start)
 - [x] Observability dashboard tab: st.tabs(Chat/Dashboard), KPI metrics, tool distribution donut, latency bar chart, recent runs table (evaluation/metrics.py)
-- [x] Persistent header: h1 full when no conversation, h3 compact when active; 🏠 Inicio button clears session
+- [x] Persistent header: h1 full when no conversation, h3 compact when active; Inicio button clears session
+- [x] UX polish 2: ||u|| serif logo in sidebar, all-LLM-nodes config display, immersive help expander, language-aware synthesizer, markdown sanitization, primary-button example cards with CSS inline
 
 ### Paquete 1A ✅
 - [x] 1.1 PostgreSQL, 1.2 pgvector, 8.1 runs in Postgres, 1.5 spec as data, 1.3 ADR
