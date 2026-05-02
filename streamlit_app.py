@@ -660,7 +660,7 @@ with st.sidebar:
             st.warning(f"DAG no disponible: {e}")
 
     # --- Ayuda inmersiva ---
-    with st.expander("ℹ️ ¿Cómo funciona llull?", expanded=False):
+    with st.expander("ℹ️ ¿Cómo funciona esta demo?", expanded=False):
         st.markdown(
             "#### Datos del modelo\n"
             "Los datos que alimentan las respuestas provienen de un modelo de negocio "
@@ -740,32 +740,46 @@ else:
         "Analiza el impacto de tus decisiones comerciales antes de tomarlas."
     )
 
-# Elegant tab styles — thin brand-color indicator, no fills
+# Tab styles — override Streamlit defaults with !important for specificity
 st.markdown(
     """
 <style>
-.stTabs [data-baseweb="tab-list"] { gap: 4px; }
-.stTabs [data-baseweb="tab"] {
-    background: transparent;
-    border-radius: 6px 6px 0 0;
-    padding: 8px 22px;
-    font-size: 14px;
-    font-weight: 500;
-    letter-spacing: 0.01em;
+.stTabs [data-baseweb="tab-list"] {
+    gap: 0 !important;
+    background: transparent !important;
+}
+.stTabs button[role="tab"] {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 10px 28px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    color: #9ca3af !important;
+}
+.stTabs button[role="tab"]:hover {
+    color: #374151 !important;
+    background: rgba(108,142,245,0.06) !important;
+}
+.stTabs button[role="tab"][aria-selected="true"] {
+    color: #111827 !important;
 }
 .stTabs [data-baseweb="tab-highlight"] {
-    background-color: #6c8ef5;
-    border-radius: 2px 2px 0 0;
+    background-color: #6c8ef5 !important;
+    height: 2px !important;
 }
 .stTabs [data-baseweb="tab-border"] {
-    background-color: rgba(108,142,245,0.2);
+    background-color: #e5e7eb !important;
+    height: 1px !important;
 }
 </style>
 """,
     unsafe_allow_html=True,
 )
 
-tab_chat, tab_dashboard = st.tabs(["💬 Chat", "📊 Dashboard"])
+tab_chat, tab_dashboard = st.tabs(["Chat", "Dashboard"])
 
 with tab_chat:
     # Welcome cards — hidden once conversation starts or a card query is pending
