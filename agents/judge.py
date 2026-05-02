@@ -206,6 +206,10 @@ def _revise_answer(
             "role": "system",
             "content": (
                 "You revise answers for a Decision Intelligence assistant.\n"
+                "IMPORTANT: Always respond in the same language as the user's "
+                "query. If the user asks in Spanish, respond entirely in "
+                "Spanish. If the user asks in English, respond in English. "
+                "Never mix languages.\n"
                 "Rewrite the answer so it is strictly grounded in the tool "
                 "output, directly answers the user's question, and stays "
                 "concise.\n"
