@@ -147,26 +147,37 @@ def synthesizer_node(
     raw = _sanitize_for_state(state.get("raw_result") or {})
 
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
-    prompt = (
-        "You are a business intelligence assistant.\n\n"
-        "IMPORTANT: Always respond in the same language as the user's query. "
-        "If the user asks in Spanish, respond entirely in Spanish. "
-        "If the user asks in English, respond in English. Never mix languages.\n\n"
-        f"The user asked: {query}\n\n"
-        f"The {action} tool returned:\n{raw_text}\n\n"
-        "Provide a clear, concise business interpretation:\n"
-        "- What do the numbers mean?\n"
-        "- What action should the decision-maker take?\n"
-        "- What risks or caveats are relevant?\n"
-        "Answer in 3-5 sentences. Be specific and quantitative."
-    )
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a business intelligence assistant. "
+                "IMPORTANT: Always respond in the same language as the user's "
+                "query. If the user asks in Spanish, respond entirely in "
+                "Spanish. If the user asks in English, respond in English. "
+                "Never mix languages."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"The user asked: {query}\n\n"
+                f"The {action} tool returned:\n{raw_text}\n\n"
+                "Provide a clear, concise business interpretation:\n"
+                "- What do the numbers mean?\n"
+                "- What action should the decision-maker take?\n"
+                "- What risks or caveats are relevant?\n"
+                "Answer in 3-5 sentences. Be specific and quantitative."
+            ),
+        },
+    ]
 
     _syn_llm, _syn_fallback = _get_synthesizer_llms()
     t0 = time.perf_counter()
     try:
         response = invoke_with_fallback(
             _syn_llm,
-            prompt,
+            messages,
             fallback=_syn_fallback,
         )
         answer = response.content.strip()
