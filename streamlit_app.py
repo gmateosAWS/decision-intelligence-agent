@@ -311,7 +311,7 @@ def _render_result_cards(action: str, raw_result: Dict[str, Any]) -> None:
 
         st.plotly_chart(
             _simulation_figure(raw_result),
-            use_container_width=True,
+            width="stretch",
             config={"displayModeBar": False},
         )
 
@@ -433,9 +433,7 @@ def _render_dashboard() -> None:
                 margin=dict(l=10, r=10, t=40, b=10),
                 paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(
-                fig, use_container_width=True, config={"displayModeBar": False}
-            )
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     # Latency breakdown — bar chart
     with col_r:
@@ -464,9 +462,7 @@ def _render_dashboard() -> None:
                 plot_bgcolor="rgba(0,0,0,0)",
                 yaxis=dict(gridcolor="rgba(128,128,128,0.15)"),
             )
-            st.plotly_chart(
-                fig, use_container_width=True, config={"displayModeBar": False}
-            )
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     st.divider()
 
@@ -489,7 +485,7 @@ def _render_dashboard() -> None:
                     "OK": "✓" if r.get("success", True) else "✗",
                 }
             )
-        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.dataframe(rows, width="stretch", hide_index=True)
 
 
 # ---------------------------------------------------------------------------
