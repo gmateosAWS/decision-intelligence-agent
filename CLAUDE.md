@@ -20,8 +20,8 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── knowledge/retriever.py     pgvector search (FAISS fallback)
         │
         ├── agents/
-        │    ├── state.py              AgentState TypedDict
-        │    ├── planner.py            LLM → structured ToolSelection + fallback policy
+        │    ├── state.py              AgentState TypedDict (includes language: str)
+        │    ├── planner.py            LLM → ToolSelection(tool, reasoning, params, language)
         │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback()
         │    ├── tools.py              tool wrappers consuming spec defaults
         │    ├── workflow.py           LangGraph: planner → tool → synthesizer → judge → END
@@ -146,7 +146,7 @@ pytest -m integration                   # DB tests (needs Docker)
 
 ## What NOT to change without discussion
 
-Spec-driven principle, graph structure, `ToolSelection` schema, `_NODE_FORMULAS` registry.
+Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning, params, language), `_NODE_FORMULAS` registry.
 
 ## Git workflow
 
@@ -164,7 +164,9 @@ Spec-driven principle, graph structure, `ToolSelection` schema, `_NODE_FORMULAS`
 - [x] fix: lazy LLM + SystemModel init in agent modules (eliminates `KeyError: 'agents.llm_factory'` on cold start)
 - [x] Observability dashboard tab: st.tabs(Chat/Dashboard), KPI metrics, tool distribution donut, latency bar chart, recent runs table (evaluation/metrics.py)
 - [x] Persistent header: h1 full when no conversation, h3 compact when active; Inicio button clears session
-- [x] UX polish 2: ||u|| serif logo in sidebar, all-LLM-nodes config display, immersive help expander, language-aware synthesizer, markdown sanitization, primary-button example cards with CSS inline
+- [x] UX polish 2: ||u|| serif logo in sidebar + main area header, all-LLM-nodes config display, immersive help expander, tab CSS, markdown sanitization, primary-button example cards with CSS inline
+- [x] Planner-driven language detection: `ToolSelection.language` (ISO 639-1) detected by planner, propagated through AgentState, used by synthesizer (_SYNTH_INSTRUCTIONS) and judge revision (_REVISE_INSTRUCTIONS) for fully language-aware answers
+- [x] Unit tests for planner language propagation (tests/agents/test_planner.py, 5 tests)
 
 ### Paquete 1A ✅
 - [x] 1.1 PostgreSQL, 1.2 pgvector, 8.1 runs in Postgres, 1.5 spec as data, 1.3 ADR

@@ -384,7 +384,7 @@ The vector store is loaded **lazily** (on first query, not at import time). If t
 
 The agent is implemented as a **4-node LangGraph graph**:
 
-**`planner_node`** -- Selects the appropriate tool using structured output (provider and model configurable via `PLANNER_PROVIDER` / `PLANNER_MODEL` env vars; defaults to OpenAI `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. The prompt also enforces a **Chain-of-Thought sequence** in the `reasoning` field: the LLM must articulate (1) what the user is asking, (2) whether concrete variable values are mentioned, (3) whether the intent is exploratory/optimization or conceptual, and (4) which tool fits best and why -- before committing to a tool choice. Output is a typed `ToolSelection(tool, reasoning, params)` object -- no string parsing. If the LLM call fails after retries, the planner falls back to the `knowledge` tool with a structured error message rather than crashing the graph.
+**`planner_node`** -- Selects the appropriate tool using structured output (provider and model configurable via `PLANNER_PROVIDER` / `PLANNER_MODEL` env vars; defaults to OpenAI `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. The prompt also enforces a **Chain-of-Thought sequence** in the `reasoning` field: the LLM must articulate (1) what the user is asking, (2) whether concrete variable values are mentioned, (3) whether the intent is exploratory/optimization or conceptual, and (4) which tool fits best and why -- before committing to a tool choice. Output is a typed `ToolSelection(tool, reasoning, params, language)` object -- no string parsing. The `language` field carries the ISO 639-1 code of the query's language (detected by the planner itself), which flows through `AgentState` to the synthesizer and judge so both respond in the user's language without any separate detection call. If the LLM call fails after retries, the planner falls back to the `knowledge` tool with `language="en"` rather than crashing the graph.
 
 **`tool_node`** -- Executes the selected tool. Wrapped in `try/except`: errors are captured and propagated to the state rather than crashing the graph.
 
@@ -400,6 +400,7 @@ The agent is implemented as a **4-node LangGraph graph**:
 | `action`         | Planner       | Selected tool name                                                  |
 | `reasoning`      | Planner       | LLM's reasoning for tool selection                                  |
 | `params`         | Planner       | Generic dict of extracted variable values -- e.g. `{"price": 30.0}` |
+| `language`       | Planner       | ISO 639-1 code of the query language detected by the planner (e.g. `"es"`, `"en"`, `"fr"`); default `"en"` |
 | `raw_result`     | Tool          | Raw output from the analytical tool                                 |
 | `answer`         | Judge         | Final natural language response returned to the user                |
 | `run_id`         | Input         | Observability correlation ID                                        |
@@ -478,6 +479,7 @@ decision-intelligence-agent/
 +-- tests/
 |   +-- agents/
 |   |   +-- test_llm_factory.py     # Unit tests: provider factory, fallback, retry, graceful error
+|   |   +-- test_planner.py         # Unit tests: language field propagation for en/es/fr/de and fallback default
 |   +-- api/
 |   |   +-- test_health.py          # /healthz, /readyz, /v1/debug/config
 |   |   +-- test_query.py           # POST /v1/query (5 tests)
@@ -1150,6 +1152,7 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Demand model coefficients in spec YAML                | `base_demand`, `price_elasticity`, `marketing_effect`, `noise_sigma` are first-class spec parameters; recalibrating the model requires only editing the YAML, not touching code |
 | Per-node configurable LLM models via environment variables | Planner, synthesizer and judge can each use a different model; enables cost/quality trade-offs (e.g. capable model for routing, fast model for synthesis) without code changes |
 | Few-shot examples generated dynamically from the spec | Planner prompt includes routing examples built from actual decision variable names; improves tool selection accuracy while remaining fully domain-agnostic |
+| Planner detects query language (`ToolSelection.language`) | Language detection is a zero-cost byproduct of the structured planner call; the ISO 639-1 code flows through `AgentState` so the synthesizer and judge revision use pre-built per-language instruction dicts instead of generic "match the query language" heuristics that LLMs routinely ignore |
 | Chain-of-Thought enforced in planner `reasoning` field | The prompt requires the LLM to reason through four explicit steps before selecting a tool; reduces misrouting without changing the output schema |
 | `agents/llm_factory.py` — provider-agnostic LLM factory | `get_chat_model(provider, model)` returns a `BaseChatModel` for OpenAI or Anthropic; adding a new provider requires only a new branch in the factory, not changes across all nodes |
 | Automatic provider fallback (`FALLBACK_PROVIDER`) | If the primary LLM fails (any error), `invoke_with_fallback()` transparently retries with a secondary provider; the graph never sees the exception, enabling zero-downtime provider switching |
