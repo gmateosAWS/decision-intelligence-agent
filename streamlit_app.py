@@ -720,15 +720,54 @@ _EXAMPLE_QUERIES = [
 # ---------------------------------------------------------------------------
 
 # Header: full when no conversation, compact when active
+_LOGO_FULL = (
+    '<span style="font-family: Georgia, serif; font-size: 52px; '
+    'font-weight: 400; letter-spacing: -2px; line-height: 1;">'
+    '||<span style="font-weight: 700;">u</span>||</span>'
+)
+_LOGO_COMPACT = (
+    '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:2px;">'
+    '<span style="font-family: Georgia, serif; font-size: 26px; '
+    'font-weight: 400; letter-spacing: -1px;">'
+    '||<span style="font-weight: 700;">u</span>||</span>'
+    '<span style="font-size: 15px; color: #6b7280;">Decision Intelligence Agent</span>'
+    "</div>"
+)
+
 if st.session_state.messages:
-    st.markdown("### llull — Decision Intelligence Agent")
+    st.markdown(_LOGO_COMPACT, unsafe_allow_html=True)
     st.caption("Tu consejero de decisiones de negocio.")
 else:
-    st.markdown("# llull")
+    st.markdown(_LOGO_FULL, unsafe_allow_html=True)
     st.markdown(
         "**Tu consejero de decisiones de negocio.**  \n"
         "Analiza el impacto de tus decisiones comerciales antes de tomarlas."
     )
+
+# Elegant tab styles — thin brand-color indicator, no fills
+st.markdown(
+    """
+<style>
+.stTabs [data-baseweb="tab-list"] { gap: 4px; }
+.stTabs [data-baseweb="tab"] {
+    background: transparent;
+    border-radius: 6px 6px 0 0;
+    padding: 8px 22px;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+.stTabs [data-baseweb="tab-highlight"] {
+    background-color: #6c8ef5;
+    border-radius: 2px 2px 0 0;
+}
+.stTabs [data-baseweb="tab-border"] {
+    background-color: rgba(108,142,245,0.2);
+}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 tab_chat, tab_dashboard = st.tabs(["💬 Chat", "📊 Dashboard"])
 
