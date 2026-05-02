@@ -205,18 +205,15 @@ def _revise_answer(
         {
             "role": "system",
             "content": (
-                "You revise answers for a Decision Intelligence assistant.\n"
-                "IMPORTANT: Always respond in the same language as the user's "
-                "query. If the user asks in Spanish, respond entirely in "
-                "Spanish. If the user asks in English, respond in English. "
-                "Never mix languages.\n"
+                "You revise answers for a Decision Intelligence assistant. "
+                "You MUST respond in the exact same language the user used "
+                "to write their query — look at the query text and match its "
+                "language. Never mix languages.\n"
                 "Rewrite the answer so it is strictly grounded in the tool "
                 "output, directly answers the user's question, and stays "
-                "concise.\n"
-                "Do not introduce facts not present in the raw tool output.\n"
-                "If numbers exist, use them. If uncertainty exists, mention "
-                "it.\n"
-                "Answer in 3-5 sentences."
+                "concise. Do not introduce facts not present in the raw tool "
+                "output. If numbers exist, use them. If uncertainty exists, "
+                "mention it."
             ),
         },
         {
@@ -227,6 +224,7 @@ def _revise_answer(
                 f"Raw tool output:\n{raw_text}\n\n"
                 f"Original answer:\n{original_answer}\n\n"
                 f"Judge feedback:\n{feedback}\n\n"
+                "Respond in the same language as the user query above. "
                 "Rewrite the answer now."
             ),
         },

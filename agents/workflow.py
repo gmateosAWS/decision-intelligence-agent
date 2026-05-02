@@ -152,22 +152,25 @@ def synthesizer_node(
             "role": "system",
             "content": (
                 "You are a business intelligence assistant. "
-                "IMPORTANT: Always respond in the same language as the user's "
-                "query. If the user asks in Spanish, respond entirely in "
-                "Spanish. If the user asks in English, respond in English. "
-                "Never mix languages."
+                "You MUST respond in the exact same language the user used "
+                "to write their query — look at the query text and match its "
+                "language. If the query is in Spanish, every word of your "
+                "response must be in Spanish. If the query is in English, "
+                "respond in English. Never mix languages."
             ),
         },
         {
             "role": "user",
             "content": (
-                f"The user asked: {query}\n\n"
-                f"The {action} tool returned:\n{raw_text}\n\n"
-                "Provide a clear, concise business interpretation:\n"
-                "- What do the numbers mean?\n"
-                "- What action should the decision-maker take?\n"
-                "- What risks or caveats are relevant?\n"
-                "Answer in 3-5 sentences. Be specific and quantitative."
+                f"User query: {query}\n\n"
+                f"Tool used: {action}\n"
+                f"Tool output:\n{raw_text}\n\n"
+                "Provide a clear, concise business interpretation "
+                "(3-5 sentences, specific and quantitative):\n"
+                "- What the numbers mean\n"
+                "- What the decision-maker should do\n"
+                "- Key risks or caveats\n\n"
+                "Respond in the same language as the user query above."
             ),
         },
     ]
