@@ -50,6 +50,50 @@ _FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 _synthesizer_llm = None
 _synthesizer_fallback_llm = None
 
+_LANG_NAMES: Dict[str, str] = {
+    "ca": "Catalan",
+    "de": "German",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pt": "Portuguese",
+}
+
+_SYNTH_INSTRUCTIONS: Dict[str, str] = {
+    "es": (
+        "Proporciona una interpretación de negocio clara y concisa "
+        "(3-5 frases, específica y cuantitativa):\n"
+        "- Qué significan los números\n"
+        "- Qué debería hacer el decisor\n"
+        "- Riesgos o matices relevantes\n\n"
+        "Tu respuesta COMPLETA debe estar en español."
+    ),
+    "en": (
+        "Provide a clear, concise business interpretation "
+        "(3-5 sentences, specific and quantitative):\n"
+        "- What the numbers mean\n"
+        "- What the decision-maker should do\n"
+        "- Key risks or caveats\n\n"
+        "Your ENTIRE response must be in English."
+    ),
+}
+
+
+def _synth_instructions(language: str) -> str:
+    if language in _SYNTH_INSTRUCTIONS:
+        return _SYNTH_INSTRUCTIONS[language]
+    lang_name = _LANG_NAMES.get(language, language)
+    return (
+        "Provide a clear, concise business interpretation "
+        "(3-5 sentences, specific and quantitative):\n"
+        "- What the numbers mean\n"
+        "- What the decision-maker should do\n"
+        "- Key risks or caveats\n\n"
+        f"Your ENTIRE response must be in {lang_name}."
+    )
+
 
 def _get_synthesizer_llms():
     global _synthesizer_llm, _synthesizer_fallback_llm
@@ -144,19 +188,18 @@ def synthesizer_node(
     obs = _get_observer(config)
     query = state.get("query", "")
     action = state.get("action", "unknown")
+    language = state.get("language", "en")
     raw = _sanitize_for_state(state.get("raw_result") or {})
 
+    lang_name = _LANG_NAMES.get(language, language)
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
     messages = [
         {
             "role": "system",
             "content": (
-                "You are a business intelligence assistant. "
-                "You MUST respond in the exact same language the user used "
-                "to write their query — look at the query text and match its "
-                "language. If the query is in Spanish, every word of your "
-                "response must be in Spanish. If the query is in English, "
-                "respond in English. Never mix languages."
+                f"You are a business intelligence assistant. "
+                f"You MUST respond ONLY in {lang_name}. "
+                f"Every single word must be in {lang_name}."
             ),
         },
         {
@@ -165,12 +208,7 @@ def synthesizer_node(
                 f"User query: {query}\n\n"
                 f"Tool used: {action}\n"
                 f"Tool output:\n{raw_text}\n\n"
-                "Provide a clear, concise business interpretation "
-                "(3-5 sentences, specific and quantitative):\n"
-                "- What the numbers mean\n"
-                "- What the decision-maker should do\n"
-                "- Key risks or caveats\n\n"
-                "Respond in the same language as the user query above."
+                f"{_synth_instructions(language)}"
             ),
         },
     ]

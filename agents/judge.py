@@ -31,6 +31,35 @@ from .state import AgentState
 
 load_dotenv()
 
+_LANG_NAMES: Dict[str, str] = {
+    "ca": "Catalan",
+    "de": "German",
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "it": "Italian",
+    "nl": "Dutch",
+    "pt": "Portuguese",
+}
+
+_REVISE_INSTRUCTIONS: Dict[str, str] = {
+    "es": (
+        "Reescribe la respuesta de forma que esté estrictamente fundamentada "
+        "en la salida de la herramienta, responda directamente la pregunta del "
+        "usuario y sea concisa. No introduzcas hechos que no estén en la salida "
+        "de la herramienta. Si hay números, úsalos. Si hay incertidumbre, "
+        "menciónala.\n\n"
+        "Tu respuesta COMPLETA debe estar en español."
+    ),
+    "en": (
+        "Rewrite the answer so it is strictly grounded in the tool output, "
+        "directly answers the user's question, and stays concise. "
+        "Do not introduce facts not present in the raw tool output. "
+        "If numbers exist, use them. If uncertainty exists, mention it.\n\n"
+        "Your ENTIRE response must be in English."
+    ),
+}
+
 _JUDGE_PROVIDER = os.getenv("JUDGE_PROVIDER", "openai")
 _JUDGE_MODEL = os.getenv("JUDGE_MODEL", "gpt-4o-mini")
 _JUDGE_THRESHOLD = float(os.getenv("JUDGE_THRESHOLD", "0.75"))
@@ -90,6 +119,7 @@ def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, An
 
     query = state.get("query", "")
     action = state.get("action", "unknown")
+    language = state.get("language", "en")
     raw_result = state.get("raw_result") or {}
     answer = (state.get("answer") or "").strip()
 
@@ -167,6 +197,7 @@ def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, An
             raw_text=raw_text,
             original_answer=answer,
             feedback=verdict.feedback,
+            language=language,
         )
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -198,22 +229,28 @@ def _revise_answer(
     raw_text: str,
     original_answer: str,
     feedback: str,
+    language: str = "en",
 ) -> str:
     """Generate one grounded revision using the judge feedback."""
     _init_llms()
+    lang_name = _LANG_NAMES.get(language, language)
+    instructions = _REVISE_INSTRUCTIONS.get(
+        language,
+        (
+            "Rewrite the answer so it is strictly grounded in the tool output, "
+            "directly answers the user's question, and stays concise. "
+            "Do not introduce facts not present in the raw tool output. "
+            "If numbers exist, use them. If uncertainty exists, mention it.\n\n"
+            f"Your ENTIRE response must be in {lang_name}."
+        ),
+    )
     revision_messages = [
         {
             "role": "system",
             "content": (
-                "You revise answers for a Decision Intelligence assistant. "
-                "You MUST respond in the exact same language the user used "
-                "to write their query — look at the query text and match its "
-                "language. Never mix languages.\n"
-                "Rewrite the answer so it is strictly grounded in the tool "
-                "output, directly answers the user's question, and stays "
-                "concise. Do not introduce facts not present in the raw tool "
-                "output. If numbers exist, use them. If uncertainty exists, "
-                "mention it."
+                f"You revise answers for a Decision Intelligence assistant. "
+                f"You MUST write the revised answer ONLY in {lang_name}. "
+                f"Every single word must be in {lang_name}."
             ),
         },
         {
@@ -224,8 +261,7 @@ def _revise_answer(
                 f"Raw tool output:\n{raw_text}\n\n"
                 f"Original answer:\n{original_answer}\n\n"
                 f"Judge feedback:\n{feedback}\n\n"
-                "Respond in the same language as the user query above. "
-                "Rewrite the answer now."
+                f"{instructions}"
             ),
         },
     ]

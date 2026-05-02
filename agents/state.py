@@ -13,6 +13,8 @@ Fields
                                         the query; keys match spec variable names
                                         exactly; tools fall back to spec defaults
                                         for any missing key
+  language     (str)                 -- ISO 639-1 code detected by planner
+                                        (e.g. "es", "en", "fr"); default "en"
   raw_result   (dict | None)         -- raw output from the analytical tool
   answer       (str | None)          -- final natural-language response
   run_id       (str | None)          -- observability correlation ID
@@ -38,6 +40,7 @@ class AgentState(TypedDict, total=False):
     action: Optional[str]
     reasoning: Optional[str]
     params: Dict[str, float]  # parámetros extraídos por el planner
+    language: str  # ISO 639-1 code detected by planner; default "en"
     raw_result: Optional[Dict[str, Any]]
     answer: Optional[str]
     run_id: Optional[str]

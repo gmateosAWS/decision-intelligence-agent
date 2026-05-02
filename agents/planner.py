@@ -31,7 +31,7 @@ import os
 from typing import Dict, List, Literal
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from spec.spec_loader import get_spec
 
@@ -63,6 +63,13 @@ class ToolSelection(BaseModel):
     tool: Literal["optimization", "simulation", "knowledge"]
     reasoning: str
     params: List[DecisionParam] = []  # vacío si no se mencionan valores
+    language: str = Field(
+        default="en",
+        description=(
+            "ISO 639-1 code of the user's query language "
+            "(e.g. 'es', 'en', 'fr', 'de')"
+        ),
+    )
 
 
 _HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "3"))
@@ -149,7 +156,10 @@ def _build_system_prompt() -> str:
         f" understand\n"
         f"     how the system works?\n"
         f"  4. Which tool fits best and why?\n\n"
-        f"Select the single most appropriate tool for the user's query."
+        f"Select the single most appropriate tool for the user's query.\n\n"
+        f"Detect the language of the user's query and return its ISO 639-1\n"
+        f"code in the 'language' field (e.g. 'es' for Spanish, 'en' for\n"
+        f"English, 'fr' for French, 'de' for German)."
     )
 
 
@@ -190,6 +200,7 @@ def planner_node(state: AgentState) -> Dict:
             "action": selection.tool,
             "reasoning": selection.reasoning,
             "params": {p.variable: p.value for p in selection.params},
+            "language": selection.language,
         }
     except (LLMUnavailableError, Exception) as exc:
         return {
@@ -198,4 +209,5 @@ def planner_node(state: AgentState) -> Dict:
                 f"Planner unavailable ({exc}). Defaulting to knowledge tool."
             ),
             "params": {},
+            "language": "en",
         }
