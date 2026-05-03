@@ -686,7 +686,19 @@ with st.sidebar:
             "#### Knowledge base\n"
             "El agente tiene acceso a una base de conocimiento con documentos sobre el "
             "dominio del negocio. Cuando la pregunta es conceptual o no requiere "
-            "cálculo, consulta estos documentos para responder."
+            "cálculo, consulta estos documentos para responder.\n\n"
+            "#### Datos de entrenamiento\n"
+            "Esta demo usa datos sintéticos que simulan 36 meses de ventas con "
+            "estacionalidad, tendencia y efectos no-lineales de precio y marketing. "
+            "En un despliegue real, estos datos serían reemplazados por datos "
+            "históricos del cliente (ventas, CRM, ERP) a través de la capa de "
+            "conectores.\n\n"
+            "#### Modelo predictivo\n"
+            "La demanda se estima con un modelo RandomForest entrenado sobre los datos "
+            "anteriores. El modelo captura relaciones no-lineales entre precio, "
+            "inversión en marketing, estacionalidad y demanda. En producción, este "
+            "modelo sería reemplazado o complementado por los modelos propietarios de "
+            "Inverence (bayesianos, series temporales, inferencia causal)."
         )
 
 # ---------------------------------------------------------------------------

@@ -176,6 +176,14 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 - [x] 6.4 Endpoints admin/health (/healthz, /readyz, /v1/debug/config)
 - [x] 6.5 API versioning (/v1/ prefix)
 
+### feature/data-enrich ✅
+- [x] Temporal data generation: 36-month synthetic dataset with seasonality (`sin(2π*month/12)`), growth trend, log-marketing effect, quadratic price elasticity — controlled via `data_generation.temporal` in spec
+- [x] `price_quadratic` and temporal fields added to `DemandModelSpec` / `DataGenerationSpec` in `spec_loader.py` (backward-compatible defaults)
+- [x] `train_demand_model.py` auto-detects `month` feature column and trains 3-feature RF (price, marketing, month); R²=0.89
+- [x] `system_model.evaluate(price, marketing, month=18)` detects `n_features_in_` and passes month when model expects 3 features
+- [x] Streamlit help expander: new "Datos de entrenamiento" and "Modelo predictivo" sections (Inverence production context)
+- [x] No API changes required — `evaluate()` `month` parameter is internal with safe default
+
 ## Current work
 
 **Paquete 1C — CI pipeline** (GitHub Actions, Dockerfile, test suites v1)

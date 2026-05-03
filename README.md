@@ -231,29 +231,37 @@ are read from `spec/organizational_model.yaml` -- no numeric literals in code.
 
 Variables: `price`, `marketing`, `demand`
 
-Demand follows the relationship declared in the spec under `demand_model`:
+Demand follows the relationship declared in the spec under `demand_model` (temporal mode):
 
 ```
 demand = base_demand
-         + price_elasticity * price
-         + marketing_effect * marketing_spend
+         + price_elasticity * price + price_quadratic * price²
+         + marketing_effect * log(marketing_spend)
+         + seasonality_amplitude * sin(2π * month / 12)
+         + trend_slope * month
          + noise(sigma=noise_sigma)
 ```
 
-Current spec values (`spec/organizational_model.yaml` v1.2.0):
+Current spec values (`spec/organizational_model.yaml` v1.3.0):
 
-| Parameter          | Value  | Description                                       |
-| ------------------ | ------ | ------------------------------------------------- |
-| `base_demand`      | 120.0  | Intercept: baseline units at price=0, marketing=0 |
-| `price_elasticity` | -1.6   | Units lost per EUR increase in price              |
-| `marketing_effect` | 0.0009 | Units gained per EUR of marketing spend           |
-| `noise_sigma`      | 5.0    | Std dev of Gaussian demand noise (units)          |
+| Parameter               | Value  | Description                                          |
+| ----------------------- | ------ | ---------------------------------------------------- |
+| `base_demand`           | 120.0  | Intercept: baseline units at price=0, marketing=0    |
+| `price_elasticity`      | -1.6   | Linear price effect (units/EUR, negative)            |
+| `price_quadratic`       | 0.01   | Quadratic price effect — dampens extremes (units/EUR²) |
+| `marketing_effect`      | 0.0009 | Units gained per unit of log(marketing_spend)        |
+| `noise_sigma`           | 5.0    | Std dev of Gaussian demand noise (units)             |
+| `seasonality_amplitude` | 15.0   | Peak seasonal swing in demand (units)                |
+| `trend_slope`           | 0.5    | Monthly demand growth trend (units/month)            |
 
-Data generation ranges (declared under `data_generation` in the spec):
+Data generation (declared under `data_generation`, spec v1.3.0):
 
-- `price`: sampled from `uniform(price_min=10, price_max=50)` -- matches decision variable bounds
-- `marketing`: sampled from `uniform(marketing_min=1000, marketing_max=20000)` -- real EUR scale
-- `n_samples`: 2,000 -- `random_seed`: 42 (reproducibility)
+- `temporal: true` — 36-month dataset (3 years), ~55 observations per month, 1,980 rows total
+- `price`: sampled from `uniform(10, 50)` per month -- matches decision variable bounds
+- `marketing`: sampled from `uniform(1000, 20000)` per month
+- `random_seed`: 42 (reproducibility)
+
+Set `temporal: false` in the spec to revert to the legacy flat generator (2,000 rows, linear formula).
 
 To recalibrate the demand model: edit `demand_model` and/or `data_generation` in the spec,
 then re-run `python data/generate_data.py` and `python models/train_demand_model.py`.
@@ -268,20 +276,21 @@ A **RandomForest regressor** estimates the demand function from historical data:
 (price, marketing_spend) -> demand
 ```
 
-Training includes an 80/20 train/test split stratified by price quantiles. Verified performance on held-out test set:
+Training includes an 80/20 train/test split. Verified performance on held-out test set (temporal dataset, v1.3.0):
 
 | Metric | Value                                          |
 | ------ | ---------------------------------------------- |
-| R2     | 0.9257 -- explains 92.6% of demand variability |
-| MAE    | 4.58 units                                     |
-| RMSE   | 5.66 units                                     |
+| R2     | 0.8876 -- explains 88.8% of demand variability |
+| MAE    | 4.48 units                                     |
+| RMSE   | 5.67 units                                     |
 
-Feature importances confirm the expected causal structure:
+Feature importances with the enriched temporal dataset:
 
-| Feature         | Importance |
-| --------------- | ---------- |
-| price           | 90.87%     |
-| marketing_spend | 9.13%      |
+| Feature    | Importance | Notes                                        |
+| ---------- | ---------- | -------------------------------------------- |
+| price      | 56.0%      | Dominant driver, includes quadratic effect   |
+| month      | 40.5%      | Captures seasonality + growth trend          |
+| marketing  | 3.5%       | Log-marketing reduces marginal sensitivity   |
 
 The trained model is persisted to `models/demand_model.pkl`.
 
@@ -317,7 +326,7 @@ flowchart LR
     class profit target
 ```
 
-`SystemModel.evaluate()` performs a **topological traversal** of the DAG:
+`SystemModel.evaluate(price, marketing, month=18)` performs a **topological traversal** of the DAG (the `month` parameter is passed to the ML model when it was trained with the temporal dataset; defaults to 18, the mid-range of the 36-month training window):
 
 1. Initialises decision nodes with input values
 2. For each node in topological order: computes via ML model (demand) or registered formula (revenue, cost, profit)

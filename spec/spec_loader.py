@@ -91,21 +91,24 @@ class ConstraintSpec:
 
 @dataclass
 class DemandModelSpec:
-    """Coefficients of the synthetic linear demand function.
+    """Coefficients of the synthetic demand function.
 
-    Formula:
+    Temporal formula:
         demand = base_demand
-                 + price_elasticity * price
-                 + marketing_effect * marketing_spend
+                 + price_elasticity * price + price_quadratic * price²
+                 + marketing_effect * log(marketing_spend)
+                 + seasonality_amplitude * sin(2π * month / 12)
+                 + trend_slope * month
                  + noise(sigma=noise_sigma)
 
-    These values are the single source of truth for both data generation
-    (generate_data.py) and any analytical validation of model predictions.
+    These values are the single source of truth for data generation
+    (generate_data.py) and analytical validation of model predictions.
     """
 
     base_demand: float  # Intercept: baseline units at price=0, marketing=0
-    price_elasticity: float  # Units lost per EUR increase in price (negative)
-    marketing_effect: float  # Units gained per EUR of marketing spend
+    price_elasticity: float  # Linear price effect (units/EUR, negative)
+    price_quadratic: float  # Quadratic price effect (units/EUR²); default 0.0
+    marketing_effect: float  # Units gained per unit of log(marketing_spend)
     noise_sigma: float  # Std dev of Gaussian demand noise (units)
 
 
@@ -115,6 +118,8 @@ class DataGenerationSpec:
 
     All bounds here should mirror the decision variable bounds so that the
     trained ML model interpolates (not extrapolates) at inference time.
+    When ``temporal=True`` the generator produces n_months × (n_samples/n_months)
+    rows with seasonality, trend, log-marketing and quadratic price effects.
     """
 
     n_samples: int
@@ -123,6 +128,11 @@ class DataGenerationSpec:
     price_max: float
     marketing_min: float
     marketing_max: float
+    # Temporal enrichment fields — all have backward-compatible defaults
+    temporal: bool = False
+    n_months: int = 36
+    seasonality_amplitude: float = 15.0
+    trend_slope: float = 0.5
 
 
 @dataclass
@@ -256,6 +266,7 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
     demand_model = DemandModelSpec(
         base_demand=float(dm_raw.get("base_demand", 120.0)),
         price_elasticity=float(dm_raw.get("price_elasticity", -1.6)),
+        price_quadratic=float(dm_raw.get("price_quadratic", 0.0)),
         marketing_effect=float(dm_raw.get("marketing_effect", 0.0009)),
         noise_sigma=float(dm_raw.get("noise_sigma", 5.0)),
     )
@@ -269,6 +280,10 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
         price_max=float(dg_raw.get("price_max", 50.0)),
         marketing_min=float(dg_raw.get("marketing_min", 1000.0)),
         marketing_max=float(dg_raw.get("marketing_max", 20000.0)),
+        temporal=bool(dg_raw.get("temporal", False)),
+        n_months=int(dg_raw.get("n_months", 36)),
+        seasonality_amplitude=float(dg_raw.get("seasonality_amplitude", 15.0)),
+        trend_slope=float(dg_raw.get("trend_slope", 0.5)),
     )
 
     sim = raw.get("simulation", {})
