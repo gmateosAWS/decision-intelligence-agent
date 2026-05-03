@@ -647,6 +647,44 @@ with st.sidebar:
                 st.markdown("**Objetivos**")
                 for tv in spec.target_variables:
                     st.markdown(f"- `{tv.name}`")
+            # Model info
+            st.divider()
+            st.markdown("**Modelo predictivo**")
+            try:
+                import pickle
+
+                import pandas as pd
+
+                _model_path = "models/demand_model.pkl"
+                _data_path = "data/sales.csv"
+                if os.path.exists(_model_path):
+                    with open(_model_path, "rb") as _f:
+                        _mdl = pickle.load(_f)
+                    _model_type = type(_mdl).__name__
+                    _n_feat = getattr(_mdl, "n_features_in_", 2)
+                    _feat_str = f"{_n_feat} variables"
+                    _r2_str = ""
+                    if os.path.exists(_data_path):
+                        _df = pd.read_csv(_data_path)
+                        _n_rows = len(_df)
+                        _feat_cols = ["price", "marketing"] + (
+                            ["month"] if "month" in _df.columns and _n_feat >= 3 else []
+                        )
+                        _X = _df[_feat_cols].values
+                        _y = _df["demand"].values
+                        from sklearn.metrics import r2_score as _r2_fn
+
+                        _r2 = _r2_fn(_y, _mdl.predict(_X))
+                        _r2_str = f" · R²={_r2:.3f}"
+                    else:
+                        _n_rows = None
+                    st.caption(f"`{_model_type}` · {_feat_str}{_r2_str}")
+                    if _n_rows is not None:
+                        st.caption(f"{_n_rows:,} muestras de entrenamiento")
+                else:
+                    st.caption("Modelo no entrenado")
+            except Exception:  # noqa: BLE001
+                st.caption("Info no disponible")
     except Exception:  # noqa: BLE001
         pass
 
@@ -688,6 +726,50 @@ with st.sidebar:
             "dominio del negocio. Cuando la pregunta es conceptual o no requiere "
             "cálculo, consulta estos documentos para responder."
         )
+
+    # --- Admin controls ---
+    with st.expander("⚙️ Administración", expanded=False):
+        st.caption("Acciones de mantenimiento del sistema")
+
+        if st.button("Regenerar datos", use_container_width=True):
+            with st.spinner("Generando datos sintéticos..."):
+                try:
+                    import sys
+                    from pathlib import Path
+
+                    sys.path.insert(0, str(Path(__file__).parent))
+                    from data.generate_data import generate
+
+                    generate()
+                    st.success("Datos regenerados correctamente.")
+                except Exception as _e:  # noqa: BLE001
+                    st.warning(f"Error al regenerar datos: {_e}")
+
+        if st.button("Reentrenar modelo ML", use_container_width=True):
+            with st.spinner("Entrenando modelo de demanda..."):
+                try:
+                    import sys
+                    from pathlib import Path
+
+                    sys.path.insert(0, str(Path(__file__).parent))
+                    from models.train_demand_model import train
+
+                    train()
+                    st.cache_resource.clear()
+                    st.success("Modelo reentrenado. Reinicia la sesión para recargar.")
+                except Exception as _e:  # noqa: BLE001
+                    st.warning(f"Error al reentrenar el modelo: {_e}")
+
+        if st.button("Recargar knowledge base", use_container_width=True):
+            with st.spinner("Construyendo índice de conocimiento..."):
+                try:
+                    from knowledge.build_index import DOCUMENTS, build_knowledge_index
+
+                    build_knowledge_index()
+                    n_docs = len(DOCUMENTS)
+                    st.success(f"Knowledge base recargada ({n_docs} documentos).")
+                except Exception as _e:  # noqa: BLE001
+                    st.warning(f"Error al recargar knowledge base: {_e}")
 
 # ---------------------------------------------------------------------------
 # Example queries for the welcome block
