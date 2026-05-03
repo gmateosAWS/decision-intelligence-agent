@@ -418,11 +418,11 @@ def _render_dashboard() -> None:
             fig = go.Figure(
                 data=[
                     go.Pie(
-                        labels=list(dist.keys()),
-                        values=list(dist.values()),
+                        labels=[str(k) for k in dist.keys()],
+                        values=[float(v) for v in dist.values()],
                         hole=0.5,
                         marker_colors=[
-                            _TOOL_COLORS.get(k, "#94a3b8") for k in dist.keys()
+                            str(_TOOL_COLORS.get(k, "#94a3b8")) for k in dist.keys()
                         ],
                     )
                 ]
@@ -448,9 +448,9 @@ def _render_dashboard() -> None:
             fig = go.Figure(
                 data=[
                     go.Bar(
-                        x=[v[0] for v in valid],
-                        y=[v[1] for v in valid],
-                        marker_color=[v[2] for v in valid],
+                        x=[str(v[0]) for v in valid],
+                        y=[float(v[1]) for v in valid],
+                        marker_color=[str(v[2]) for v in valid],
                     )
                 ]
             )
