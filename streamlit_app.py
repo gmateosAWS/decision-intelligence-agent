@@ -761,8 +761,7 @@ with st.sidebar:
 
                     reload_spec()  # flush singleton — pick up latest spec from DB
                     train()
-                    reload_system_model()
-                    st.cache_resource.clear()
+                    reload_system_model()  # graph calls _get_system_model() at runtime
                     st.success("Modelo reentrenado y recargado correctamente.")
                     st.rerun()
                 except Exception as _e:  # noqa: BLE001
