@@ -28,7 +28,7 @@ Responsibilities
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -163,7 +163,14 @@ def _build_system_prompt() -> str:
     )
 
 
-_SYSTEM_PROMPT = _build_system_prompt()
+_SYSTEM_PROMPT: Optional[str] = None
+
+
+def _get_system_prompt() -> str:
+    global _SYSTEM_PROMPT
+    if _SYSTEM_PROMPT is None:
+        _SYSTEM_PROMPT = _build_system_prompt()
+    return _SYSTEM_PROMPT
 
 
 def planner_node(state: AgentState) -> Dict:
@@ -177,7 +184,7 @@ def planner_node(state: AgentState) -> Dict:
     query = state["query"]
     history: List[Dict[str, str]] = state.get("history") or []
 
-    messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    messages = [{"role": "system", "content": _get_system_prompt()}]
 
     recent = history[-_HISTORY_WINDOW:]
     for turn in recent:
