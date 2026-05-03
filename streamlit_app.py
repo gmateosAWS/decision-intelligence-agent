@@ -734,29 +734,33 @@ with st.sidebar:
         if st.button("Regenerar datos", use_container_width=True):
             with st.spinner("Generando datos sintéticos..."):
                 try:
-                    import sys
-                    from pathlib import Path
-
-                    sys.path.insert(0, str(Path(__file__).parent))
                     from data.generate_data import generate
 
-                    generate()
-                    st.success("Datos regenerados correctamente.")
+                    df_gen = generate()
+                    n_rows = len(df_gen)
+                    temporal = "month" in df_gen.columns
+                    _mode = (
+                        "con temporalidad"
+                        if temporal
+                        else "datos estáticos, sin temporalidad"
+                    )
+                    st.success(f"Generados {n_rows:,} registros ({_mode}).")
                 except Exception as _e:  # noqa: BLE001
                     st.warning(f"Error al regenerar datos: {_e}")
 
         if st.button("Reentrenar modelo ML", use_container_width=True):
-            with st.spinner("Entrenando modelo de demanda..."):
+            with st.spinner(
+                "Entrenando modelo de demanda... (puede tardar unos segundos)"
+            ):
                 try:
-                    import sys
-                    from pathlib import Path
-
-                    sys.path.insert(0, str(Path(__file__).parent))
+                    from agents.tools import reload_system_model
                     from models.train_demand_model import train
 
                     train()
+                    reload_system_model()
                     st.cache_resource.clear()
-                    st.success("Modelo reentrenado. Reinicia la sesión para recargar.")
+                    st.success("Modelo reentrenado y recargado correctamente.")
+                    st.rerun()
                 except Exception as _e:  # noqa: BLE001
                     st.warning(f"Error al reentrenar el modelo: {_e}")
 

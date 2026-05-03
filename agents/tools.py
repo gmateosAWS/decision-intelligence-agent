@@ -37,6 +37,12 @@ def _get_system_model() -> SystemModel:
     return _system_model
 
 
+def reload_system_model() -> None:
+    """Force re-instantiation of the SystemModel singleton (e.g. after retraining)."""
+    global _system_model
+    _system_model = None
+
+
 def optimization_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Run a grid-search optimisation over the price range and return
