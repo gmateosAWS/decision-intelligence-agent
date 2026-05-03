@@ -12,7 +12,7 @@ domain:
     Retail business model that captures the causal relationships between
     pricing, marketing investment, demand response, and profitability.
     Supports scenario simulation and decision optimization.
-  version: '1.2.0'
+  version: '1.3.0'
 
 # ── VARIABLES ─────────────────────────────────────────────────────────────────
 variables:
@@ -91,22 +91,24 @@ business_parameters:
   unit_cost: 10.0 # Variable cost per unit produced/sold
 
 # ── DEMAND MODEL ──────────────────────────────────────────────────────────────
-# Coefficients of the synthetic linear demand function used to generate
-# training data and to validate analytical calculations.
+# Coefficients of the synthetic demand function used to generate training data.
 #
-# Formula:
+# Formula (temporal mode):
 #   demand = base_demand
-#            + price_elasticity * price
-#            + marketing_effect * marketing_spend
+#            + price_elasticity * price + price_quadratic * price²
+#            + marketing_effect * log(marketing_spend)
+#            + seasonality_amplitude * sin(2π * month / 12)
+#            + trend_slope * month
 #            + noise(sigma=noise_sigma)
 #
 # Changing these values and re-running generate_data.py + train_demand_model.py
 # is all that is needed to recalibrate the model for a different market context.
 demand_model:
-  base_demand: 120.0 # Intercept: baseline units at price=0, marketing=0
-  price_elasticity: -1.6 # Units lost per EUR increase in price (must be negative)
-  marketing_effect: 0.0009 # Units gained per EUR of marketing spend
-  noise_sigma: 5.0 # Standard deviation of Gaussian demand noise (units)
+  base_demand: 120.0      # Intercept: baseline units at price=0, marketing=0
+  price_elasticity: -1.6  # Linear price effect (units/EUR, must be negative)
+  price_quadratic: 0.01   # Quadratic price effect (units/EUR², dampens extremes)
+  marketing_effect: 0.0009 # Units gained per unit of log(marketing_spend)
+  noise_sigma: 5.0         # Standard deviation of Gaussian demand noise (units)
 
 # ── DATA GENERATION ───────────────────────────────────────────────────────────
 # Controls the synthetic training dataset produced by data/generate_data.py.
@@ -115,10 +117,15 @@ demand_model:
 data_generation:
   n_samples: 2000
   random_seed: 42
-  price_min: 10.0 # Lower bound for sampled price (matches bounds.min)
-  price_max: 50.0 # Upper bound for sampled price (matches bounds.max)
-  marketing_min: 1000.0 # Lower bound for sampled marketing spend (EUR)
-  marketing_max: 20000.0 # Upper bound for sampled marketing spend (EUR)
+  price_min: 10.0     # Lower bound for sampled price (matches bounds.min)
+  price_max: 50.0     # Upper bound for sampled price (matches bounds.max)
+  marketing_min: 1000.0   # Lower bound for sampled marketing spend (EUR)
+  marketing_max: 20000.0  # Upper bound for sampled marketing spend (EUR)
+  # Temporal enrichment (set to false to use the legacy flat generator)
+  temporal: true
+  n_months: 36                 # 3 years of monthly data
+  seasonality_amplitude: 15.0  # Peak-to-peak demand swing from seasonality (units)
+  trend_slope: 0.5             # Monthly demand growth trend (units/month)
 
 # ── SIMULATION ────────────────────────────────────────────────────────────────
 simulation:

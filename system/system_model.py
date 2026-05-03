@@ -111,7 +111,7 @@ class SystemModel:
         self.graph = build_graph()
         self._eval_order = list(nx.topological_sort(self.graph))
 
-    def evaluate(self, price: float, marketing: float) -> dict:
+    def evaluate(self, price: float, marketing: float, month: int = 18) -> dict:
         """
         Evalúa el modelo organizacional para un punto (price, marketing) dado.
 
@@ -144,10 +144,12 @@ class SystemModel:
                 continue  # ya calculado
 
             if node == "demand":
-                # Nodo estimado por ML
-                values["demand"] = float(
-                    self.demand_model.predict([[price, marketing]])[0]
+                # Nodo estimado por ML — 3-feature model includes month
+                n_feat = getattr(self.demand_model, "n_features_in_", 2)
+                features = (
+                    [price, marketing, month] if n_feat >= 3 else [price, marketing]
                 )
+                values["demand"] = float(self.demand_model.predict([features])[0])
             elif node in _NODE_FORMULAS:
                 # Nodo calculado por fórmula registrada
                 values[node] = _NODE_FORMULAS[node](values)

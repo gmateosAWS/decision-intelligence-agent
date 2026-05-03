@@ -735,7 +735,9 @@ with st.sidebar:
             with st.spinner("Generando datos sintéticos..."):
                 try:
                     from data.generate_data import generate
+                    from spec.spec_loader import reload_spec
 
+                    reload_spec()  # flush singleton — pick up latest spec from DB
                     df_gen = generate()
                     n_rows = len(df_gen)
                     temporal = "month" in df_gen.columns
@@ -755,7 +757,9 @@ with st.sidebar:
                 try:
                     from agents.tools import reload_system_model
                     from models.train_demand_model import train
+                    from spec.spec_loader import reload_spec
 
+                    reload_spec()  # flush singleton — pick up latest spec from DB
                     train()
                     reload_system_model()
                     st.cache_resource.clear()
@@ -768,7 +772,9 @@ with st.sidebar:
             with st.spinner("Construyendo índice de conocimiento..."):
                 try:
                     from knowledge.build_index import DOCUMENTS, build_knowledge_index
+                    from spec.spec_loader import reload_spec
 
+                    reload_spec()  # flush singleton — pick up latest spec from DB
                     build_knowledge_index()
                     n_docs = len(DOCUMENTS)
                     st.success(f"Knowledge base recargada ({n_docs} documentos).")
