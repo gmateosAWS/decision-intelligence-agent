@@ -135,6 +135,14 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 .pkg-gray .pkg-label { color: var(--gray-800); }
 .pkg-gray .pkg-items { color: var(--gray-600); }
 
+.pkg-memory { background: var(--pink-50); border-color: rgba(153,53,86,0.12); }
+.pkg-memory .pkg-label { color: var(--pink-800); }
+.pkg-memory .pkg-items { color: var(--pink-600); }
+
+.pkg-multiagent { background: var(--purple-50); border-color: rgba(83,74,183,0.12); }
+.pkg-multiagent .pkg-label { color: var(--purple-800); }
+.pkg-multiagent .pkg-items { color: var(--purple-600); }
+
 .review-badge { display: inline-block; background: var(--amber-50); color: var(--amber-800); font-size: 12px; font-weight: 500; padding: 4px 14px; border-radius: 12px; border: 1px solid rgba(133,79,11,0.15); margin: 8px 0 20px; }
 
 .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--border); }
@@ -171,15 +179,19 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
   .pkg-eval .pkg-items, .pkg-obs .pkg-items { color: var(--green-200); }
   .pkg-gray { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.08); }
   .pkg-gray .pkg-label { color: var(--gray-200); } .pkg-gray .pkg-items { color: var(--gray-200); }
+  .pkg-memory { background: rgba(153,53,86,0.1); border-color: rgba(237,147,177,0.15); }
+  .pkg-memory .pkg-label { color: var(--pink-200); } .pkg-memory .pkg-items { color: var(--pink-200); }
+  .pkg-multiagent { background: rgba(83,74,183,0.1); border-color: rgba(175,169,236,0.15); }
+  .pkg-multiagent .pkg-label { color: var(--purple-200); } .pkg-multiagent .pkg-items { color: var(--purple-200); }
   .review-badge { background: rgba(133,79,11,0.15); color: var(--amber-200); border-color: rgba(239,159,39,0.2); }
 }
 </style>
 </head>
 <body>
 
-<h1>llull — roadmap visual</h1>
-<p class="subtitle">Del prototipo al producto · 4 iteraciones con criterio de entrega · 97 items</p>
-<p class="updated">Actualizado: 1 de mayo de 2026</p>
+<h1>llull — roadmap visual (v4)</h1>
+<p class="subtitle">Del prototipo al producto · 4 iteraciones con criterio de entrega · 116 items</p>
+<p class="updated">Actualizado: 5 de mayo de 2026 · Integra aprendizajes de las auditorías de LlullGen y arquitecturas objetivo</p>
 
 <div class="timeline">
 
@@ -195,13 +207,13 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <div class="iteration iter-1">
 <div class="iter-header">
 <span class="iter-name">Iteración 1 — Fundación productiva</span>
-<span class="iter-tag" style="background:var(--purple-50);color:var(--purple-800)">18 items</span>
+<span class="iter-tag" style="background:var(--purple-50);color:var(--purple-800)">19 items</span>
 </div>
-<p class="iter-desc">Servicio desplegable con API REST, PostgreSQL, pgvector, specs versionados en BD, pipeline CI, interfaz web y primeros tests del agente.</p>
+<p class="iter-desc">Servicio desplegable con API REST, PostgreSQL, pgvector, ObjectBus para artefactos analíticos, specs versionados en BD, pipeline CI, interfaz web y primeros tests del agente.</p>
 <div class="packages">
 <div class="pkg pkg-persist status-done">
 <div class="pkg-label">Persistencia (1A)</div>
-<div class="pkg-items">PostgreSQL + pgvector<br>Spec as data · Runs en Postgres<br>ADR pgvector vs Qdrant</div>
+<div class="pkg-items">PostgreSQL + pgvector<br>Spec as data · Runs en Postgres<br><b>ObjectBus 3-tier</b> (hot/warm/cold)<br>ADR-001 pgvector vs Qdrant</div>
 </div>
 <div class="pkg pkg-api status-done">
 <div class="pkg-label">API y servicio (1B)</div>
@@ -230,27 +242,31 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <div class="iteration iter-2a">
 <div class="iter-header">
 <span class="iter-name">Iteración 2A — Datos reales y calidad</span>
-<span class="iter-tag" style="background:var(--teal-50);color:var(--teal-800)">17 items</span>
+<span class="iter-tag" style="background:var(--teal-50);color:var(--teal-800)">26 items</span>
 </div>
-<p class="iter-desc">Validar con datos reales en entorno controlado. Un consultor de Inverence puede probar llull con datos de un cliente candidato.</p>
+<p class="iter-desc">Validar con datos reales en entorno controlado, con memoria analítica activa tipada y control de gasto LLM en sus dimensiones críticas. Un consultor de Inverence puede probar llull con datos de un cliente candidato sin riesgo presupuestario.</p>
 <div class="packages">
 <div class="pkg pkg-data">
 <div class="pkg-label">Datos reales</div>
-<div class="pkg-items">Conectores batch (Excel, CSV, SQL)<br>Data Mapping Layer + LLM<br>Great Expectations · Data bindings</div>
+<div class="pkg-items">Conectores batch (Excel, CSV, SQL)<br>Data Mapping Layer + LLM<br>Great Expectations · Data bindings<br><b>SQL Execution Gateway R0–R3</b></div>
 </div>
 <div class="pkg pkg-domain">
 <div class="pkg-label">Modelo de dominio</div>
 <div class="pkg-items">Generador conversacional de specs<br>Validación automática · Autonomía<br>Portabilidad (own your intelligence)<br>Skills engine + MCP servers</div>
 </div>
-<div class="pkg pkg-eval">
-<div class="pkg-label">Evaluación y calidad</div>
-<div class="pkg-items">Datasets de evaluación<br>Test suites v2 · Judge offline<br>Evaluación pre-promoción</div>
+<div class="pkg pkg-memory">
+<div class="pkg-label">Memoria + control gasto</div>
+<div class="pkg-items"><b>LLMFactory completo</b><br><b>GroundedTokens</b> guardrail<br><b>ActiveAnalyticalState</b><br><b>MemoryService</b> protocol<br>Cuotas tenant (8.7.a)<br>Hard ceilings run (8.7.b)<br>Budget reservation (8.7.c)<br>Fallback chain slot (8.7.d)</div>
 </div>
 </div>
 <div class="packages" style="margin-top:8px">
+<div class="pkg pkg-eval">
+<div class="pkg-label">Evaluación y calidad</div>
+<div class="pkg-items">Datasets de evaluación<br>Test suites v2 · Judge offline<br>Evaluación pre-promoción<br><b>Prompt capture</b></div>
+</div>
 <div class="pkg pkg-gray">
 <div class="pkg-label">Mejoras del agente</div>
-<div class="pkg-items">Versionado semántico spec · Spec como artefacto de despliegue · Prompt registry</div>
+<div class="pkg-items">Versionado semántico spec<br>Spec como artefacto de despliegue<br>Prompt registry (1er registry tipado)</div>
 </div>
 </div>
 </div>
@@ -283,41 +299,45 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <div class="iteration iter-3">
 <div class="iter-header">
 <span class="iter-name">Iteración 3 — Producto diferencial</span>
-<span class="iter-tag" style="background:var(--coral-50);color:var(--coral-800)">~25 items</span>
+<span class="iter-tag" style="background:var(--coral-50);color:var(--coral-800)">~32 items</span>
 </div>
-<p class="iter-desc">La capacidad diferencial más visible. Se presenta al mercado como producto, no como piloto.</p>
+<p class="iter-desc">La capacidad diferencial más visible. DAG builder + Bloque A multi-agente con governance + governance unificada con registries y LineageRecord. Se presenta al mercado como producto, no como piloto.</p>
 <div class="packages">
 <div class="pkg pkg-product">
 <div class="pkg-label">DAG builder y onboarding</div>
 <div class="pkg-items">Editor visual (React Flow)<br>Spec Service extraído<br>Proceso onboarding documentado</div>
 </div>
+<div class="pkg pkg-multiagent">
+<div class="pkg-label">Bloque A multi-agente (gov.)</div>
+<div class="pkg-items"><b>Supervisor LangGraph</b> (ADR-002)<br>Decision Agent + Dashboard Agent<br><b>Capability Graph</b> tipado<br>Recursion guard · depth limits<br>Budgets por peer (8.7.e)</div>
+</div>
 <div class="pkg pkg-domain">
 <div class="pkg-label">Analítica avanzada</div>
 <div class="pkg-items">Optimización multi-variable<br>Paralelización Monte Carlo<br>Scenario comparison · Análisis causal</div>
 </div>
+</div>
+<div class="packages" style="margin-top:8px">
 <div class="pkg pkg-ml">
 <div class="pkg-label">MLOps</div>
 <div class="pkg-items">MLflow tracking + registry<br>DVC datasets · Pipeline reprod.<br>Validación pre-promoción</div>
 </div>
-</div>
-<div class="packages" style="margin-top:8px">
 <div class="pkg pkg-scale">
 <div class="pkg-label">Escalado</div>
 <div class="pkg-items">Redis memoria<br>WebSockets<br>Async tools</div>
 </div>
 <div class="pkg pkg-gov">
-<div class="pkg-label">Gobernanza</div>
-<div class="pkg-items">RBAC + OPA<br>Lineage e2e<br>Autonomía runtime</div>
-</div>
-<div class="pkg pkg-obs">
-<div class="pkg-label">Observabilidad</div>
-<div class="pkg-items">Loki · Alerting<br>Dashboard multi-tenant<br>Coste por tenant</div>
+<div class="pkg-label">Governance + Lineage</div>
+<div class="pkg-items">RBAC + OPA · Autonomía runtime<br><b>Registry pattern unificado</b><br><b>Cost lineage</b> (8.7.f)<br><b>LineageRecord</b> tipado<br><b>Golden eval CI gates</b></div>
 </div>
 </div>
 <div class="packages" style="margin-top:8px">
+<div class="pkg pkg-obs">
+<div class="pkg-label">Observabilidad completa</div>
+<div class="pkg-items">Loki + run_id contextvars<br>Alerting · Dashboard multi-tenant</div>
+</div>
 <div class="pkg pkg-gray">
 <div class="pkg-label">Agente</div>
-<div class="pkg-items">Memoria de dominio · Guardrails · Presupuestos · Documentación operativa</div>
+<div class="pkg-items">Memoria de dominio · Guardrails output LLM · Documentación operativa</div>
 </div>
 </div>
 </div>
@@ -327,7 +347,7 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <div class="iter-header">
 <span class="iter-name">Más allá — bajo demanda</span>
 </div>
-<p class="iter-desc" style="margin-bottom:4px">CDC + Kafka · Ontologías · Multi-agente · Extracción servicios · Event-driven · Despliegues dedicados · Drift + reentrenamiento · Terraform · SDK · Gen. spec desde datos</p>
+<p class="iter-desc" style="margin-bottom:4px">CDC + Kafka · Ontologías · Sub-agentes Alert/Report/Action · Extracción servicios · Event-driven · Despliegues dedicados · Drift + reentrenamiento · Terraform · SDK · Gen. spec desde datos</p>
 <p class="iter-desc" style="font-style:italic">Cada item tiene una señal documentada que lo activa</p>
 </div>
 
@@ -338,16 +358,17 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <div class="legend-item"><div class="legend-dot" style="background:var(--teal-200)"></div>Persistencia / datos</div>
 <div class="legend-item"><div class="legend-dot" style="background:var(--blue-200)"></div>API / operación</div>
 <div class="legend-item"><div class="legend-dot" style="background:var(--green-200)"></div>Ingeniería / eval</div>
-<div class="legend-item"><div class="legend-dot" style="background:var(--amber-200)"></div>Dominio / spec</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--amber-200)"></div>Dominio / spec / gov</div>
 <div class="legend-item"><div class="legend-dot" style="background:var(--red-200)"></div>Seguridad</div>
 <div class="legend-item"><div class="legend-dot" style="background:var(--coral-200)"></div>Producto</div>
-<div class="legend-item"><div class="legend-dot" style="background:var(--purple-200)"></div>MLOps</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--pink-200)"></div>Memoria + gasto LLM</div>
+<div class="legend-item"><div class="legend-dot" style="background:var(--purple-200)"></div>Multi-agente / MLOps</div>
 <div class="legend-item"><div class="legend-dot" style="background:var(--done-text)"></div>✅ Completado</div>
 <div class="legend-item"><div class="legend-dot" style="background:var(--wip-text)"></div>🔧 En progreso</div>
 </div>
 
 <div class="footer-notes">
-Cada iteración entrega valor demostrable independientemente · Las iteraciones tienen criterio de entrega, no fecha · Items fuera de alcance se activan cuando aparece la señal documentada
+v4 · Integra los aprendizajes derivados del análisis de las 4 auditorías de LlullGen y de las 4 arquitecturas objetivo · 19 items nuevos respecto a v3 (en negrita en cada paquete) · Decisiones declaradas en ADR-001 (pgvector), ADR-002 (LangGraph como motor de orquestación), ADR-003 (política de reutilización de componentes de LlullGen) · Cada iteración entrega valor demostrable independientemente · Las iteraciones tienen criterio de entrega, no fecha
 </div>
 
 </body>
