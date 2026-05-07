@@ -111,7 +111,6 @@ def main() -> None:  # noqa: C901
 
     # Start a fresh session
     session_id = _new_session_id()
-    is_new_session = True
     print(f"  ● New session: {session_id}\n")
 
     # -- REPL ------------------------------------------------------------
@@ -141,7 +140,6 @@ def main() -> None:  # noqa: C901
 
         if lower == "session new":
             session_id = _new_session_id()
-            is_new_session = True
             print(f"  ● New session: {session_id}\n")
             continue
 
@@ -158,7 +156,6 @@ def main() -> None:  # noqa: C901
             resolved = _resolve_session(token)
             if resolved:
                 session_id = resolved
-                is_new_session = False
                 print(f"  ● Resumed session: {session_id}\n")
             else:
                 print(f"  Session '{token}' not found.\n")
@@ -187,13 +184,7 @@ def main() -> None:  # noqa: C901
             answer = result.get("answer") or "(no answer generated)"
             print(f"\n{answer}\n")
 
-            # Persist turn metadata in agent_sessions
-            register_turn(
-                session_id,
-                raw,
-                is_new=is_new_session,
-            )
-            is_new_session = False
+            register_turn(session_id, raw)
 
             observer.end_run(success=True)
 

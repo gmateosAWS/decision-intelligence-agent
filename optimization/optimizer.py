@@ -6,7 +6,7 @@ from config.settings import (
     get_price_min,
     get_price_steps,
 )
-from simulation.scenario_runner import run_scenario
+from simulation.montecarlo import run_scenario
 
 
 def optimize_price(system_model):
