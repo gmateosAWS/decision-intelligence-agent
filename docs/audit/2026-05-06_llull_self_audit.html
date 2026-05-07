@@ -272,6 +272,9 @@ body {
 .finding-item .layer-tag { font-size: 11px; color: var(--text2); }
 .finding-item .summary { font-size: 13px; color: var(--text2); margin-top: 4px; }
 .finding-item .summary code { font-family: 'DM Mono', monospace; font-size: 11px; padding: 1px 4px; background: var(--bg2); border-radius: 3px; }
+.finding-item.fixed { opacity: 0.6; }
+.finding-item.fixed .name { text-decoration: line-through; }
+.finding-item .badge-fixed { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 20px; background: var(--strength-bg); color: var(--strength-text); border: 1px solid var(--strength-border); }
 
 /* ---------- Planned gaps grouped ---------- */
 .planned-grid {
@@ -668,14 +671,15 @@ body {
     <div class="summary"><code>config/settings.py:14-37</code> calls <code>get_spec()</code> at module load. A YAML parse error or DB unreachable crashes the import cascade before logging is configured. The recent commit <code>5d2adf5</code> fixed the same antipattern in the planner but skipped <code>settings.py</code>.</div>
   </div>
 
-  <div class="finding-item">
+  <div class="finding-item fixed">
     <div class="head">
       <span class="id">6.3</span>
       <span class="name">pytest missing from requirements-dev.txt</span>
       <span class="severity p1">P1</span>
+      <span class="badge-fixed">FIXED</span>
       <span class="layer-tag">· Codebase #8, #13</span>
     </div>
-    <div class="summary"><code>requirements-dev.txt</code> lists only black, ruff and pre-commit. 14 test files require pytest via convention. Without manual install, tests cannot run.</div>
+    <div class="summary"><code>requirements-dev.txt</code> lists only black, ruff and pre-commit. 14 test files require pytest via convention. Without manual install, tests cannot run. — <strong>Fixed:</strong> added <code>pytest~=8.0</code> and <code>pytest-cov~=5.0</code> (audit-P03).</div>
   </div>
 
   <div class="finding-item">
