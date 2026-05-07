@@ -15,7 +15,7 @@ y delega toda la evaluación causal en él.
 
 import numpy as np
 
-from config.settings import MC_RUNS
+from config.settings import get_mc_runs
 
 
 def monte_carlo(
@@ -43,7 +43,7 @@ def monte_carlo(
           - downside_risk_pct : % de simulaciones con beneficio negativo
     """
     if n_runs is None:
-        n_runs = MC_RUNS
+        n_runs = get_mc_runs()
 
     # Evaluación base (sin ruido) para obtener la estimación central de demanda
     base = system_model.evaluate(price, marketing)

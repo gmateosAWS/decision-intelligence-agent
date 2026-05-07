@@ -41,7 +41,7 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    ├── metrics.py            reads from Postgres (JSONL fallback)
         │    └── dashboard.py          HTML dashboard
         │
-        └── config/settings.py        thin adapter over spec
+        └── config/settings.py        lazy accessor functions over spec (no import-time IO)
 
 api/
 ├── main.py              FastAPI app, lifespan, CORS, global error handler
@@ -167,6 +167,11 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 - [x] UX polish 2: ||u|| serif logo in sidebar + main area header, all-LLM-nodes config display, immersive help expander, tab CSS, markdown sanitization, primary-button example cards with CSS inline
 - [x] Planner-driven language detection: `ToolSelection.language` (ISO 639-1) detected by planner, propagated through AgentState, used by synthesizer (_SYNTH_INSTRUCTIONS) and judge revision (_REVISE_INSTRUCTIONS) for fully language-aware answers
 - [x] Unit tests for planner language propagation (tests/agents/test_planner.py, 5 tests)
+
+### Audit hotfixes (main + fix branches)
+- [x] audit-P03: added `pytest~=8.0` and `pytest-cov~=5.0` to `requirements-dev.txt` (finding 6.3 fixed)
+- [x] audit-P02: `config/settings.py` fully lazy — accessor functions replace module-level constants; callers updated (`optimizer.py`, `montecarlo.py`, `system_model.py`); finding 6.2 fixed
+- [x] fix: `agents/planner.py` `_SYSTEM_PROMPT` lazy (was module-level `get_spec()` call, caused `KeyError: 'agents.planner'` on cold start)
 
 ### Paquete 1A ✅
 - [x] 1.1 PostgreSQL, 1.2 pgvector, 8.1 runs in Postgres, 1.5 spec as data, 1.3 ADR
