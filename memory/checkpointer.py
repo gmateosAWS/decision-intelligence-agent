@@ -37,12 +37,7 @@ def get_checkpointer():
     return _checkpointer
 
 
-def register_turn(
-    session_id: str,
-    query: str,
-    *,
-    is_new: bool = False,  # noqa: ARG001 kept for API compatibility
-) -> None:
+def register_turn(session_id: str, query: str) -> None:
     """
     Upsert a row in agent_sessions for *session_id*.
 

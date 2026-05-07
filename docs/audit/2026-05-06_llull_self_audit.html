@@ -684,34 +684,40 @@ body {
     <div class="summary"><code>requirements-dev.txt</code> lists only black, ruff and pre-commit. 14 test files require pytest via convention. Without manual install, tests cannot run. — <strong>Fixed:</strong> added <code>pytest~=8.0</code> and <code>pytest-cov~=5.0</code> (audit-P03).</div>
   </div>
 
-  <div class="finding-item">
+  <div class="finding-item fixed">
     <div class="head">
       <span class="id">6.4</span>
       <span class="name">Inconsistent declared Python target version</span>
       <span class="severity p2">P2</span>
       <span class="layer-tag">· Codebase #8, #16</span>
-    </div>
+    
+      <span class="badge-fixed">FIXED</span></div>
     <div class="summary"><code>.python-version</code> says <code>3.12</code>; <code>pyproject.toml</code> declares <code>target-version = ["py310"]</code> for black. No CI matrix to validate.</div>
+    <div class="summary" style="margin-top:6px;color:#166534"><strong>Fix applied (2026-05-07):</strong> <code>pyproject.toml [tool.black]</code> updated to <code>target-version = ["py312"]</code>. Branch: <code>fix/audit-P1-hygiene</code>.</div>
   </div>
 
-  <div class="finding-item">
+  <div class="finding-item fixed">
     <div class="head">
       <span class="id">6.5</span>
       <span class="name">CORS allows wildcard methods + headers with credentials</span>
       <span class="severity p2">P2</span>
       <span class="layer-tag">· Codebase #15 · raised to P0 on public exposure</span>
-    </div>
+    
+      <span class="badge-fixed">FIXED</span></div>
     <div class="summary"><code>api/main.py:84-89</code>: <code>allow_methods=["*"]</code>, <code>allow_headers=["*"]</code>, <code>allow_credentials=True</code> is silently inconsistent (CORS spec disallows wildcard with credentials in browsers).</div>
+    <div class="summary" style="margin-top:6px;color:#166534"><strong>Fix applied (2026-05-07):</strong> CORS tightened in <code>api/main.py</code>: <code>allow_credentials=False</code>, explicit methods/headers list, default origins narrowed to localhost:8501+8000. Branch: <code>fix/audit-P1-hygiene</code>.</div>
   </div>
 
-  <div class="finding-item">
+  <div class="finding-item fixed">
     <div class="head">
       <span class="id">6.6</span>
       <span class="name">FAISS allow_dangerous_deserialization without comment</span>
       <span class="severity p2">P2</span>
       <span class="layer-tag">· Codebase #15</span>
-    </div>
+    
+      <span class="badge-fixed">FIXED</span></div>
     <div class="summary"><code>knowledge/retriever.py:130</code>: <code>allow_dangerous_deserialization=True</code> without inline threat-model comment. Today low risk (locally generated indices); grows with multi-tenancy or remote indices.</div>
+    <div class="summary" style="margin-top:6px;color:#166534"><strong>Fix applied (2026-05-07):</strong> Security note added above <code>allow_dangerous_deserialization=True</code> in <code>knowledge/retriever.py</code> documenting the trusted-build-artifact threat model. Branch: <code>fix/audit-P1-hygiene</code>.</div>
   </div>
 </div>
 
@@ -860,12 +866,12 @@ body {
 <div class="remediation-tier tier-p1">
   <div class="tier-h">P1 · I1 close-out + I2A open</div>
   <ol>
-    <li><span class="effort">~5 min</span> &nbsp; <strong>Align <code>pyproject.toml target-version</code> to <code>py312</code>.</strong> Finding 6.4.</li>
-    <li><span class="effort">~15 min</span> &nbsp; <strong>Tighten CORS configuration in <code>api/main.py</code>.</strong> Finding 6.5.</li>
+    <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~5 min</span> &nbsp; <strong>Align <code>pyproject.toml target-version</code> to <code>py312</code>.</strong> Finding 6.4. <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span></li>
+    <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~15 min</span> &nbsp; <strong>Tighten CORS configuration in <code>api/main.py</code>.</strong> Finding 6.5. <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span></li>
     <li><span class="effort">~3-4 days</span> &nbsp; <strong>Begin item 5.10 (ActiveAnalyticalState typed) + 5.11 (MemoryService Protocol).</strong> Largest single move-the-needle item: lifts 12 of 22 Memory dimensions from 0–1 to 2–3.</li>
-    <li><span class="effort">~10 min</span> &nbsp; <strong>Inline <code>simulation/scenario_runner.py</code></strong> into <code>simulation/montecarlo.py</code>.</li>
-    <li><span class="effort">~30 min</span> &nbsp; <strong>Remove <code>is_new</code> param from <code>memory/checkpointer.py:register_turn</code>.</strong> No legacy callers exist.</li>
-    <li><span class="effort">~10 min</span> &nbsp; <strong>Document threat model at <code>knowledge/retriever.py:130</code>.</strong> Finding 6.6.</li>
+    <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~10 min</span> &nbsp; <strong>Inline <code>simulation/scenario_runner.py</code></strong> into <code>simulation/montecarlo.py</code>. <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span></li>
+    <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~30 min</span> &nbsp; <strong>Remove <code>is_new</code> param from <code>memory/checkpointer.py:register_turn</code>.</strong> No legacy callers exist. <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span></li>
+    <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~10 min</span> &nbsp; <strong>Document threat model at <code>knowledge/retriever.py:130</code>.</strong> Finding 6.6. <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span></li>
   </ol>
 </div>
 

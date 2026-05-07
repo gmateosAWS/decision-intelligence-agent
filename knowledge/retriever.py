@@ -124,6 +124,17 @@ def _get_faiss_vectorstore():
         from langchain_openai import OpenAIEmbeddings
 
         try:
+            # SECURITY NOTE (audit finding 6.6):
+            # allow_dangerous_deserialization=True is required because LangChain's
+            # FAISS integration uses pickle for index serialization. This is
+            # acceptable here because:
+            # 1. The FAISS index is generated locally by build_index.py, not
+            #    user-supplied.
+            # 2. The index files (knowledge_index/) are generated at deploy time
+            #    from trusted source documents.
+            # 3. If index files ever become user-supplied artifacts, this must be
+            #    revisited — consider migrating to pgvector-only mode (no pickle).
+            # Threat model: trusted-build-artifact only. No user-uploaded index files.
             _faiss_vectorstore = FAISS.load_local(
                 _INDEX_PATH,
                 OpenAIEmbeddings(),

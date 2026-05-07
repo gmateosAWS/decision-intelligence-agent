@@ -71,21 +71,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — configurable via CORS_ORIGINS env var (comma-separated)
+# CORS — configurable via CORS_ORIGINS env var (comma-separated).
+# CORS tightened per audit finding 6.5. Revisit when SSO (item 7.5) lands.
 _cors_origins = [
     o.strip()
     for o in os.getenv(
         "CORS_ORIGINS",
-        "http://localhost:8501,http://localhost:3000,http://localhost:8000",
+        "http://localhost:8501,http://localhost:8000",
     ).split(",")
     if o.strip()
 ]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
 
 
