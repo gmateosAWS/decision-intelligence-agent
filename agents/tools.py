@@ -23,7 +23,7 @@ from typing import Any, Dict
 
 from knowledge.retriever import retrieve_knowledge
 from optimization.optimizer import optimize_price
-from simulation.scenario_runner import run_scenario
+from simulation.montecarlo import run_scenario
 from spec.spec_loader import get_spec
 from system.system_model import SystemModel
 

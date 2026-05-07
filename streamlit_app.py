@@ -995,11 +995,7 @@ if prompt:
                 },
             }
 
-            register_turn(
-                st.session_state.session_id,
-                prompt,
-                is_new=st.session_state.is_new_session,
-            )
+            register_turn(st.session_state.session_id, prompt)
             st.session_state.is_new_session = False
 
         except Exception as exc:  # noqa: BLE001

@@ -172,6 +172,7 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 - [x] audit-P03: added `pytest~=8.0` and `pytest-cov~=5.0` to `requirements-dev.txt` (finding 6.3 fixed)
 - [x] audit-P02: `config/settings.py` fully lazy — accessor functions replace module-level constants; callers updated (`optimizer.py`, `montecarlo.py`, `system_model.py`); finding 6.2 fixed
 - [x] fix: `agents/planner.py` `_SYSTEM_PROMPT` lazy (was module-level `get_spec()` call, caused `KeyError: 'agents.planner'` on cold start)
+- [x] audit-P1-hygiene: pyproject.toml target-version → py312 (6.4); CORS tightened in api/main.py (6.5); scenario_runner.py inlined into montecarlo.py; `is_new` param removed from `register_turn` + all callers; FAISS threat model documented in retriever.py (6.6)
 
 ### Paquete 1A ✅
 - [x] 1.1 PostgreSQL, 1.2 pgvector, 8.1 runs in Postgres, 1.5 spec as data, 1.3 ADR

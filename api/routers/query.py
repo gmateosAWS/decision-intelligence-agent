@@ -31,7 +31,6 @@ def run_query(req: QueryRequest, graph=Depends(get_graph)) -> QueryResponse:
     from agents.llm_factory import LLMUnavailableError
     from evaluation.observer import AgentObserver
     from memory.checkpointer import register_turn
-    from memory.session_manager import SessionManager
 
     session_id = req.session_id or uuid.uuid4()
     observer = AgentObserver()
@@ -61,8 +60,7 @@ def run_query(req: QueryRequest, graph=Depends(get_graph)) -> QueryResponse:
         total_ms = (time.perf_counter() - t0) * 1000
         record = observer.end_run(success=True) or {}
 
-        existing = SessionManager.get_session(str(session_id))
-        register_turn(str(session_id), req.query, is_new=(existing is None))
+        register_turn(str(session_id), req.query)
 
         return QueryResponse(
             answer=result.get("answer") or "",

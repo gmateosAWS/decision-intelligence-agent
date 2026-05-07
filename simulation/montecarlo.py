@@ -18,6 +18,11 @@ import numpy as np
 from config.settings import get_mc_runs
 
 
+def run_scenario(system_model, price: float, marketing: float) -> dict:
+    """Thin convenience wrapper — evaluate one scenario via Monte Carlo."""
+    return monte_carlo(system_model, price, marketing)
+
+
 def monte_carlo(
     system_model, price: float, marketing: float, n_runs: int = None
 ) -> dict:
