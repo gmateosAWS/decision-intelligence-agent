@@ -1,16 +1,21 @@
 import numpy as np
 
-from config.settings import DEFAULT_MARKETING, PRICE_MAX, PRICE_MIN, PRICE_STEPS
+from config.settings import (
+    get_default_marketing,
+    get_price_max,
+    get_price_min,
+    get_price_steps,
+)
 from simulation.scenario_runner import run_scenario
 
 
 def optimize_price(system_model):
-    prices = np.linspace(PRICE_MIN, PRICE_MAX, PRICE_STEPS)
+    prices = np.linspace(get_price_min(), get_price_max(), get_price_steps())
 
     results = []
 
     for p in prices:
-        r = run_scenario(system_model, p, DEFAULT_MARKETING)
+        r = run_scenario(system_model, p, get_default_marketing())
 
         results.append(r)
 

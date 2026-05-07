@@ -65,7 +65,7 @@ except ImportError:
     _USE_SPEC = False
 
 if not _USE_SPEC:
-    from config.settings import UNIT_COST as _FALLBACK_UNIT_COST
+    from config.settings import get_unit_cost as _get_fallback_unit_cost
 
 
 # ── Registro de fórmulas para nodos derivados ─────────────────────────────────
@@ -97,7 +97,7 @@ class SystemModel:
             self.spec = spec
         else:
             model_path = "models/demand_model.pkl"
-            self.unit_cost = _FALLBACK_UNIT_COST
+            self.unit_cost = _get_fallback_unit_cost()
 
         # ── Bootstrap: generate data and train model if missing ──────────────
         _ensure_data("data/sales.csv")
