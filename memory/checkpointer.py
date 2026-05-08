@@ -134,23 +134,28 @@ def _register_turn_postgres(session_id: str, query: str) -> None:
 
 
 def _register_turn_sqlite(session_id: str, query: str) -> None:
-    now = _utcnow()
-    conn = sqlite3.connect(str(_DB_PATH))
     try:
-        conn.execute(
-            """
-            INSERT INTO agent_sessions
-                (session_id, title, created_at, last_active, turn_count)
-            VALUES (?, ?, ?, ?, 1)
-            ON CONFLICT(session_id) DO UPDATE SET
-                last_active = excluded.last_active,
-                turn_count  = turn_count + 1
-            """,
-            (session_id, query[:60], now, now),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+        # idempotent; table absent when checkpointer is mocked in tests
+        _ensure_sessions_table_sqlite()
+        now = _utcnow()
+        conn = sqlite3.connect(str(_DB_PATH))
+        try:
+            conn.execute(
+                """
+                INSERT INTO agent_sessions
+                    (session_id, title, created_at, last_active, turn_count)
+                VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT(session_id) DO UPDATE SET
+                    last_active = excluded.last_active,
+                    turn_count  = turn_count + 1
+                """,
+                (session_id, query[:60], now, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("register_turn (sqlite) failed: %s", exc)
 
 
 def _ensure_sessions_table_sqlite() -> None:
