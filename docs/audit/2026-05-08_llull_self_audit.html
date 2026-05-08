@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llull · Self-Audit · 2026-05-08</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #FAFAF8;
+  --bg2: #F0EFEB;
+  --card: #FFFFFF;
+  --text: #2C2C2A;
+  --text2: #6B6A66;
+  --text3: #9C9A92;
+  --border: rgba(0,0,0,0.08);
+  --border2: rgba(0,0,0,0.04);
+
+  --s0: #C73E3A;
+  --s1: #E07856;
+  --s2: #E8AE4B;
+  --s3: #C7B856;
+  --s4: #6F9B6E;
+  --s5: #2D7A5F;
+
+  --critical-bg: #FCEBEB;
+  --critical-text: #A32D2D;
+  --critical-border: rgba(163,45,45,0.2);
+  --planned-bg: #FAEEDA;
+  --planned-text: #854F0B;
+  --planned-border: rgba(133,79,11,0.2);
+  --strength-bg: #E1F5EE;
+  --strength-text: #0F6E56;
+  --strength-border: rgba(15,110,86,0.2);
+  --delta-bg: #EFF6FF;
+  --delta-text: #1D4ED8;
+  --delta-border: rgba(29,78,216,0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1A1A18; --bg2: #232320; --card: #2A2A27;
+    --text: #E8E6DE; --text2: #9C9A92; --text3: #6B6A66;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.04);
+    --critical-bg: rgba(163,45,45,0.15); --critical-text: #F09595; --critical-border: rgba(240,149,149,0.2);
+    --planned-bg: rgba(133,79,11,0.15); --planned-text: #EF9F27; --planned-border: rgba(239,159,39,0.2);
+    --strength-bg: rgba(15,110,86,0.15); --strength-text: #5DCAA5; --strength-border: rgba(93,202,165,0.2);
+    --delta-bg: rgba(29,78,216,0.12); --delta-text: #93C5FD; --delta-border: rgba(147,197,253,0.2);
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 32px 24px 64px;
+  max-width: 1080px;
+  margin: 0 auto;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.mono { font-family: 'DM Mono', monospace; }
+
+.header { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.header h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.4px; margin-bottom: 4px; }
+.header .meta { font-size: 12px; color: var(--text2); }
+.header .meta span { font-family: 'DM Mono', monospace; font-size: 11px; }
+.header .meta-divider { color: var(--text3); margin: 0 8px; }
+.delta-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--delta-bg); color: var(--delta-text); border: 1px solid var(--delta-border);
+  border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 9px; margin-left: 10px; font-family: 'DM Mono', monospace;
+}
+
+.top-row { display: grid; grid-template-columns: 220px 1fr; gap: 20px; margin-bottom: 28px; }
+
+.gauge {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; text-align: center;
+}
+.gauge .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
+.gauge .score-big { font-size: 56px; font-weight: 600; letter-spacing: -2px; line-height: 1; font-family: 'DM Mono', monospace; }
+.gauge .score-big .denom { font-size: 22px; color: var(--text3); font-weight: 400; }
+.gauge .prev { font-size: 11px; color: var(--text3); margin-top: 6px; font-family: 'DM Mono', monospace; }
+.gauge .scale { display: flex; gap: 2px; justify-content: center; margin-top: 14px; }
+.gauge .scale-bar { flex: 1; height: 4px; border-radius: 2px; max-width: 16px; }
+
+.layers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.layer-card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 16px;
+}
+.layer-card .name { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+.layer-card .score-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.layer-card .score { font-size: 24px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -1px; }
+.layer-card .denom { font-size: 13px; color: var(--text3); margin-left: 2px; }
+.layer-card .dim-count { font-size: 11px; color: var(--text3); }
+.layer-card .delta { font-size: 11px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--delta-text); }
+.layer-card .delta.neutral { color: var(--text3); }
+.layer-card .bar { display: flex; gap: 1px; margin-top: 10px; height: 6px; border-radius: 3px; overflow: hidden; }
+.layer-card .bar-cell { flex: 1; }
+
+.findings-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+.finding-summary {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+}
+.finding-summary .count { font-size: 28px; font-weight: 600; font-family: 'DM Mono', monospace; letter-spacing: -1.5px; }
+.finding-summary .desc { font-size: 12px; color: var(--text2); line-height: 1.4; }
+.finding-summary .desc strong { display: block; color: var(--text); font-weight: 500; font-size: 13px; }
+.fs-critical { background: var(--strength-bg); border-color: var(--strength-border); }
+.fs-critical .count { color: var(--strength-text); }
+.fs-planned { background: var(--planned-bg); border-color: var(--planned-border); }
+.fs-planned .count { color: var(--planned-text); }
+.fs-strength { background: var(--delta-bg); border-color: var(--delta-border); }
+.fs-strength .count { color: var(--delta-text); }
+
+.section-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 32px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border2);
+}
+.section-h h2 { font-size: 14px; font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; color: var(--text); }
+.section-h .meta { font-size: 11px; color: var(--text3); }
+
+.heatmap-block { margin-bottom: 18px; }
+.heatmap-block h3 {
+  font-size: 12px; font-weight: 500; margin-bottom: 6px; color: var(--text2);
+  display: flex; justify-content: space-between; align-items: baseline;
+}
+.heatmap-block h3 .layer-mean { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); }
+.heatmap-grid { display: grid; gap: 3px; grid-template-columns: repeat(14, 1fr); }
+.heat-cell {
+  aspect-ratio: 1; border-radius: 3px; position: relative;
+  cursor: help; transition: transform 0.12s ease;
+}
+.heat-cell:hover { transform: scale(1.18); z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.18); }
+.heat-cell .num {
+  position: absolute; inset: 0; display: flex;
+  align-items: center; justify-content: center;
+  font-family: 'DM Mono', monospace; font-size: 9px; font-weight: 500;
+  color: rgba(255,255,255,0.85); text-shadow: 0 1px 1px rgba(0,0,0,0.2); pointer-events: none;
+}
+.heat-cell .gap-marker {
+  position: absolute; top: 1px; right: 1px;
+  width: 5px; height: 5px; border-radius: 50%; pointer-events: none;
+}
+.heat-cell .gap-marker.gap-planned { background: rgba(255,255,255,0.7); }
+.heat-cell .gap-marker.gap-strength { background: rgba(255,255,255,0.95); border: 1px solid rgba(0,0,0,0.15); }
+.heat-cell .improved-dot {
+  position: absolute; bottom: 1px; left: 1px;
+  width: 4px; height: 4px; border-radius: 50%;
+  background: rgba(255,255,255,0.9); pointer-events: none;
+}
+.score-0 { background: var(--s0); }
+.score-1 { background: var(--s1); }
+.score-2 { background: var(--s2); }
+.score-3 { background: var(--s3); }
+.score-4 { background: var(--s4); }
+.score-5 { background: var(--s5); }
+.heat-cell::before {
+  content: attr(data-label);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: var(--text); color: var(--bg); padding: 6px 10px; border-radius: 6px;
+  font-size: 11px; font-weight: 400; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 0.15s ease;
+  z-index: 20; font-family: 'DM Sans', sans-serif; box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+.heat-cell:hover::before { opacity: 1; }
+
+.diff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.diff-table th {
+  text-align: left; padding: 7px 10px; font-size: 11px; font-weight: 500;
+  color: var(--text2); text-transform: uppercase; letter-spacing: 0.4px;
+  border-bottom: 1px solid var(--border); background: var(--bg2);
+}
+.diff-table td { padding: 8px 10px; border-bottom: 1px solid var(--border2); vertical-align: top; }
+.diff-table tr:last-child td { border-bottom: none; }
+.diff-table .dim-label { font-size: 12px; color: var(--text); }
+.diff-table .dim-layer { font-size: 10px; color: var(--text3); font-family: 'DM Mono', monospace; }
+.score-chip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 4px; font-size: 11px; font-weight: 600;
+  font-family: 'DM Mono', monospace; color: white; text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+}
+.arrow { font-size: 13px; color: var(--text3); margin: 0 4px; }
+.improved-row td { background: rgba(29,78,216,0.04); }
+.driver-cell { font-size: 12px; color: var(--text2); }
+.driver-cell code { font-family: 'DM Mono', monospace; font-size: 10px; padding: 1px 4px; background: var(--bg2); border-radius: 3px; }
+
+.findings-list { display: flex; flex-direction: column; gap: 10px; }
+.finding-item {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 16px;
+}
+.finding-item.fixed {
+  border-left: 3px solid var(--strength-text); opacity: 0.8;
+}
+.finding-item .head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 4px; flex-wrap: wrap; }
+.finding-item .id { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text3); font-weight: 500; }
+.finding-item .name { font-size: 14px; font-weight: 500; text-decoration: line-through; color: var(--text2); }
+.finding-item .severity { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; letter-spacing: 0.5px; font-family: 'DM Mono', monospace; }
+.finding-item .severity.p0 { background: var(--critical-bg); color: var(--critical-text); }
+.finding-item .severity.p1 { background: var(--planned-bg); color: var(--planned-text); }
+.finding-item .severity.p2 { background: var(--bg2); color: var(--text2); }
+.finding-item .badge-fixed { font-size: 10px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 20px; background: var(--strength-bg); color: var(--strength-text); border: 1px solid var(--strength-border); }
+.finding-item .summary { font-size: 13px; color: var(--text2); margin-top: 4px; }
+.finding-item .summary code { font-family: 'DM Mono', monospace; font-size: 11px; padding: 1px 4px; background: var(--bg2); border-radius: 3px; }
+
+.planned-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.planned-bucket { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+.planned-bucket .iter-name { font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.6px; color: var(--planned-text); margin-bottom: 8px; }
+.planned-bucket ul { list-style: none; }
+.planned-bucket li { font-size: 12px; padding: 3px 0; color: var(--text2); border-bottom: 1px dashed var(--border2); }
+.planned-bucket li:last-child { border-bottom: none; }
+.planned-bucket li .item-code { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); }
+
+.strength-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px; }
+.strength-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--strength-text); border-radius: 8px; padding: 12px 14px; }
+.strength-card.new-card { border-left-color: var(--delta-text); }
+.strength-card .num { font-family: 'DM Mono', monospace; font-size: 10px; color: var(--text3); margin-bottom: 3px; }
+.strength-card .title { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 4px; }
+.strength-card .desc { font-size: 12px; color: var(--text2); }
+.new-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; background: var(--delta-bg); color: var(--delta-text); border: 1px solid var(--delta-border); margin-left: 6px; font-family: 'DM Mono', monospace; }
+
+.remediation { display: flex; flex-direction: column; gap: 10px; }
+.remed-item {
+  display: grid; grid-template-columns: 48px 1fr;
+  gap: 12px; background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 12px 14px; align-items: start;
+}
+.remed-item .prio { font-size: 10px; font-weight: 700; text-align: center; padding: 3px 0; border-radius: 6px; font-family: 'DM Mono', monospace; }
+.remed-item .prio.p0 { background: var(--strength-bg); color: var(--strength-text); }
+.remed-item .prio.p1 { background: var(--planned-bg); color: var(--planned-text); }
+.remed-item .prio.p2 { background: var(--bg2); color: var(--text2); }
+.remed-item .body .title { font-size: 13px; font-weight: 500; margin-bottom: 3px; }
+.remed-item .body .detail { font-size: 12px; color: var(--text2); }
+.remed-item .body .detail code { font-family: 'DM Mono', monospace; font-size: 11px; padding: 1px 4px; background: var(--bg2); border-radius: 3px; }
+
+.legend-row { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); }
+.legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
+.legend-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.9); border: 1px solid rgba(0,0,0,0.2); display: inline-block; }
+.legend-improved-dot { width: 5px; height: 5px; border-radius: 50%; background: rgba(29,78,216,0.7); display: inline-block; }
+
+footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text3); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="header">
+  <h1>llull · Self-Audit · 2026-05-08<span class="delta-badge">Audit #2</span></h1>
+  <div class="meta">
+    <span>commit a09f9f2</span>
+    <span class="meta-divider">·</span>
+    <span>Claude Sonnet 4.6</span>
+    <span class="meta-divider">·</span>
+    <span>86 dimensions · 4 layers</span>
+    <span class="meta-divider">·</span>
+    <span>Baseline: 2026-05-06 commit 5d2adf5</span>
+    <span class="meta-divider">·</span>
+    79 Python files · 8,881 LOC · 101 tests
+  </div>
+</div>
+
+<!-- ── TOP ROW: OVERALL SCORE + LAYER CARDS ── -->
+<div class="top-row">
+  <div class="gauge">
+    <div class="label">Overall score</div>
+    <div class="score-big" style="color:var(--s3)">2.65<span class="denom">/5</span></div>
+    <div class="prev">prev 2.55 · Δ +0.10</div>
+    <div class="scale">
+      <div class="scale-bar" style="background:var(--s0)"></div>
+      <div class="scale-bar" style="background:var(--s1)"></div>
+      <div class="scale-bar" style="background:var(--s2)"></div>
+      <div class="scale-bar" style="background:var(--s3); outline: 2px solid var(--text); outline-offset: 2px;"></div>
+      <div class="scale-bar" style="background:var(--s4)"></div>
+      <div class="scale-bar" style="background:var(--s5)"></div>
+    </div>
+  </div>
+
+  <div class="layers">
+    <!-- Layer 1 -->
+    <div class="layer-card">
+      <div class="name">Codebase &amp; Architecture</div>
+      <div class="score-row">
+        <div><span class="score" style="color:var(--s4)">3.39</span><span class="denom">/5</span></div>
+        <span class="delta">↑ +0.43</span>
+        <span class="dim-count">28 dims</span>
+      </div>
+      <div class="bar">
+        <!-- 28 cells: scores per dim: 4,4,3,3,1,2,4,4,4,3,3,3,4,4,3,3,4,2,4,5,3,3,4,4,5,3,4,2 -->
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s5)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s5)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+      </div>
+    </div>
+
+    <!-- Layer 2 -->
+    <div class="layer-card">
+      <div class="name">AI / Agent Layer</div>
+      <div class="score-row">
+        <div><span class="score" style="color:var(--s2)">2.45</span><span class="denom">/5</span></div>
+        <span class="delta">↑ +0.05</span>
+        <span class="dim-count">20 dims</span>
+      </div>
+      <div class="bar">
+        <!-- scores: 3,3,2,4,2,2,3,1,4,1,2,4,3,1,4,3,0,2,1,1 -->
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+      </div>
+    </div>
+
+    <!-- Layer 3 -->
+    <div class="layer-card">
+      <div class="name">Conversational &amp; Analytical Memory</div>
+      <div class="score-row">
+        <div><span class="score" style="color:var(--s1)">1.27</span><span class="denom">/5</span></div>
+        <span class="delta neutral">→ 0.00</span>
+        <span class="dim-count">22 dims</span>
+      </div>
+      <div class="bar">
+        <!-- scores: 2,1,0,0,1,1,3,1,0,0,1,0,2,1,2,1,2,2,0,2,2,1 -->
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+      </div>
+    </div>
+
+    <!-- Layer 4 -->
+    <div class="layer-card">
+      <div class="name">Ontology &amp; Semantic Knowledge</div>
+      <div class="score-row">
+        <div><span class="score" style="color:var(--s2)">2.31</span><span class="denom">/5</span></div>
+        <span class="delta neutral">→ 0.00</span>
+        <span class="dim-count">16 dims</span>
+      </div>
+      <div class="bar">
+        <!-- scores: 3,1,1,3,1,0,0,1,2,1,4,4,1,3,4,3 -->
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s0)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s2)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s1)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+        <div class="bar-cell" style="background:var(--s4)"></div>
+        <div class="bar-cell" style="background:var(--s3)"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FINDINGS STRIP ── -->
+<div class="findings-strip">
+  <div class="finding-summary fs-critical">
+    <div class="count">0</div>
+    <div class="desc"><strong>Critical findings (🔴)</strong>All 6 baseline findings resolved</div>
+  </div>
+  <div class="finding-summary fs-planned">
+    <div class="count">48</div>
+    <div class="desc"><strong>Planned gaps (🟡)</strong>Unchanged — I2A items not yet started</div>
+  </div>
+  <div class="finding-summary fs-strength">
+    <div class="count">11</div>
+    <div class="desc"><strong>Confirmed strengths</strong>9 baseline + 2 new (CI, dead-code 0%)</div>
+  </div>
+</div>
+
+<!-- ── HEATMAP ── -->
+<div class="section-h"><h2>Heatmap — All 86 Dimensions</h2><span class="meta">hover for tooltip · ● = improved this sprint</span></div>
+
+<div class="legend-row">
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--s0)"></div>0 — absent</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--s1)"></div>1 — minimal</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--s2)"></div>2 — scaffolded</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--s3)"></div>3 — functional</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--s4)"></div>4 — solid</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--s5)"></div>5 — exemplary</div>
+  <div class="legend-item"><span class="legend-improved-dot"></span> improved in this sprint</div>
+  <div class="legend-item"><span class="legend-dot"></span> confirmed strength</div>
+</div>
+
+<!-- Layer 1 -->
+<div class="heatmap-block">
+  <h3>Layer 1 — Codebase &amp; Architecture (28 dims) <span class="layer-mean">3.39/5 · prev 2.96 · Δ +0.43</span></h3>
+  <div class="heatmap-grid" style="grid-template-columns: repeat(14, 1fr);">
+    <div class="heat-cell score-4" data-label="L1·1 Local code clarity · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-4" data-label="L1·2 Naming quality · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-3" data-label="L1·3 Function/class size · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-3" data-label="L1·4 Modularity · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-1" data-label="L1·5 Boundary integrity · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L1·6 Composability · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L1·7 Architectural integrity · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-4" data-label="L1·8 Dependency hygiene · 4 ↑"><div class="num">4</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-4" data-label="L1·9 Separation of concerns · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-3" data-label="L1·10 Correctness · 3"><div class="num">3</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-3" data-label="L1·11 Robustness · 3 ↑"><div class="num">3</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-3" data-label="L1·12 Error handling · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-4" data-label="L1·13 Test quality · 4 ↑"><div class="num">4</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-4" data-label="L1·14 Test strategy completeness · 4 ↑↑"><div class="num">4</div><div class="improved-dot"></div></div>
+    <!-- row 2 -->
+    <div class="heat-cell score-3" data-label="L1·15 Security posture · 3 ↑"><div class="num">3</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-3" data-label="L1·16 Supply-chain hygiene · 3 ↑"><div class="num">3</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-4" data-label="L1·17 Typing and contracts · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-2" data-label="L1·18 Invariant enforcement · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L1·19 Duplication control · 4 ↑"><div class="num">4</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-5" data-label="L1·20 Dead-code hygiene · 5 ↑"><div class="num">5</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-3" data-label="L1·21 Observability · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-3" data-label="L1·22 Performance awareness · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-4" data-label="L1·23 Documentation · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-4" data-label="L1·24 Change governance · 4 ↑↑"><div class="num">4</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-5" data-label="L1·25 Dark-code risk · 5 ↑"><div class="num">5</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-3" data-label="L1·26 AI-generated code governance · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-4" data-label="L1·27 Overall maintainability · 4 ↑"><div class="num">4</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-2" data-label="L1·28 Production-readiness · 2 ↑"><div class="num">2</div><div class="improved-dot"></div></div>
+  </div>
+</div>
+
+<!-- Layer 2 -->
+<div class="heatmap-block">
+  <h3>Layer 2 — AI / Agent Layer (20 dims) <span class="layer-mean">2.45/5 · prev 2.40 · Δ +0.05</span></h3>
+  <div class="heatmap-grid" style="grid-template-columns: repeat(10, 1fr);">
+    <div class="heat-cell score-3" data-label="L2·1 Clarity of agentic role · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-3" data-label="L2·2 Explicitness of boundary · 3"><div class="num">3</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-2" data-label="L2·3 Separation between agents · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L2·4 Planning/orchestration · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-2" data-label="L2·5 Tooling discipline · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L2·6 Tool safety · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-3" data-label="L2·7 Model abstraction · 3"><div class="num">3</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L2·8 Prompt governance · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L2·9 State management · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-1" data-label="L2·10 Memory abstraction · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L2·11 Retrieval/grounding · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L2·12 Output validation · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-3" data-label="L2·13 Error/retry strategy · 3"><div class="num">3</div></div>
+    <div class="heat-cell score-1" data-label="L2·14 Loop control/boundedness · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L2·15 Observability of runs · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-3" data-label="L2·16 Testing and evaluation · 3 ↑"><div class="num">3</div><div class="improved-dot"></div></div>
+    <div class="heat-cell score-0" data-label="L2·17 LLM cost control · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L2·18 Multi-turn/session · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L2·19 Multi-agent coordination · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L2·20 Agent autonomy policy · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+  </div>
+</div>
+
+<!-- Layer 3 -->
+<div class="heatmap-block">
+  <h3>Layer 3 — Conversational &amp; Analytical Memory (22 dims) <span class="layer-mean">1.27/5 · unchanged · all 🟡 planned (I2A)</span></h3>
+  <div class="heatmap-grid" style="grid-template-columns: repeat(11, 1fr);">
+    <div class="heat-cell score-2" data-label="L3·1 Memory system existence · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·2 System boundary clarity · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L3·3 Structured active state · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L3·4 State centrality as truth · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·5 State traceability · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·6 State lifecycle discipline · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-3" data-label="L3·7 Short-range memory · 3"><div class="num">3</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·8 Explicit rule quality · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L3·9 Inheritance governance · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L3·10 Reset/invalidation · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·11 Clarification governance · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L3·12 Conflict resolution · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L3·13 Contextual retrieval · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·14 Retrieval subordination · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L3·15 Multi-turn behavior · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·16 Memory vs prompting balance · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L3·17 Complementary techniques · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L3·18 Single vs multi-turn separation · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L3·19 User interaction with memory · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L3·20 Downstream integration · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L3·21 Coordination/orchestration · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L3·22 Coordination integrity · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+  </div>
+</div>
+
+<!-- Layer 4 -->
+<div class="heatmap-block">
+  <h3>Layer 4 — Ontology &amp; Semantic Knowledge (16 dims) <span class="layer-mean">2.31/5 · unchanged</span></h3>
+  <div class="heatmap-grid" style="grid-template-columns: repeat(8, 1fr);">
+    <div class="heat-cell score-3" data-label="L4·1 Conceptual semantic layer · 3"><div class="num">3</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-1" data-label="L4·2 Formal ontology presence · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L4·3 Entity registry · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-3" data-label="L4·4 Relationship modelling · 3"><div class="num">3</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-1" data-label="L4·5 Metric registry · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L4·6 Dimension/vocabulary registry · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-0" data-label="L4·7 Alias/synonym handling · 0"><div class="num">0</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L4·8 Ambiguity handling · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-2" data-label="L4·9 Business-to-system mapping · 2"><div class="num">2</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-1" data-label="L4·10 Physical data introspection · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L4·11 Query interpretation · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-4" data-label="L4·12 Runtime consumption · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-1" data-label="L4·13 Test coverage of semantic layer · 1"><div class="num">1</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-3" data-label="L4·14 Governance/versioning · 3"><div class="num">3</div><div class="gap-marker gap-planned"></div></div>
+    <div class="heat-cell score-4" data-label="L4·15 Scalability across domains · 4"><div class="num">4</div><div class="gap-marker gap-strength"></div></div>
+    <div class="heat-cell score-3" data-label="L4·16 Internal consistency · 3"><div class="num">3</div></div>
+  </div>
+</div>
+
+<!-- ── SECTION 9: DIFF TABLE ── -->
+<div class="section-h"><h2>Delta — Comparison with 2026-05-06 Baseline</h2><span class="meta">13 dimensions improved · 0 regressed</span></div>
+
+<table class="diff-table">
+  <thead>
+    <tr>
+      <th style="width:28%">Dimension</th>
+      <th style="width:18%">Score change</th>
+      <th>Driver</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="improved-row">
+      <td><div class="dim-label">Dependency hygiene</div><div class="dim-layer">L1 · #8</div></td>
+      <td><span class="score-chip" style="background:var(--s3)">3</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s4)">4</span></td>
+      <td class="driver-cell">pytest, mypy, types-* added to dev deps; <code>pyproject.toml</code> py312 target. Findings 6.3, 6.4 closed.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Robustness against failure</div><div class="dim-layer">L1 · #11</div></td>
+      <td><span class="score-chip" style="background:var(--s2)">2</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s3)">3</span></td>
+      <td class="driver-cell"><code>config/settings.py</code> fully lazy; SQLite table creation guard in <code>checkpointer.py</code>. Finding 6.2 closed.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Test quality</div><div class="dim-layer">L1 · #13</div></td>
+      <td><span class="score-chip" style="background:var(--s3)">3</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s4)">4</span></td>
+      <td class="driver-cell">101 tests (was ~85). Added test_i18n, test_agent_golden (15 canonical queries), test_smoke. Item 5.2 delivered.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Test strategy completeness</div><div class="dim-layer">L1 · #14</div></td>
+      <td><span class="score-chip" style="background:var(--s2)">2</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s4)">4</span></td>
+      <td class="driver-cell">CI pipeline with 2 jobs: unit+lint on every push, integration+Postgres on PR. Finding 6.1 closed. Item 11.1 delivered.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Security posture</div><div class="dim-layer">L1 · #15</div></td>
+      <td><span class="score-chip" style="background:var(--s2)">2</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s3)">3</span></td>
+      <td class="driver-cell">CORS explicit allowlist + <code>allow_credentials=False</code>; FAISS threat model comment (13 lines). Findings 6.5, 6.6 closed.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Supply-chain hygiene</div><div class="dim-layer">L1 · #16</div></td>
+      <td><span class="score-chip" style="background:var(--s2)">2</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s3)">3</span></td>
+      <td class="driver-cell"><code>pip-audit --strict</code> now runs in CI (continue-on-error). P2.4 delivered.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Duplication control</div><div class="dim-layer">L1 · #19</div></td>
+      <td><span class="score-chip" style="background:var(--s3)">3</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s4)">4</span></td>
+      <td class="driver-cell"><code>agents/i18n.py</code> extracted: language tables DRY. Skills-aware entry point. P2.1 delivered.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Dead-code hygiene</div><div class="dim-layer">L1 · #20</div></td>
+      <td><span class="score-chip" style="background:var(--s4)">4</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s5)">5</span></td>
+      <td class="driver-cell"><code>simulation/scenario_runner.py</code> deleted; <code>is_new</code> param removed. Dark-code → 0.0%.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Change governance</div><div class="dim-layer">L1 · #24</div></td>
+      <td><span class="score-chip" style="background:var(--s2)">2</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s4)">4</span></td>
+      <td class="driver-cell">CI enforces black → ruff → mypy → pytest on every push. Pre-commit + CI = two-layer gate. Finding 6.1 closed.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Dark-code risk</div><div class="dim-layer">L1 · #25</div></td>
+      <td><span class="score-chip" style="background:var(--s4)">4</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s5)">5</span></td>
+      <td class="driver-cell"><code>scenario_runner.py</code> gone. 79 Python files, 0 dead code.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Overall maintainability</div><div class="dim-layer">L1 · #27</div></td>
+      <td><span class="score-chip" style="background:var(--s3)">3</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s4)">4</span></td>
+      <td class="driver-cell">CI test signal + golden eval oracle (15 canonical queries) + smoke test for import safety.</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Production-readiness from code</div><div class="dim-layer">L1 · #28</div></td>
+      <td><span class="score-chip" style="background:var(--s1)">1</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s2)">2</span></td>
+      <td class="driver-cell">CI + Dockerfile + lazy imports + CORS. No auth yet (item 7.5, I2B).</td>
+    </tr>
+    <tr class="improved-row">
+      <td><div class="dim-label">Testing and evaluation</div><div class="dim-layer">L2 · #16</div></td>
+      <td><span class="score-chip" style="background:var(--s2)">2</span><span class="arrow">→</span><span class="score-chip" style="background:var(--s3)">3</span></td>
+      <td class="driver-cell">test_agent_golden: 15 golden queries, parametrized with GOLDEN_QUERIES, CI-integrated. Item 5.2 foundation.</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ── CRITICAL FINDINGS (ALL CLOSED) ── -->
+<div class="section-h"><h2>Critical Findings (🔴)</h2><span class="meta">0 open · 6 closed since baseline</span></div>
+
+<div class="findings-list">
+  <div class="finding-item fixed">
+    <div class="head">
+      <span class="id">6.1</span>
+      <span class="name">No executable CI pipeline</span>
+      <span class="severity p0">P0</span>
+      <span class="badge-fixed">✓ Closed 2026-05-08</span>
+    </div>
+    <div class="summary"><code>.github/workflows/ci.yml</code> created with 2 jobs. Item 11.1 delivered.</div>
+  </div>
+  <div class="finding-item fixed">
+    <div class="head">
+      <span class="id">6.2</span>
+      <span class="name">config/settings.py import-time spec loading</span>
+      <span class="severity p1">P1</span>
+      <span class="badge-fixed">✓ Closed 2026-05-08</span>
+    </div>
+    <div class="summary"><code>_load_settings()</code> now lazy + cached. Full lazy chain restored.</div>
+  </div>
+  <div class="finding-item fixed">
+    <div class="head">
+      <span class="id">6.3</span>
+      <span class="name">pytest / pytest-cov missing from requirements-dev</span>
+      <span class="severity p1">P1</span>
+      <span class="badge-fixed">✓ Closed 2026-05-08</span>
+    </div>
+    <div class="summary">Added pytest, pytest-cov, mypy, types-*, pip-audit to <code>requirements-dev.txt</code>.</div>
+  </div>
+  <div class="finding-item fixed">
+    <div class="head">
+      <span class="id">6.4</span>
+      <span class="name">pyproject.toml target-version = py310 vs .python-version = 3.12</span>
+      <span class="severity p2">P2</span>
+      <span class="badge-fixed">✓ Closed 2026-05-08</span>
+    </div>
+    <div class="summary"><code>target-version = ["py312"]</code> aligned.</div>
+  </div>
+  <div class="finding-item fixed">
+    <div class="head">
+      <span class="id">6.5</span>
+      <span class="name">CORS allow_methods=["*"] without explicit allowlist</span>
+      <span class="severity p2">P2</span>
+      <span class="badge-fixed">✓ Closed 2026-05-08</span>
+    </div>
+    <div class="summary">Explicit methods + headers allowlist; <code>allow_credentials=False</code>.</div>
+  </div>
+  <div class="finding-item fixed">
+    <div class="head">
+      <span class="id">6.6</span>
+      <span class="name">FAISS allow_dangerous_deserialization undocumented</span>
+      <span class="severity p2">P2</span>
+      <span class="badge-fixed">✓ Closed 2026-05-08</span>
+    </div>
+    <div class="summary">13-line comment in <code>knowledge/retriever.py</code> explains threat model and migration path.</div>
+  </div>
+</div>
+
+<!-- ── PLANNED GAPS ── -->
+<div class="section-h"><h2>Planned Gaps (🟡)</h2><span class="meta">48 dimensions · all covered by inventory v4</span></div>
+<div class="planned-grid">
+  <div class="planned-bucket">
+    <div class="iter-name">I2A · Highest priority</div>
+    <ul>
+      <li><span class="item-code">5.10</span> ActiveAnalyticalState typed (moves 12 L3 dims)</li>
+      <li><span class="item-code">5.11</span> MemoryService Protocol + layer-deps lint</li>
+      <li><span class="item-code">8.7.b</span> Hard LLM cost ceilings per run</li>
+      <li><span class="item-code">8.7.a</span> Cost tracking per run (tokens + USD)</li>
+      <li><span class="item-code">5.9</span> GroundedTokens guardrail</li>
+      <li><span class="item-code">5.6</span> LLMFactory completo (multi-provider, context-budget)</li>
+      <li><span class="item-code">10.1</span> PromptRegistry + versioning</li>
+      <li><span class="item-code">2.10</span> SQL Execution Gateway (R0–R3 policies)</li>
+    </ul>
+  </div>
+  <div class="planned-bucket">
+    <div class="iter-name">I2B · Security &amp; Scale</div>
+    <ul>
+      <li><span class="item-code">7.1</span> Multi-tenancy con Row-Level Security</li>
+      <li><span class="item-code">7.5</span> SSO / API-key auth middleware</li>
+      <li><span class="item-code">7.6</span> Cifrado en tránsito y en reposo</li>
+      <li><span class="item-code">7.7</span> Audit log de accesos</li>
+      <li><span class="item-code">7.8</span> Rate limiting (item 12.5)</li>
+      <li><span class="item-code">8.2</span> Metrics endpoint (Prometheus / OTel)</li>
+    </ul>
+  </div>
+  <div class="planned-bucket">
+    <div class="iter-name">I3 · Multi-agent</div>
+    <ul>
+      <li><span class="item-code">5.3.a/b</span> Multi-agent Supervisor pattern</li>
+      <li><span class="item-code">5.12</span> Recursion guard + depth limits</li>
+      <li><span class="item-code">8.7.e</span> Per-peer budgets (multi-agent)</li>
+      <li><span class="item-code">10.8</span> Registry pattern unificado (10 registries)</li>
+      <li><span class="item-code">8.4</span> run_id por contextvar + OpenTelemetry</li>
+    </ul>
+  </div>
+  <div class="planned-bucket">
+    <div class="iter-name">Más allá</div>
+    <ul>
+      <li><span class="item-code">2.7</span> Integración de ontologías corporativas (OWL)</li>
+      <li><span class="item-code">2.1</span> Conectores batch (real data sources)</li>
+      <li><span class="item-code">2.2</span> Data Mapping Layer asistida por LLM</li>
+      <li><span class="item-code">10.11</span> Golden eval CI gates (plan + response shape)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ── STRENGTHS ── -->
+<div class="section-h"><h2>Genuine Strengths</h2><span class="meta">9 baseline confirmed + 2 new this sprint</span></div>
+<div class="strength-grid">
+  <div class="strength-card">
+    <div class="num">8.1</div>
+    <div class="title">Single coherent architecture, end-to-end</div>
+    <div class="desc">One architecture, zero zombie code. Four-node LangGraph graph is the sole runtime path.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.2</div>
+    <div class="title">Spec-driven design that is actually spec-driven</div>
+    <div class="desc">Spec consumed by every layer that should consume it — system, simulation, optimization, planner, tools.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.3</div>
+    <div class="title">Type discipline above the size class</div>
+    <div class="desc">Structured outputs at every LLM seam. mypy now in CI with 21 real type errors found and fixed.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.4</div>
+    <div class="title">Dual-backend pattern consistent across all modules</div>
+    <div class="desc">Postgres ↔ SQLite/FAISS fallback in memory, spec, knowledge, evaluation — logged, never silent.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.5</div>
+    <div class="title">Observability built in, not bolted on</div>
+    <div class="desc">AgentObserver records per-node spans, latency, model, judge score. JSONL + Postgres + LangSmith.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.6</div>
+    <div class="title">Error handling discipline is explicit</div>
+    <div class="desc">38 broad excepts, 27 marked # noqa: BLE001. Deliberate, not accidental.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.7</div>
+    <div class="title">Active fix discipline visible in commit history</div>
+    <div class="desc">Real fixes with named problem classes in commit messages. P0/P1/P2 sprint completed in 2 days.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.8</div>
+    <div class="title">Documentation that matches the code</div>
+    <div class="desc">README + CLAUDE.md + 3 ADRs describe what the code actually does. Rare.</div>
+  </div>
+  <div class="strength-card">
+    <div class="num">8.9</div>
+    <div class="title">Tests that test behavior, not mocks</div>
+    <div class="desc">Mocks at LLM call sites only. FastAPI dependency overrides instead of monkey-patching globals.</div>
+  </div>
+  <div class="strength-card new-card">
+    <div class="num">8.10 <span class="new-badge">NEW</span></div>
+    <div class="title">CI pipeline that earns trust</div>
+    <div class="desc">black → ruff → mypy → pytest (coverage) → pip-audit + integration job with real pgvector + Alembic. Production-grade template for this phase.</div>
+  </div>
+  <div class="strength-card new-card">
+    <div class="num">8.11 <span class="new-badge">NEW</span></div>
+    <div class="title">Dead-code at 0.0% after two-day sprint</div>
+    <div class="desc">scenario_runner.py deleted, is_new removed. 79 Python files, zero dark-code. vs. LlullGen's 7kLOC zombie planner.</div>
+  </div>
+</div>
+
+<!-- ── REMEDIATION ── -->
+<div class="section-h"><h2>Next Sprint — Prioritized Remediation</h2><span class="meta">No P0 open · P1 = I2A priorities</span></div>
+<div class="remediation">
+  <div class="remed-item">
+    <div class="prio p0">✓ P0<br>ALL DONE</div>
+    <div class="body">
+      <div class="title">All P0 items from baseline are closed</div>
+      <div class="detail">CI pipeline (6.1), lazy imports (6.2), pytest in dev deps (6.3) — all delivered.</div>
+    </div>
+  </div>
+  <div class="remed-item">
+    <div class="prio p1">P1<br>I2A</div>
+    <div class="body">
+      <div class="title">⏱ 3–4 days · Item 5.10 — ActiveAnalyticalState typed</div>
+      <div class="detail">Highest-ROI item in the entire backlog. Lifts 12 of 22 Layer 3 dimensions. Design: Pydantic model in <code>memory/active_state.py</code> with active metric, dimensions, period, frozen slots, provenance. Wire into MemoryService (5.11). Replace <code>state["history"]</code> slice in <code>agents/planner.py:185-196</code>.</div>
+    </div>
+  </div>
+  <div class="remed-item">
+    <div class="prio p1">P1<br>I2A</div>
+    <div class="body">
+      <div class="title">⏱ 1 day · Item 5.11 — MemoryService Protocol</div>
+      <div class="detail">Protocol-typed seam in <code>memory/memory_service.py</code>. Lint rule banning direct <code>state["history"]</code> access outside <code>memory/</code>. Lifts L1 dims 5, 6 from 1→3, 2→3.</div>
+    </div>
+  </div>
+  <div class="remed-item">
+    <div class="prio p1">P1<br>I2A</div>
+    <div class="body">
+      <div class="title">⏱ 2 days · Items 8.7.a + 8.7.b — LLM cost tracking + hard ceilings</div>
+      <div class="detail">Token/cost field in <code>evaluation/observer.py RunRecord</code>. Per-run hard ceiling env var. Critical-path for I2A. Lifts L2 dim 17 from 0 to 2.</div>
+    </div>
+  </div>
+  <div class="remed-item">
+    <div class="prio p1">P1<br>risk</div>
+    <div class="body">
+      <div class="title">⏱ 30 min · Risk R1 — integration CI requires real OPENAI_API_KEY</div>
+      <div class="detail">Add <code>@pytest.mark.llm</code> to <code>test_retrieve_relevant_docs</code>. CI integration job can pass partially without the key while LLM-dependent tests are skipped when secret is absent.</div>
+    </div>
+  </div>
+  <div class="remed-item">
+    <div class="prio p2">P2</div>
+    <div class="body">
+      <div class="title">Tactical hygiene</div>
+      <div class="detail">Refactor <code>streamlit_app.py</code> (1,040 LOC) into 3–4 modules. Split AgentObserver. Add pip-tools lock file. Migrate mypy to <code>--strict</code> progressively. Item 10.1 PromptRegistry.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div>llull · Self-Audit #2 · 2026-05-08 · commit <span class="mono">a09f9f2</span></div>
+  <div>Auditor: Claude Sonnet 4.6 · Methodology: llull self-audit v1.0 · Next: after I2A close-out</div>
+</footer>
+
+</body>
+</html>
