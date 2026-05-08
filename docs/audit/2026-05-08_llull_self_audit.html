@@ -852,7 +852,7 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border
     <div class="prio p2">P2</div>
     <div class="body">
       <div class="title">Tactical hygiene</div>
-      <div class="detail">Refactor <code>streamlit_app.py</code> (1,040 LOC) into 3–4 modules. Split AgentObserver. Add pip-tools lock file. Migrate mypy to <code>--strict</code> progressively. Item 10.1 PromptRegistry.</div>
+      <div class="detail">Refactor <code>streamlit_app.py</code> (1,040 LOC) into 3–4 modules. <s>Split AgentObserver</s> <strong>CLOSED</strong> (<code>refactor/observer-split</code>): <code>evaluation/sinks/</code> package with <code>RunSink</code> Protocol + JsonlSink + PostgresSink + LangSmithBridge; <code>ConfidenceScorer</code> extracted; 28 new tests. Add pip-tools lock file. Migrate mypy to <code>--strict</code> progressively. Item 10.1 PromptRegistry.</div>
     </div>
   </div>
 </div>

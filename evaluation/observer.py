@@ -5,7 +5,8 @@ AgentObserver: structured observability for every agent run.
 
 Architecture decision:
   - Console output  →  standard Python logging (human-readable)
-  - Persistent data →  JSONL file (always) + agent_runs table (when DATABASE_URL set)
+  - Persistent data →  pluggable RunSink list (JsonlSink always;
+                        PostgresSink when DATABASE_URL set)
   - LangSmith       →  automatic when LANGCHAIN_TRACING_V2=true is set in .env
 
 Usage (in app.py):
@@ -22,11 +23,13 @@ Usage (in workflow nodes):
         ...
         if obs:
             obs.record_planner(action, reasoning, (time.time()-t0)*1000)
+
+Custom sinks (ObjectBus-ready, item 1.6):
+    observer = AgentObserver(sinks=[JsonlSink("logs"), MyCustomSink()])
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import time
@@ -35,6 +38,12 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from evaluation.confidence import ConfidenceScorer
+from evaluation.sinks.base import RunSink
+from evaluation.sinks.jsonl_sink import JsonlSink
+from evaluation.sinks.langsmith_sink import LangSmithBridge
+from evaluation.sinks.postgres_sink import PostgresSink
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -59,7 +68,7 @@ class RunRecord:
     # Tool
     tool_latency_ms: Optional[float] = None
     raw_result_keys: Optional[List[str]] = None
-    confidence_score: Optional[float] = None  # derived from tool output
+    confidence_score: Optional[float] = None
 
     # Synthesizer
     synthesizer_latency_ms: Optional[float] = None
@@ -96,23 +105,32 @@ class AgentObserver:
     Responsibilities
     ----------------
     1. Console logging  – human-readable INFO lines for interactive sessions.
-    2. JSONL persistence – one JSON record per run appended to
-       ``logs/agent_runs.jsonl``.  Compatible with any log-analysis tool.
-    3. Confidence scoring – derives a simple 0-1 score from tool output
-       (Monte Carlo downside risk or optimization margin).
+    2. RunRecord accumulation – gathers per-stage fields into a single record.
+    3. Sink dispatch – calls each RunSink.finalize_run() at end_run().
     4. LangSmith bridge – sets the ``run_name`` tag so every LangGraph
        invocation appears named in the LangSmith UI when tracing is enabled.
+
+    Persistence is handled by the injected sinks (default: JsonlSink +
+    PostgresSink when DATABASE_URL set + LangSmithBridge).
     """
 
     JSONL_FILENAME = "agent_runs.jsonl"
     LOG_FILENAME = "agent.log"
 
-    def __init__(self, log_dir: str = "logs") -> None:
+    def __init__(
+        self,
+        sinks: Optional[List[RunSink]] = None,
+        log_dir: str = "logs",
+    ) -> None:
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.session_id = uuid.uuid4().hex[:8]
         self._run: Optional[RunRecord] = None
         self._run_start: Optional[float] = None
+        self._scorer = ConfidenceScorer()
+        self._sinks: List[RunSink] = (
+            sinks if sinks is not None else self._default_sinks()
+        )
         self._logger = self._build_logger()
 
     # ------------------------------------------------------------------
@@ -177,7 +195,7 @@ class AgentObserver:
                 self._run.error = error
             elif isinstance(result, dict):
                 self._run.raw_result_keys = list(result.keys())
-                self._run.confidence_score = self._derive_confidence(result)
+                self._run.confidence_score = self._scorer.compute_from_result(result)
 
         status = "ERROR" if error else "OK"
         conf = (
@@ -254,7 +272,7 @@ class AgentObserver:
     ) -> Optional[Dict]:
         """
         Close the current run, compute total latency,
-        persist the record to JSONL, and return the record dict.
+        dispatch to all sinks, and return the record dict.
         """
         if not self._run:
             return None
@@ -266,8 +284,8 @@ class AgentObserver:
             self._run.error = error
 
         record = self._sanitize_value(asdict(self._run))
-        self._append_jsonl(record)
-        self._write_postgres(record)
+        for sink in self._sinks:
+            sink.finalize_run(record)
 
         icon = "✓" if self._run.success else "✗"
         self._logger.info(
@@ -279,10 +297,10 @@ class AgentObserver:
         )
         self._run = None
         self._run_start = None
-        return record  # type: ignore[no-any-return]  # _sanitize_value returns Any; value is dict at runtime
+        return record  # type: ignore[no-any-return]
 
     def cancel_run(self, reason: str = "Cancelled") -> None:
-        """Abort the current run without persisting a failed JSONL record."""
+        """Abort the current run without persisting a failed record."""
         if not self._run:
             return
 
@@ -327,13 +345,19 @@ class AgentObserver:
     # Private helpers
     # ------------------------------------------------------------------
 
+    def _default_sinks(self) -> List[RunSink]:
+        sinks: List[RunSink] = [JsonlSink(self.log_dir)]
+        if os.getenv("DATABASE_URL", ""):
+            sinks.append(PostgresSink())
+        sinks.append(LangSmithBridge())
+        return sinks
+
     def _build_logger(self) -> logging.Logger:
         name = f"dia.observer.{self.session_id}"
         logger = logging.getLogger(name)
         logger.setLevel(logging.DEBUG)
         logger.propagate = False
 
-        # Console – concise, human-readable
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
         ch.setFormatter(
@@ -343,7 +367,6 @@ class AgentObserver:
             )
         )
 
-        # File – verbose, for post-mortem debugging
         fh = logging.FileHandler(
             self.log_dir / self.LOG_FILENAME, mode="a", encoding="utf-8"
         )
@@ -358,58 +381,6 @@ class AgentObserver:
         logger.addHandler(ch)
         logger.addHandler(fh)
         return logger
-
-    def _append_jsonl(self, record: Dict) -> None:
-        path = self.log_dir / self.JSONL_FILENAME
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(self._sanitize_value(record), ensure_ascii=False) + "\n")
-
-    def _write_postgres(self, record: Dict) -> None:
-        if not os.getenv("DATABASE_URL", ""):
-            return
-        try:
-            import uuid as _uuid
-
-            from db.engine import get_session
-            from db.models import AgentRun
-
-            with get_session() as session:
-                # Resolve spec_id UUID if present
-                spec_id_raw = record.get("spec_id")
-                try:
-                    spec_uuid = _uuid.UUID(spec_id_raw) if spec_id_raw else None
-                except (ValueError, AttributeError):
-                    spec_uuid = None
-
-                session.add(
-                    AgentRun(
-                        session_id=None,  # hex8 observer id ≠ agent_sessions PK
-                        run_id=record.get("run_id", ""),
-                        query=record.get("query", ""),
-                        action=record.get("action"),
-                        reasoning=record.get("reasoning"),
-                        planner_latency_ms=record.get("planner_latency_ms"),
-                        planner_model=record.get("planner_model"),
-                        tool_latency_ms=record.get("tool_latency_ms"),
-                        confidence_score=record.get("confidence_score"),
-                        synthesizer_latency_ms=record.get("synthesizer_latency_ms"),
-                        answer_length=record.get("answer_length"),
-                        synthesizer_model=record.get("synthesizer_model"),
-                        judge_latency_ms=record.get("judge_latency_ms"),
-                        judge_score=record.get("judge_score"),
-                        judge_passed=record.get("judge_passed"),
-                        judge_revised=record.get("judge_revised"),
-                        judge_feedback=record.get("judge_feedback"),
-                        judge_model=record.get("judge_model"),
-                        total_latency_ms=record.get("total_latency_ms"),
-                        success=record.get("success", True),
-                        error=record.get("error"),
-                        spec_id=spec_uuid,
-                        spec_version=record.get("spec_version"),
-                    )
-                )
-        except Exception as exc:  # noqa: BLE001
-            self._logger.warning("Failed to write run to Postgres: %s", exc)
 
     @staticmethod
     def _sanitize_value(value: Any) -> Any:
@@ -439,26 +410,6 @@ class AgentObserver:
                 pass
 
         return str(value)
-
-    @staticmethod
-    def _derive_confidence(result: Dict) -> Optional[float]:
-        """
-        Heuristic confidence score [0, 1] derived from tool output.
-
-        - Simulation/optimization: 1 - downside_risk_pct / 100
-        - Knowledge: fixed 0.9 (RAG match assumed relevant)
-        - Unknown: None
-        """
-        if "downside_risk_pct" in result:
-            risk = float(result["downside_risk_pct"])
-            return round(max(0.0, 1.0 - risk / 100.0), 3)
-        if "expected_profit" in result:
-            # Optimization result – confidence based on profit being positive
-            profit = float(result.get("expected_profit", 0))
-            return 1.0 if profit > 0 else 0.3
-        if "answer" in result or "documents" in result:
-            return 0.9
-        return None
 
     @staticmethod
     def _truncate(text: str, n: int) -> str:

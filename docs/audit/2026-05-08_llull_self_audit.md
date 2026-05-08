@@ -375,7 +375,7 @@ All P0 items from the baseline have been resolved.
 4. **Refactor `streamlit_app.py`** into 3-4 modules (UI components, business adapters, dashboard glue,
    session state). Reduces the 1,040 LOC monolith. Lifts Codebase dim 3 to 4.
 
-5. **Split `AgentObserver`** into `RunRecorder`, `JsonlSink`, `PostgresSink`, `LangSmithBridge`. Lifts dim 3.
+5. ~~**Split `AgentObserver`** into `RunRecorder`, `JsonlSink`, `PostgresSink`, `LangSmithBridge`. Lifts dim 3.~~ **CLOSED** (`refactor/observer-split`): `evaluation/sinks/` package with `RunSink` Protocol + `JsonlSink` + `PostgresSink` + `LangSmithBridge` stub; `evaluation/confidence.py` with `ConfidenceScorer`; `observer.py` refactored to thin orchestrator. 28 new tests. Public API unchanged.
 
 6. **Add `pip-tools` lock file** (`requirements.lock`) for reproducible builds. Lifts dim 16 from 3 to 4.
 

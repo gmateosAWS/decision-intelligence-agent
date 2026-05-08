@@ -754,9 +754,14 @@ logs/
 
 | Module                    | Responsibility                                                                                           |
 | ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `evaluation/observer.py`  | `AgentObserver` -- wraps each run, records timing, confidence signals, spec traceability, judge verdicts; dual-writes to Postgres + JSONL |
-| `evaluation/metrics.py`   | `load_runs` / `compute_metrics` -- reads from Postgres (`agent_runs`) with JSONL fallback; aggregates latency, confidence and judge-quality metrics |
-| `evaluation/dashboard.py` | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point                          |
+| `evaluation/observer.py`             | `AgentObserver` -- thin orchestrator; accumulates `RunRecord`, dispatches to pluggable `RunSink` list at run end |
+| `evaluation/confidence.py`           | `ConfidenceScorer` -- derives 0-1 confidence from tool output (simulation risk, optimization profit, RAG) |
+| `evaluation/sinks/base.py`           | `RunSink` Protocol -- ObjectBus-ready consumer interface (item 1.6)                            |
+| `evaluation/sinks/jsonl_sink.py`     | `JsonlSink` -- appends one JSON line per run to `agent_runs.jsonl`                             |
+| `evaluation/sinks/postgres_sink.py`  | `PostgresSink` -- writes to `agent_runs` table; fail-open on DB outage                        |
+| `evaluation/sinks/langsmith_sink.py` | `LangSmithBridge` stub -- active when `LANGCHAIN_TRACING_V2=true` (TODO product)              |
+| `evaluation/metrics.py`              | `load_runs` / `compute_metrics` -- reads from Postgres with JSONL fallback                    |
+| `evaluation/dashboard.py`            | `generate_html_dashboard` -- self-contained HTML with Chart.js; CLI entry point               |
 
 ### RunRecord fields
 
