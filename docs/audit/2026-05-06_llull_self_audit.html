@@ -880,10 +880,10 @@ body {
 <div class="remediation-tier tier-p2">
   <div class="tier-h">P2 · tactical hygiene · compound interest</div>
   <ol>
-    <li><strong>Extract <code>agents/i18n.py</code></strong> for the language tables duplicated in workflow.py and judge.py.</li>
+    <li style="opacity:0.55;text-decoration:line-through"><strong>Extract <code>agents/i18n.py</code></strong> for the language tables duplicated in workflow.py and judge.py. <span style="text-decoration:none">FIXED 2026-05-08 — centralized LANGUAGE_NAMES, SYNTH_INSTRUCTIONS, REVISE_INSTRUCTIONS; workflow.py and judge.py import from i18n; 9 unit tests added</span></li>
     <li><strong>Refactor <code>streamlit_app.py</code></strong> (1.040 LOC) into 3-4 modules: UI components, business adapters, dashboard glue, session state.</li>
     <li><strong>Split <code>AgentObserver</code></strong> into <code>RunRecorder</code>, <code>JsonlSink</code>, <code>PostgresSink</code>, <code>LangSmithBridge</code>, <code>ConfidenceScorer</code>.</li>
-    <li><strong>Add <code>mypy --strict</code> and <code>pip-audit</code> to CI</strong> once 11.1 lands.</li>
+    <li style="opacity:0.55;text-decoration:line-through"><strong>Add <code>mypy</code> and <code>pip-audit</code> to CI</strong> once 11.1 lands. <span style="text-decoration:none">FIXED 2026-05-08 — mypy intermediate level (no --strict yet) + pip-audit continue-on-error; 21 pre-existing type errors fixed or suppressed with explanation</span></li>
   </ol>
 </div>
 

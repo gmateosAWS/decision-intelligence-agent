@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import pickle
 from pathlib import Path
-from typing import Dict
+from typing import Any, Callable, Dict
 
 import networkx as nx
 
@@ -72,7 +72,7 @@ if not _USE_SPEC:
 # Cada fórmula recibe el dict de valores ya calculados
 # y devuelve el valor del nodo.
 # Para añadir un nuevo nodo: registrarlo aquí y añadir la arista en system_graph.py
-_NODE_FORMULAS: Dict[str, callable] = {
+_NODE_FORMULAS: Dict[str, Callable[[Dict[str, Any]], Any]] = {
     "revenue": lambda v: v["price"] * v["demand"],
     "cost": lambda v: v["demand"] * v["_unit_cost"],
     "profit": lambda v: v["revenue"] - v["cost"],

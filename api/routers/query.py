@@ -45,7 +45,7 @@ def run_query(req: QueryRequest, graph=Depends(get_graph)) -> QueryResponse:
             spec = get_spec()
             active_row = get_active_spec(spec.domain_name)
             if active_row:
-                observer.set_spec(str(active_row.id), active_row.version)
+                observer.set_spec(str(active_row.id), active_row.version)  # type: ignore[arg-type]  # Column[str] is str at runtime
         except Exception:
             pass
 
