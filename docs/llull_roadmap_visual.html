@@ -191,7 +191,7 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 
 <h1>llull — roadmap visual (v4)</h1>
 <p class="subtitle">Del prototipo al producto · 4 iteraciones con criterio de entrega · 116 items</p>
-<p class="updated">Actualizado: 5 de mayo de 2026 · Integra aprendizajes de las auditorías de LlullGen y arquitecturas objetivo</p>
+<p class="updated">Actualizado: 8 de mayo de 2026 · Paquete 1C completado (CI pipeline, Dockerfile, Test suites v1) · Audit P1 hygiene finalizado · Próximo: ObjectBus (1.6)</p>
 
 <div class="timeline">
 
@@ -213,15 +213,15 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <div class="packages">
 <div class="pkg pkg-persist status-done">
 <div class="pkg-label">Persistencia (1A)</div>
-<div class="pkg-items">PostgreSQL + pgvector<br>Spec as data · Runs en Postgres<br><b>ObjectBus 3-tier</b> (hot/warm/cold)<br>ADR-001 pgvector vs Qdrant</div>
+<div class="pkg-items">PostgreSQL + pgvector<br>Spec as data · Runs en Postgres<br>ADR-001 pgvector vs Qdrant<br><span style="opacity:0.6">⏳ <b>ObjectBus 3-tier</b> (hot/warm/cold) — pendiente</span></div>
 </div>
 <div class="pkg pkg-api status-done">
 <div class="pkg-label">API y servicio (1B)</div>
 <div class="pkg-items">Agent Service (FastAPI)<br>Endpoints admin/health<br>Versionado /v1/</div>
 </div>
-<div class="pkg pkg-eng status-wip">
+<div class="pkg pkg-eng status-done">
 <div class="pkg-label">Ingeniería (1C)</div>
-<div class="pkg-items">Pipeline CI (GitHub Actions)<br>Dockerfile multi-stage<br>Test suites v1</div>
+<div class="pkg-items">Pipeline CI (GitHub Actions)<br>Dockerfile multi-stage<br>Test suites v1 · 76 unit tests</div>
 </div>
 </div>
 <div class="packages" style="margin-top:8px">
