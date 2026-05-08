@@ -89,7 +89,13 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    └── session_manager.py    SQLAlchemy queries (SQLite fallback)
         │
         ├── evaluation/
-        │    ├── observer.py           dual-write: JSONL + Postgres
+        │    ├── observer.py           thin orchestrator: RunRecord accumulation + sink dispatch
+        │    ├── confidence.py         ConfidenceScorer: 0-1 score from tool output (extractable skill)
+        │    ├── sinks/
+        │    │    ├── base.py          RunSink Protocol (ObjectBus-ready, item 1.6)
+        │    │    ├── jsonl_sink.py    JsonlSink: appends to agent_runs.jsonl
+        │    │    ├── postgres_sink.py PostgresSink: writes to agent_runs table
+        │    │    └── langsmith_sink.py LangSmithBridge stub (TODO product)
         │    ├── metrics.py            reads from Postgres (JSONL fallback)
         │    └── dashboard.py          HTML dashboard
         │
@@ -245,248 +251,27 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 - [x] P1 hygiene: pyproject target py312 (6.4), CORS tightened (6.5), scenario_runner inlined, is_new removed, FAISS threat model documented (6.6)
 - [x] Fix: planner \_SYSTEM_PROMPT lazy (import-time IO)
 - [x] P2.1: `agents/i18n.py` extracted — LANGUAGE_NAMES, SYNTH_INSTRUCTIONS, REVISE_INSTRUCTIONS, get_system_language_directive(); workflow.py + judge.py refactored; 9 tests added
+- [x] P2.3: `evaluation/observer.py` split into RunSink Protocol + JsonlSink + PostgresSink + LangSmithBridge + ConfidenceScorer; public API unchanged; 28 new tests in `tests/evaluation/test_sinks.py`
 - [x] P2.4: mypy (intermediate level, --explicit-package-bases) + pip-audit (continue-on-error) added to CI Job 1; 21 pre-existing type errors fixed or suppressed
 
-## Current work: Audit P2.1 + P2.4 — Next: Item 1.6 ObjectBus
+## Current work: Audit P2.3 (observer split) — Next: Item 1.6 ObjectBus
 
-**Branch**: `fix/audit-P2-i18n-and-ci-hardening`
+**Branch**: `refactor/observer-split`
 
-Completed 2026-05-08. Three items delivered. Item 5.7 was removed (completed in 1D, subsumed by LLMFactory pattern).
+Completed 2026-05-08.
 
-### Item 11.1 — Pipeline CI with GitHub Actions
+### Audit P2.3 — AgentObserver split (SRP)
 
-**This is the P0 finding from the self-audit (finding 6.1). Highest leverage fix in the backlog.**
+`evaluation/observer.py` was a monolith mixing RunRecord accumulation, JSONL writing, Postgres writing, confidence scoring, and LangSmith bridging. Split into:
 
-Create `.github/workflows/ci.yml` with two jobs:
+- `evaluation/confidence.py` — `ConfidenceScorer` (extractable skill, item 4.3)
+- `evaluation/sinks/base.py` — `RunSink` Protocol (ObjectBus-ready, item 1.6)
+- `evaluation/sinks/jsonl_sink.py` — `JsonlSink`
+- `evaluation/sinks/postgres_sink.py` — `PostgresSink` (fail-open)
+- `evaluation/sinks/langsmith_sink.py` — `LangSmithBridge` stub (TODO product)
+- `evaluation/observer.py` — thin orchestrator; public API unchanged
 
-**Job 1 — Unit tests + linting (runs on every push and PR)**
-
-```yaml
-name: CI
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: pip install -r requirements.txt -r requirements-dev.txt
-      - run: black --check .
-      - run: ruff check .
-      - run: pytest -m "not integration" --tb=short -q --cov=. --cov-report=term-missing
-```
-
-**Job 2 — Integration tests with Postgres (runs on PR to main only)**
-
-```yaml
-integration:
-  runs-on: ubuntu-latest
-  needs: test
-  if: github.event_name == 'pull_request'
-  services:
-    postgres:
-      image: pgvector/pgvector:pg16
-      env:
-        POSTGRES_DB: llull_test
-        POSTGRES_USER: llull
-        POSTGRES_PASSWORD: llull
-      ports:
-        - 5432:5432
-      options: >-
-        --health-cmd pg_isready
-        --health-interval 10s
-        --health-timeout 5s
-        --health-retries 5
-  env:
-    DATABASE_URL: postgresql://llull:llull@localhost:5432/llull_test
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    - run: pip install -r requirements.txt -r requirements-dev.txt
-    - run: alembic upgrade head
-    - run: python data/generate_data.py
-    - run: python models/train_demand_model.py
-    - run: python knowledge/build_index.py
-    - run: pytest -m integration --tb=short -q
-```
-
-**Important CI considerations:**
-
-- The workflow must NOT require OpenAI or Anthropic API keys to pass. Unit tests mock LLM calls. Integration tests that need LLM calls should be marked `@pytest.mark.llm` and skipped in CI.
-- Add `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` as optional GitHub Secrets for future LLM-based integration tests, but don't block CI on them.
-- Add a badge to README.md: `![CI](https://github.com/gmateosAWS/decision-intelligence-agent/actions/workflows/ci.yml/badge.svg)`
-
-### Item 11.3 — Dockerfile multi-stage
-
-Create `Dockerfile` in project root. Multi-stage build:
-
-```dockerfile
-# Stage 1: builder
-FROM python:3.12-slim AS builder
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
-
-# Stage 2: runtime
-FROM python:3.12-slim
-WORKDIR /app
-COPY --from=builder /install /usr/local
-COPY . .
-
-# Generate data and train model at build time (baked into image)
-RUN python data/generate_data.py && \
-    python models/train_demand_model.py
-
-# Default: run the API
-EXPOSE 8000
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-Add to `docker-compose.yml`:
-
-```yaml
-api:
-  build: .
-  ports:
-    - '8000:8000'
-  environment:
-    - DATABASE_URL=postgresql://llull:llull@postgres:5432/llull
-  depends_on:
-    postgres:
-      condition: service_healthy
-```
-
-Add health check to postgres service:
-
-```yaml
-postgres:
-  # ... existing config ...
-  healthcheck:
-    test: ['CMD-SHELL', 'pg_isready -U llull']
-    interval: 5s
-    timeout: 5s
-    retries: 5
-```
-
-**Design note (Directive 3 — API-first):** The Dockerfile's default CMD runs the API server, not Streamlit. The API is the primary interface; Streamlit is a presentation layer. A separate compose profile or command override can run Streamlit:
-
-```bash
-docker compose run --rm api streamlit run streamlit_app.py --server.port=8501
-```
-
-Add `.dockerignore`:
-
-```
-.git
-.env
-__pycache__
-*.pyc
-.pytest_cache
-logs/
-venv/
-.venv/
-```
-
-### Item 5.2 — Test suites v1 (golden eval foundation)
-
-Create `tests/evaluation/test_agent_golden.py` — a structured test suite of 10-15 canonical queries with expected behaviors. This is NOT a test of exact LLM output text — it tests:
-
-- **Routing correctness**: query → expected tool (optimization/simulation/knowledge)
-- **Result shape**: tool output has expected keys and value types
-- **Parameter propagation**: queries with explicit params pass them to the tool
-- **Language detection**: Spanish queries get `language='es'` in state
-
-Structure the tests as a parametrized fixture so they can be extended to golden eval (item 10.11) later:
-
-```python
-GOLDEN_QUERIES = [
-    {
-        "id": "opt-01",
-        "query": "What price maximizes profit?",
-        "expected_tool": "optimization",
-        "expected_keys": ["optimal_price", "optimal_marketing", "optimal_profit"],
-        "language": "en",
-    },
-    {
-        "id": "opt-02",
-        "query": "¿Qué precio maximiza el beneficio?",
-        "expected_tool": "optimization",
-        "expected_keys": ["optimal_price", "optimal_marketing", "optimal_profit"],
-        "language": "es",
-    },
-    {
-        "id": "sim-01",
-        "query": "Simulate profit at price 25",
-        "expected_tool": "simulation",
-        "expected_keys": ["mean_profit", "std_profit", "n_simulations"],
-        "language": "en",
-    },
-    {
-        "id": "sim-02",
-        "query": "Simula el beneficio con precio 25 y marketing 8000",
-        "expected_tool": "simulation",
-        "expected_keys": ["mean_profit", "std_profit"],
-        "language": "es",
-        "expected_params": {"price": 25},
-    },
-    {
-        "id": "know-01",
-        "query": "What is the demand model?",
-        "expected_tool": "knowledge",
-        "language": "en",
-    },
-    {
-        "id": "know-02",
-        "query": "¿Cómo afecta el marketing a la demanda?",
-        "expected_tool": "knowledge",
-        "language": "es",
-    },
-    # ... add 8-10 more covering edge cases:
-    # - ambiguous queries that could be simulation or knowledge
-    # - queries with boundary params (price at min/max)
-    # - multi-turn follow-ups
-    # - queries in other languages (fr, de) to test language detection
-]
-
-@pytest.mark.parametrize("case", GOLDEN_QUERIES, ids=[c["id"] for c in GOLDEN_QUERIES])
-def test_golden_routing(case, mock_graph):
-    """Verify that the planner routes each query to the expected tool."""
-    ...
-
-@pytest.mark.parametrize("case", [c for c in GOLDEN_QUERIES if "expected_keys" in c], ...)
-def test_golden_result_shape(case, mock_graph):
-    """Verify that tool output contains expected keys."""
-    ...
-```
-
-The mock_graph fixture should:
-
-- Use a real planner (with mocked LLM that returns deterministic ToolSelection)
-- Use real tools (simulation, optimization, knowledge) against test data
-- NOT use real LLM for synthesis/judge — mock those
-
-**Design note (Directive 5 — no orphaned implementations):** This test suite is the foundation for item 10.11 (Golden eval CI gates from ADR-003). The parametrized structure with `GOLDEN_QUERIES` list is designed to evolve into three CI gates: routing gate, plan gate, and response-shape gate. When 10.11 lands, it extends this file — it doesn't replace it.
-
-### Tests for CI and Docker
-
-In `tests/ci/test_smoke.py`:
-
-- `test_imports_succeed` — verify all main modules import without error (catches import-time IO bugs)
-- `test_api_healthz` — FastAPI TestClient, verify `/healthz` returns 200
-- `test_api_readyz` — verify `/readyz` returns dependency status
-
-### After this block
-
-Mark 11.1, 11.3, 5.2 as completed. Update audit report (finding 6.1 fixed).
+28 tests in `tests/evaluation/test_sinks.py`. 113 unit tests pass. Callers in `workflow.py`, `api/`, `streamlit_app.py`, `app.py` require zero changes.
 
 **Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, open I2A formally.
 
