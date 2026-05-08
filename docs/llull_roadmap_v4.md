@@ -202,14 +202,14 @@ Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que s
 | **6.4** Endpoints admin/health             | Imprescindible para cualquier despliegue real. Se añade junto al Agent Service.                                                                                                                              |
 | **6.5** Versionado de API                  | Se decide ahora (prefijo `/v1/`) para no tener que romper compatibilidad después.                                                                                                                            |
 
-### Paquete 1C — Disciplina de ingeniería
+### Paquete 1C — Disciplina de ingeniería ✅ COMPLETADO
 
-| Item                                 | Justificación                                                                                                                                                                   |
+| Item                                 | Estado                                                                                                                                                                          |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **11.1** Pipeline CI                 | Linting, tests unitarios, tests de integración con Postgres de test, build de imagen. Debe existir desde el primer commit del sistema productivo.                               |
-| **11.3** Contenedorización           | Dockerfile multi-stage. Base del despliegue.                                                                                                                                    |
-| **5.2** Test suites del agente (v1)  | Primera versión: 10-15 queries canónicas con respuestas esperadas, ejecutadas en CI. No es el dataset completo de 10.2 todavía — es el mínimo para detectar regresiones graves. |
-| **5.7** Fallback robusto del planner | Política formal de qué hacer cuando el LLM falla. Se hace ahora porque afecta a cómo se comporta el sistema en tests y en producción.                                           |
+| **11.1** Pipeline CI                 | ✅ Hecho — `.github/workflows/ci.yml`: job unit (black+ruff+pytest -m "not integration") + job integration (Postgres service, alembic, data+model bootstrap). CI badge en README. |
+| **11.3** Contenedorización           | ✅ Hecho — `Dockerfile` multi-stage (builder + runtime), `docker-compose.yml` actualizado (api service + healthcheck postgres), `.dockerignore`.                                 |
+| **5.2** Test suites del agente (v1)  | ✅ Hecho — `tests/evaluation/test_agent_golden.py` (15 queries canónicas: routing, param propagation, result shape) + `tests/ci/test_smoke.py` (imports + healthz/readyz). 76 unit tests total. |
+| **5.7** Fallback robusto del planner | ✅ Hecho en 1D — subsumed by LLMFactory pattern (ADR-003/paquete 2A.3).                                                                                                         |
 
 ### Paquete 1D — Parches inmediatos al prototipo ✅ COMPLETADO
 
