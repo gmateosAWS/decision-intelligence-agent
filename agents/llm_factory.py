@@ -87,7 +87,7 @@ def get_chat_model(
     if provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
-        return ChatAnthropic(
+        return ChatAnthropic(  # type: ignore[call-arg]  # langchain-anthropic stubs lag behind actual API; model= is valid
             model=model_name,
             temperature=temperature,
             timeout=_LLM_TIMEOUT,

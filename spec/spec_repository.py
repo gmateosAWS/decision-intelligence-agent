@@ -177,7 +177,7 @@ def activate_spec(spec_id: uuid.UUID) -> Spec:
             Spec.id != spec_id,
         ).update({"status": "archived"})
 
-        target.status = "active"
+        target.status = "active"  # type: ignore[assignment]  # SQLAlchemy Column[str] assignment; correct at runtime
         session.flush()
         session.expunge(target)
         return target
@@ -213,4 +213,4 @@ def seed_from_yaml(yaml_path: Path) -> Spec:
         version=_INITIAL_VERSION,
         description=f"Initial seed from {yaml_path.name}",
     )
-    return activate_spec(spec.id)
+    return activate_spec(spec.id)  # type: ignore[arg-type]  # Column[UUID] is UUID-compatible at runtime

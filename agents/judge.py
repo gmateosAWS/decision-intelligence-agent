@@ -21,44 +21,16 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional, Union
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from .i18n import get_revise_instructions, get_system_language_directive
 from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from .state import AgentState
 
 load_dotenv()
-
-_LANG_NAMES: Dict[str, str] = {
-    "ca": "Catalan",
-    "de": "German",
-    "en": "English",
-    "es": "Spanish",
-    "fr": "French",
-    "it": "Italian",
-    "nl": "Dutch",
-    "pt": "Portuguese",
-}
-
-_REVISE_INSTRUCTIONS: Dict[str, str] = {
-    "es": (
-        "Reescribe la respuesta de forma que esté estrictamente fundamentada "
-        "en la salida de la herramienta, responda directamente la pregunta del "
-        "usuario y sea concisa. No introduzcas hechos que no estén en la salida "
-        "de la herramienta. Si hay números, úsalos. Si hay incertidumbre, "
-        "menciónala.\n\n"
-        "Tu respuesta COMPLETA debe estar en español."
-    ),
-    "en": (
-        "Rewrite the answer so it is strictly grounded in the tool output, "
-        "directly answers the user's question, and stays concise. "
-        "Do not introduce facts not present in the raw tool output. "
-        "If numbers exist, use them. If uncertainty exists, mention it.\n\n"
-        "Your ENTIRE response must be in English."
-    ),
-}
 
 _JUDGE_PROVIDER = os.getenv("JUDGE_PROVIDER", "openai")
 _JUDGE_MODEL = os.getenv("JUDGE_MODEL", "gpt-4o-mini")
@@ -107,7 +79,9 @@ def _init_llms() -> None:
     )
 
 
-def judge_node(state: AgentState, config: Optional[dict] = None) -> Dict[str, Any]:
+def judge_node(
+    state: AgentState, config: Optional[Union[dict, Any]] = None
+) -> Dict[str, Any]:
     """
     Evaluate the synthesized answer and optionally revise it once.
 
@@ -233,24 +207,13 @@ def _revise_answer(
 ) -> str:
     """Generate one grounded revision using the judge feedback."""
     _init_llms()
-    lang_name = _LANG_NAMES.get(language, language)
-    instructions = _REVISE_INSTRUCTIONS.get(
-        language,
-        (
-            "Rewrite the answer so it is strictly grounded in the tool output, "
-            "directly answers the user's question, and stays concise. "
-            "Do not introduce facts not present in the raw tool output. "
-            "If numbers exist, use them. If uncertainty exists, mention it.\n\n"
-            f"Your ENTIRE response must be in {lang_name}."
-        ),
-    )
+    instructions = get_revise_instructions(language)
     revision_messages = [
         {
             "role": "system",
             "content": (
                 f"You revise answers for a Decision Intelligence assistant. "
-                f"You MUST write the revised answer ONLY in {lang_name}. "
-                f"Every single word must be in {lang_name}."
+                f"{get_system_language_directive(language)}"
             ),
         },
         {

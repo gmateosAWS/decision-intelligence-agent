@@ -68,7 +68,7 @@ def _build_postgres_checkpointer(database_url: str):
         from langgraph.checkpoint.postgres import PostgresSaver  # type: ignore[import]
 
         conn = psycopg.connect(database_url, autocommit=True)
-        checkpointer = PostgresSaver(conn)
+        checkpointer = PostgresSaver(conn)  # type: ignore[arg-type]  # psycopg Connection type vs langgraph stubs
         checkpointer.setup()
         logger.info("Using PostgresSaver checkpointer")
         return checkpointer
@@ -122,8 +122,8 @@ def _register_turn_postgres(session_id: str, query: str) -> None:
                     )
                 )
             else:
-                existing.last_active = now
-                existing.turn_count = (existing.turn_count or 0) + 1
+                existing.last_active = now  # type: ignore[assignment]  # SQLAlchemy Column[datetime] assignment
+                existing.turn_count = (existing.turn_count or 0) + 1  # type: ignore[assignment]  # Column[int]
     except Exception as exc:  # noqa: BLE001
         logger.error("register_turn (postgres) failed: %s", exc)
 

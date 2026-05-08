@@ -29,8 +29,20 @@ jobs:
       - name: ruff lint
         run: ruff check .
 
+      - name: mypy type check
+        run: |
+          mypy --ignore-missing-imports --no-strict-optional \
+               --warn-return-any --warn-unused-configs \
+               --explicit-package-bases \
+               agents/ api/ spec/ system/ simulation/ optimization/ \
+               config/ db/ memory/ evaluation/
+
       - name: Unit tests with coverage
         run: pytest -m "not integration" --tb=short -q --cov=. --cov-report=term-missing
+
+      - name: pip-audit security scan
+        run: pip-audit --strict --desc
+        continue-on-error: true
         env:
           # Dummy keys so import-time provider checks don't raise.
           # No real LLM calls are made — unit tests mock all LLM interactions.

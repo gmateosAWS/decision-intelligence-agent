@@ -46,24 +46,24 @@ def _load_settings() -> dict:
 
 
 def get_unit_cost() -> float:
-    return _load_settings()["unit_cost"]
+    return float(_load_settings()["unit_cost"])
 
 
 def get_mc_runs() -> int:
-    return _load_settings()["mc_runs"]
+    return int(_load_settings()["mc_runs"])
 
 
 def get_price_min() -> float:
-    return _load_settings()["price_min"]
+    return float(_load_settings()["price_min"])
 
 
 def get_price_max() -> float:
-    return _load_settings()["price_max"]
+    return float(_load_settings()["price_max"])
 
 
 def get_price_steps() -> int:
-    return _load_settings()["price_steps"]
+    return int(_load_settings()["price_steps"])
 
 
 def get_default_marketing() -> float:
-    return _load_settings()["default_marketing"]
+    return float(_load_settings()["default_marketing"])

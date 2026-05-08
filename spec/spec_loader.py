@@ -337,7 +337,7 @@ def load_spec_from_db(domain_name: str) -> OrganizationalModelSpec:
     logger.debug(
         "Loaded spec for domain '%s' v%s from DB", domain_name, spec_row.version
     )
-    return _parse_raw(raw)
+    return _parse_raw(raw)  # type: ignore[arg-type]  # Column[Any] is dict at runtime
 
 
 # ── SINGLETON ─────────────────────────────────────────────────────────────────

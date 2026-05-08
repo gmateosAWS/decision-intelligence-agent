@@ -33,6 +33,7 @@ from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
+from .i18n import get_synth_instructions, get_system_language_directive
 from .judge import judge_node as _judge_node_impl
 from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from .planner import planner_node as _planner_node_impl
@@ -49,50 +50,6 @@ _FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "")
 
 _synthesizer_llm = None
 _synthesizer_fallback_llm = None
-
-_LANG_NAMES: Dict[str, str] = {
-    "ca": "Catalan",
-    "de": "German",
-    "en": "English",
-    "es": "Spanish",
-    "fr": "French",
-    "it": "Italian",
-    "nl": "Dutch",
-    "pt": "Portuguese",
-}
-
-_SYNTH_INSTRUCTIONS: Dict[str, str] = {
-    "es": (
-        "Proporciona una interpretación de negocio clara y concisa "
-        "(3-5 frases, específica y cuantitativa):\n"
-        "- Qué significan los números\n"
-        "- Qué debería hacer el decisor\n"
-        "- Riesgos o matices relevantes\n\n"
-        "Tu respuesta COMPLETA debe estar en español."
-    ),
-    "en": (
-        "Provide a clear, concise business interpretation "
-        "(3-5 sentences, specific and quantitative):\n"
-        "- What the numbers mean\n"
-        "- What the decision-maker should do\n"
-        "- Key risks or caveats\n\n"
-        "Your ENTIRE response must be in English."
-    ),
-}
-
-
-def _synth_instructions(language: str) -> str:
-    if language in _SYNTH_INSTRUCTIONS:
-        return _SYNTH_INSTRUCTIONS[language]
-    lang_name = _LANG_NAMES.get(language, language)
-    return (
-        "Provide a clear, concise business interpretation "
-        "(3-5 sentences, specific and quantitative):\n"
-        "- What the numbers mean\n"
-        "- What the decision-maker should do\n"
-        "- Key risks or caveats\n\n"
-        f"Your ENTIRE response must be in {lang_name}."
-    )
 
 
 def _get_synthesizer_llms():
@@ -140,7 +97,7 @@ def planner_node(
             latency_ms=elapsed_ms,
             model=_PLANNER_MODEL,
         )
-    return result
+    return result  # type: ignore[no-any-return]  # _sanitize_for_state returns Any; dict at runtime
 
 
 def tool_node(
@@ -191,15 +148,13 @@ def synthesizer_node(
     language = state.get("language", "en")
     raw = _sanitize_for_state(state.get("raw_result") or {})
 
-    lang_name = _LANG_NAMES.get(language, language)
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
     messages = [
         {
             "role": "system",
             "content": (
                 f"You are a business intelligence assistant. "
-                f"You MUST respond ONLY in {lang_name}. "
-                f"Every single word must be in {lang_name}."
+                f"{get_system_language_directive(language)}"
             ),
         },
         {
@@ -208,7 +163,7 @@ def synthesizer_node(
                 f"User query: {query}\n\n"
                 f"Tool used: {action}\n"
                 f"Tool output:\n{raw_text}\n\n"
-                f"{_synth_instructions(language)}"
+                f"{get_synth_instructions(language)}"
             ),
         },
     ]
@@ -235,7 +190,7 @@ def synthesizer_node(
             answer=answer, latency_ms=elapsed_ms, model=_SYNTHESIZER_MODEL
         )
 
-    return _sanitize_for_state({"answer": answer})
+    return _sanitize_for_state({"answer": answer})  # type: ignore[no-any-return]
 
 
 def judge_node(
@@ -243,7 +198,7 @@ def judge_node(
     config: Optional[RunnableConfig] = None,
 ) -> Dict:
     """Evaluate and optionally revise the synthesized answer."""
-    return _sanitize_for_state(_judge_node_impl(state, config))
+    return _sanitize_for_state(_judge_node_impl(state, config))  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

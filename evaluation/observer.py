@@ -279,7 +279,7 @@ class AgentObserver:
         )
         self._run = None
         self._run_start = None
-        return record
+        return record  # type: ignore[no-any-return]  # _sanitize_value returns Any; value is dict at runtime
 
     def cancel_run(self, reason: str = "Cancelled") -> None:
         """Abort the current run without persisting a failed JSONL record."""
