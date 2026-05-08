@@ -85,9 +85,8 @@ jobs:
         run: python models/train_demand_model.py
 
       - name: Build knowledge index
-        # Requires OPENAI_API_KEY — skipped gracefully if unavailable.
+        # Requires OPENAI_API_KEY secret (repo Settings → Secrets → Actions).
         run: python knowledge/build_index.py
-        continue-on-error: true
 
       - name: Integration tests
         run: pytest -m integration --tb=short -q
