@@ -18,19 +18,19 @@
 
 Todo lo relacionado con dónde y cómo se guarda la información que el sistema necesita para funcionar: sesiones, runs, specs, conocimiento, memoria conversacional.
 
-### 1.1 Migración de SQLite a PostgreSQL como núcleo de persistencia `[feature]`
+### 1.1 Migración de SQLite a PostgreSQL como núcleo de persistencia `[feature]` ✅ COMPLETADO
 
 Reemplazar `SqliteSaver` por `AsyncPostgresSaver` para el checkpointing del grafo LangGraph, y mover la tabla `agent_sessions` y los logs JSONL de runs a tablas Postgres. La arquitectura del prototipo está diseñada para que este cambio sea prácticamente una línea en `checkpointer.py`, pero en la práctica implica también definir el esquema relacional completo (sesiones, runs, usuarios, dominios) y una primera iteración de migraciones.
 
 _Resuelve:_ el prototipo no aguanta concurrencia real, no permite queries analíticas sobre runs históricos, y no sirve como base para multi-tenancy. Postgres es el punto de partida para todo lo demás en esta sección.
 
-### 1.2 Capa vectorial sobre pgvector `[feature]`
+### 1.2 Capa vectorial sobre pgvector `[feature]` ✅ COMPLETADO
 
 Reemplazar el índice FAISS local por la extensión `pgvector` de PostgreSQL. El knowledge layer pasa a ser una tabla más de Postgres, con filtros por metadata (tenant, dominio, categoría) como cláusulas WHERE. Elimina la necesidad de mantener un store separado y sincronizarlo con el resto del estado.
 
 _Resuelve:_ FAISS local no soporta multi-tenancy, no tiene filtros nativos, no tiene replicación y no escala a miles de documentos por cliente. Para el volumen previsible del primer año de llull (decenas de miles de docs por cliente), pgvector es suficiente.
 
-### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]`
+### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]` ✅ COMPLETADO
 
 Documentar explícitamente en qué condiciones (volumen, latencia, features avanzadas como hybrid search) migraríamos el vector store a Qdrant. Tener el plan escrito no implica hacerlo — implica que cuando el síntoma aparezca, no hay que rediseñar desde cero.
 
@@ -42,7 +42,7 @@ Separar la memoria del agente en dos capas: Redis para estado activo de sesiones
 
 _Resuelve:_ cuando escale a cientos de sesiones concurrentes con turnos frecuentes, Postgres sufre por el patrón escritura-continua-de-blobs-pequeños + lecturas-muy-frecuentes. Es una optimización que se introduce cuando el síntoma aparece, no de entrada, pero la arquitectura lógica lo contempla desde el día 1.
 
-### 1.5 Spec as data — el spec vive en base de datos `[feature]`
+### 1.5 Spec as data — el spec vive en base de datos `[feature]` ✅ COMPLETADO
 
 El spec YAML deja de ser un fichero estático y pasa a ser un objeto de base de datos con historial de versiones, validación en tiempo real y edición programática desde la UI. Soporta versiones candidate/staging/production igual que un modelo, tiene diffs legibles entre versiones, y cada run del agente queda asociado a la versión exacta del spec con la que se ejecutó.
 
@@ -193,7 +193,7 @@ _Resuelve:_ diferencial comercial directo con clientes enterprise que evalúan r
 
 El motor determinista que calcula: modelos ML, simulación Monte Carlo, optimización, y la integración con los modelos analíticos propietarios de Inverence.
 
-### 4.1 Simulación con parámetros arbitrarios desde la query `[parche]`
+### 4.1 Simulación con parámetros arbitrarios desde la query `[parche]` ✅ COMPLETADO
 
 Actualmente el `simulation_tool` siempre simula con el precio por defecto del spec porque no extrae el valor de la query. El problema ya está resuelto por la extracción dinámica de parámetros en el planner (ver README): el `simulation_tool` ya recibe los params extraídos y los aplica. Pero conviene validar esto con un caso real y documentarlo como cerrado.
 
@@ -308,7 +308,7 @@ Evaluador automático que procesa periódicamente `agent_runs.jsonl` (o su equiv
 
 _Resuelve:_ el judge online ya existe y valida por run, pero no detecta degradaciones lentas del sistema a lo largo del tiempo. El offline es la pieza que cierra el loop de calidad.
 
-### 5.2 Test suites automatizadas de evaluación `[feature]`
+### 5.2 Test suites automatizadas de evaluación `[feature]` ✅ v1 COMPLETADO — v2 (dataset completo + judge offline) en I2A
 
 Colecciones de queries con respuestas esperadas (o con criterios de evaluación vía LLM-as-judge offline) que se ejecutan automáticamente en cada deploy. Incluyen casos representativos de cada tool (routing correcto), casos límite (queries ambiguas, datos faltantes), y casos de regresión (bugs detectados en producción que se añaden para que no vuelvan).
 
@@ -363,13 +363,13 @@ Tipo especial de tool que, en vez de ejecutar síncrona en el nodo `tool` del gr
 
 _Resuelve:_ habilita que simulaciones grandes, optimizaciones multi-variable y generación de informes no bloqueen el hilo conversacional. Es el puente entre el agente y la capa event-driven (ver 6.3).
 
-### 5.5 Ampliar la ventana de historial conversacional `[parche]`
+### 5.5 Ampliar la ventana de historial conversacional `[parche]` ✅ COMPLETADO
 
 Actualmente el planner inyecta los últimos 3 turnos en el prompt. Para conversaciones más largas y análisis iterativos, ampliar a N turnos (configurable) o implementar una estrategia más inteligente: resumen de turnos antiguos + detalle de los recientes.
 
 _Resuelve:_ tres turnos no alcanzan para análisis exploratorios profundos. Es un parche pequeño pero con impacto directo en la calidad de la experiencia multi-turno.
 
-### 5.6 Modelos LLM configurables por nodo + LLMFactory con abstracción multi-proveedor `[feature] [v4 — ampliado]`
+### 5.6 Modelos LLM configurables por nodo + LLMFactory con abstracción multi-proveedor `[feature] [v4 — ampliado]` ✅ v1 COMPLETADO — LLMFactory completo (budget guard + fallback chain) en I2A
 
 Ya está parcialmente implementado en el prototipo (cada nodo puede usar un modelo distinto via env vars). Esta evolución lo convierte en una pieza enterprise-ready completa con tres componentes integrados:
 
@@ -383,7 +383,7 @@ Inspirado en el `LLMFactory` + `budget_guard` de LlullGen (~684 LOC de código o
 
 _Resuelve:_ (a) clave para residencia de datos y para mitigar vendor lock-in (alineado con 3.7 portabilidad); (b) prevención del problema "context window overflow" que aparece la primera vez que un cliente trae histórico largo; (c) control granular del coste por dimensión, alimentando 8.7 y 10.6.
 
-### 5.7 Fallback robusto en el planner `[parche]`
+### 5.7 Fallback robusto en el planner `[parche]` ✅ COMPLETADO — subsumed por LLMFactory pattern (ADR-003)
 
 Ya existe un fallback básico a knowledge tool si el structured output falla. Conviene formalizar la estrategia de fallback: qué hacer si el modelo devuelve un params mal formado, si la tool seleccionada no aplica al contexto, si el judge rechaza la respuesta más de una vez. Cada caso debe tener una respuesta degradada definida, no un crash.
 
@@ -525,7 +525,7 @@ CRUD completo sobre specs: crear, leer, actualizar, eliminar, validar, versionar
 
 _Resuelve:_ centraliza el gobierno del modelo de dominio. Cualquier componente que necesite saber cómo está modelado un dominio concreto pregunta aquí. Habilita spec-as-data (1.5).
 
-#### 6.1.e Agent Service `[feature]`
+#### 6.1.e Agent Service `[feature]` ✅ COMPLETADO — monolito modular FastAPI + LangGraph
 
 Orquestación LangGraph que consume los servicios anteriores como tools remotas. Expone al exterior los endpoints conversacionales: lanzar queries, gestionar sesiones, consultar historia de interacciones. Este es el servicio "cerebro" que razona; el resto son "músculo" que calcula.
 
@@ -557,13 +557,13 @@ Introducción de un message broker (Kafka si ya hay infraestructura por CDC, o R
 
 _Resuelve:_ cualquier tarea pesada bloquea el camino crítico conversacional si no existe esta capa. Solo se introduce cuando una tarea real rompe el SLA — no de entrada — pero la arquitectura del agente (5.4) debe contemplarla desde el principio para que la migración sea aditiva.
 
-### 6.4 Endpoints administrativos y de diagnóstico `[parche]`
+### 6.4 Endpoints administrativos y de diagnóstico `[parche]` ✅ COMPLETADO
 
 Endpoints de health (`/healthz`, `/readyz`), diagnóstico (`/debug/spec`, `/debug/state`), y administración (`/admin/sessions`, `/admin/runs`) con control de acceso estricto. Imprescindible para operar en cualquier entorno no-juguete.
 
 _Resuelve:_ sin esto no hay Kubernetes probes, no hay diagnóstico rápido en incidentes, no hay administración sin acceso directo a la base de datos.
 
-### 6.5 Versionado de API `[parche]`
+### 6.5 Versionado de API `[parche]` ✅ COMPLETADO
 
 Prefijo de versión en la URL (`/v1/...`) y política declarada de compatibilidad hacia atrás. Importante desde el primer día aunque solo haya una versión, para no tener que hacer breaking changes silenciosos después.
 
@@ -651,7 +651,7 @@ _Resuelve:_ algunos clientes grandes no aceptan multi-tenancy lógico por polít
 
 Todo lo que permite saber qué está pasando en el sistema, detectar problemas antes de que el cliente los sufra, y responder cuando algo falla.
 
-### 8.1 Migración de JSONL a tablas de runs en Postgres `[parche]`
+### 8.1 Migración de JSONL a tablas de runs en Postgres `[parche]` ✅ COMPLETADO
 
 El observer sigue funcionando igual, pero los runs se escriben a una tabla Postgres en lugar de a un fichero JSONL. Permite queries analíticas, filtros por tenant/usuario/dominio, y sirve como base para dashboards multi-usuario.
 
@@ -975,7 +975,7 @@ _Resuelve:_ regresión silenciosa de calidad. El gap más documentado en la audi
 
 Pipeline de entrega del código, tests, build, despliegue por entornos. La base sobre la que funcionan MLOps y LLMOps.
 
-### 11.1 Pipeline CI con linting, tests y build `[feature]`
+### 11.1 Pipeline CI con linting, tests y build `[feature]` ✅ COMPLETADO
 
 GitHub Actions o GitLab CI con etapas: linting (ruff, black, mypy), tests unitarios (pytest con cobertura mínima), tests de integración (contenedores efímeros con Postgres, Redis, Kafka), build de imágenes multi-stage firmadas con cosign, generación de SBOM. Bloqueante en cada PR a main.
 
@@ -987,7 +987,7 @@ Tests que levantan el grafo completo con dependencias reales (Postgres de test, 
 
 _Resuelve:_ una clase de bugs específica del sistema agentic: el grafo se compila bien, cada nodo por separado funciona, pero la combinación falla por contratos implícitos rotos.
 
-### 11.3 Contenedorización y empaquetado reproducible `[feature]`
+### 11.3 Contenedorización y empaquetado reproducible `[feature]` ✅ COMPLETADO
 
 Todos los servicios empaquetados en contenedores Docker multi-stage. Imágenes mínimas basadas en distroless o Alpine donde tenga sentido. Configuración por variables de entorno. Cero estado en las imágenes.
 
@@ -1047,13 +1047,13 @@ Cómo se valida que el DAG refleja la realidad de la organización. Tres fuentes
 
 _Resuelve:_ el DAG es una hipótesis, no un hecho. Sin proceso de validación, la calidad del producto depende de que el primer spec sea correcto por suerte.
 
-### 12.4 Política de fallback entre proveedores de LLM `[parche]`
+### 12.4 Política de fallback entre proveedores de LLM `[parche]` ✅ v1 COMPLETADO — se subsume en LLMFactory completo (I2A)
 
 Qué pasa si OpenAI cae. La arquitectura ya permite modelos configurables por nodo (5.6), pero falta una política explícita de failover automático a un proveedor alternativo, con alerting y retorno al proveedor primario cuando se recupere.
 
 _Resuelve:_ dependencia crítica de un único proveedor externo. Los incidentes de los grandes proveedores de LLM son frecuentes.
 
-### 12.5 Gestión de límites de rate limiting del LLM `[parche]`
+### 12.5 Gestión de límites de rate limiting del LLM `[parche]` ✅ v1 COMPLETADO — se subsume en LLMFactory completo (I2A)
 
 Cuando se alcanzan los rate limits del proveedor de LLM (por segundo, por minuto, por día), comportamiento definido: encolado con espera, degradación a otro modelo, rechazo de la query. Nunca crash silencioso.
 

@@ -183,24 +183,24 @@ Al final de esta iteración, llull es un **servicio desplegable con API REST, pe
 
 Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que se empieza a construir el producto.
 
-### Paquete 1A — Base de persistencia
+### Paquete 1A — Base de persistencia ✅ COMPLETADO
 
-| Item                              | Justificación                                                                                                                                                                |
+| Item                              | Estado / Justificación                                                                                                                                                       |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1.1** PostgreSQL                | Desbloquea casi todo. Es lo primero.                                                                                                                                         |
-| **1.2** pgvector                  | Se monta junto a 1.1 porque comparten infraestructura. El knowledge layer migra de FAISS a una tabla más de Postgres.                                                        |
-| **1.5** Spec as data              | Se monta junto a 1.1 porque define parte del schema. Desbloquea el DAG builder, el generador conversacional, y el versionado del spec. Es habilitador de la Iteración 2 y 3. |
-| **1.6** ObjectBus de tres niveles `[v4]` | Se monta junto a 1.1 porque define parte del schema (tabla de objetos warm). Desbloquea simultáneamente memoria analítica activa (5.10), multi-agente sin recomputación (5.3.a) y lineage de objetos (10.10). En I1 va con la versión hot+warm; cold como SQL-recompute se introduce cuando haya volumen real. |
-| **8.1** Runs en Postgres          | Se monta junto a 1.1 porque es parte del schema. Desbloquea judge offline y evaluaciones.                                                                                    |
-| **1.3** Ruta a Qdrant documentada | Un documento, no código. Se escribe ahora para que la decisión pgvector esté documentada como consciente. ADR-001 ya cubre esta decisión.                                    |
+| **1.1** PostgreSQL                | ✅ Hecho — 5 tablas, Alembic migrations, dual-backend con SQLite fallback.                                                                                                   |
+| **1.2** pgvector                  | ✅ Hecho — `knowledge_documents` table con embedding column; FAISS fallback cuando no hay DB.                                                                                 |
+| **1.5** Spec as data              | ✅ Hecho — `specs` + `spec_versions` tables; `spec_repository.py` CRUD; `spec_loader.py` DB-first with YAML fallback.                                                        |
+| **1.6** ObjectBus de tres niveles `[v4]` | ⏳ Pendiente (I1 diferido) — deferred until LlullGen codebase available for reference (ADR-003). Next priority after current audit work. |
+| **8.1** Runs en Postgres          | ✅ Hecho — `agent_runs` table; `PostgresSink` escribe en cada run; JSONL fallback vía `JsonlSink`.                                                                            |
+| **1.3** Ruta a Qdrant documentada | ✅ Hecho — ADR-001 `docs/adr-001-pgvector-over-qdrant.md`.                                                                                                                   |
 
-### Paquete 1B — API y servicio
+### Paquete 1B — API y servicio ✅ COMPLETADO
 
-| Item                                       | Justificación                                                                                                                                                                                                |
+| Item                                       | Estado / Justificación                                                                                                                                                                                                |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **6.1.e** Agent Service (monolito modular) | Porta el prototipo a FastAPI como monolito modular. Todavía no extrae servicios — los módulos internos siguen importados en proceso. Expone los endpoints conversacionales, de sesiones, de runs y de specs. |
-| **6.4** Endpoints admin/health             | Imprescindible para cualquier despliegue real. Se añade junto al Agent Service.                                                                                                                              |
-| **6.5** Versionado de API                  | Se decide ahora (prefijo `/v1/`) para no tener que romper compatibilidad después.                                                                                                                            |
+| **6.1.e** Agent Service (monolito modular) | ✅ Hecho — FastAPI con routers `/v1/query`, `/v1/sessions`, `/v1/runs`, `/v1/specs`, `/healthz`, `/readyz`. Pydantic schemas. |
+| **6.4** Endpoints admin/health             | ✅ Hecho — `/healthz`, `/readyz`, `/v1/debug/config`.                                                                        |
+| **6.5** Versionado de API                  | ✅ Hecho — prefijo `/v1/` en todos los routers.                                                                              |
 
 ### Paquete 1C — Disciplina de ingeniería ✅ COMPLETADO
 
