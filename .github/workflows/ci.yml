@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Job 1: Unit tests + linting (every push / PR) ─────────────────────────
+  test:
+    name: Unit tests + linting
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: black format check
+        run: black --check .
+
+      - name: ruff lint
+        run: ruff check .
+
+      - name: Unit tests with coverage
+        run: pytest -m "not integration" --tb=short -q --cov=. --cov-report=term-missing
+        env:
+          # Dummy keys so import-time provider checks don't raise.
+          # No real LLM calls are made — unit tests mock all LLM interactions.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-placeholder' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'sk-ant-test-placeholder' }}
+
+  # ── Job 2: Integration tests with Postgres (PR to main only) ──────────────
+  integration:
+    name: Integration tests (Postgres)
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'pull_request'
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: llull_test
+          POSTGRES_USER: llull
+          POSTGRES_PASSWORD: llull
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://llull:llull@localhost:5432/llull_test
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'sk-test-placeholder' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'sk-ant-test-placeholder' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run database migrations
+        run: alembic upgrade head
+
+      - name: Generate training data
+        run: python data/generate_data.py
+
+      - name: Train demand model
+        run: python models/train_demand_model.py
+
+      - name: Build knowledge index
+        # Requires OPENAI_API_KEY secret (repo Settings → Secrets → Actions).
+        run: python knowledge/build_index.py
+
+      - name: Integration tests
+        run: pytest -m integration --tb=short -q

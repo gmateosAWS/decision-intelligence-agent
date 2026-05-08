@@ -5,4 +5,5 @@ target-version = ["py312"]
 [tool.pytest.ini_options]
 markers = [
     "integration: marks tests as requiring a running database (deselect with -m 'not integration')",
+    "llm: marks tests that make real LLM API calls (skipped in CI unless keys are set)",
 ]

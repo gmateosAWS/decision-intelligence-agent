@@ -1,5 +1,7 @@
 # Decision Intelligence Agent
 
+![CI](https://github.com/gmateosAWS/decision-intelligence-agent/actions/workflows/ci.yml/badge.svg)
+
 A **Decision Intelligence prototype** that models how an organization works causally, evaluates decisions under uncertainty, and supports prescriptive reasoning -- orchestrated by an LLM agent.
 
 The system combines spec-driven development and deterministic analytical components (causal model, ML, Monte Carlo simulation, optimization) with LLM-based orchestration using LangGraph and basic RAG for system knowledge. The LLM **does not compute decisions**: it orchestrates specialized tools that do.

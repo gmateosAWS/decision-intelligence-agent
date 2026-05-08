@@ -651,14 +651,16 @@ body {
 </div>
 
 <div class="findings-list">
-  <div class="finding-item">
+  <div class="finding-item fixed">
     <div class="head">
       <span class="id">6.1</span>
       <span class="name">No executable CI pipeline</span>
       <span class="severity">P0</span>
       <span class="layer-tag">· Codebase #14, #24</span>
+      <span class="badge-fixed">FIXED</span>
     </div>
     <div class="summary">Inventory item <code>11.1 Pipeline CI</code> is in I1 but no <code>.github/workflows/</code> exists. 1.300 LOC of tests across 14 files cannot be exercised automatically. <code>pre-commit</code> hooks protect local commits, not pushes.</div>
+    <div class="summary" style="margin-top:6px;color:#166534"><strong>Fix applied (2026-05-08, branch feature/11.1-ci-pipeline):</strong> <code>.github/workflows/ci.yml</code> created with two jobs: (1) unit tests + black + ruff on every push; (2) integration tests with Postgres service on PR to main. Dockerfile multi-stage added. 76 unit tests (36 new: golden eval + smoke). CI badge added to README. Audit P0 finding resolved.</div>
   </div>
 
   <div class="finding-item fixed">
@@ -857,7 +859,7 @@ body {
 <div class="remediation-tier tier-p0">
   <div class="tier-h">P0 · before next iteration milestone</div>
   <ol>
-    <li><span class="effort">~1 day</span> &nbsp; <strong>Land item 11.1 (Pipeline CI)</strong> — GitHub Actions running pytest non-integration on push, integration with Postgres service container as second job. Fixes finding 6.1; lifts dimensions 13, 14, 24, 25, 28 simultaneously.</li>
+    <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~1 day</span> &nbsp; <strong>Land item 11.1 (Pipeline CI)</strong> — GitHub Actions running pytest non-integration on push, integration with Postgres service container as second job. Fixes finding 6.1; lifts dimensions 13, 14, 24, 25, 28 simultaneously.</li> <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-08</span>
     <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~30 min</span> &nbsp; <strong>Fix <code>config/settings.py</code> import-time loading</strong> — mirror the lazy pattern of <code>agents/planner.py:166-173</code>. Fixes finding 6.2.</li> <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span>
     <li style="opacity:0.55;text-decoration:line-through"><span class="effort">~5 min</span> &nbsp; <strong>Add <code>pytest</code>, <code>pytest-cov</code> to <code>requirements-dev.txt</code></strong>. Fixes finding 6.3.</li> <span class="badge-fixed" style="text-decoration:none">FIXED 2026-05-07</span>
   </ol>

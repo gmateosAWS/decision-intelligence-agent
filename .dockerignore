@@ -1,0 +1,21 @@
+.git
+.env
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.ruff_cache
+logs/
+venv/
+.venv/
+*.egg-info
+dist/
+# Generated artifacts — rebuilt at image build time
+data/sales.csv
+models/demand_model.pkl
+knowledge_index/
+# Dev/CI only
+requirements-dev.txt
+tests/
+.github/
+docs/

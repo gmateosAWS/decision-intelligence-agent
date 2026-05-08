@@ -53,20 +53,20 @@ def test_list_runs_with_db(client):
         mock_query.limit.return_value = mock_query
         mock_query.all.return_value = [_make_run_row()]
 
-        from api.dependencies import get_db
         from api.main import app
+        from api.routers.runs import _get_db_or_503
 
-        app.dependency_overrides[get_db] = lambda: mock_session
+        app.dependency_overrides[_get_db_or_503] = lambda: mock_session
         response = client.get("/v1/runs")
         assert response.status_code == 200
         data = response.json()
         assert data["total"] == 1
         assert data["runs"][0]["action"] == "optimization"
     finally:
-        from api.dependencies import get_db
         from api.main import app
+        from api.routers.runs import _get_db_or_503
 
-        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(_get_db_or_503, None)
         os.environ.pop("DATABASE_URL", None)
 
 
@@ -81,17 +81,17 @@ def test_get_run_not_found(client):
         mock_query.filter.return_value = mock_query
         mock_query.first.return_value = None
 
-        from api.dependencies import get_db
         from api.main import app
+        from api.routers.runs import _get_db_or_503
 
-        app.dependency_overrides[get_db] = lambda: mock_session
+        app.dependency_overrides[_get_db_or_503] = lambda: mock_session
         response = client.get("/v1/runs/nonexistent-run-id")
         assert response.status_code == 404
     finally:
-        from api.dependencies import get_db
         from api.main import app
+        from api.routers.runs import _get_db_or_503
 
-        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(_get_db_or_503, None)
         os.environ.pop("DATABASE_URL", None)
 
 
@@ -105,17 +105,17 @@ def test_filter_runs_by_invalid_session_uuid(client):
         mock_session.query.return_value = mock_query
         mock_query.order_by.return_value = mock_query
 
-        from api.dependencies import get_db
         from api.main import app
+        from api.routers.runs import _get_db_or_503
 
-        app.dependency_overrides[get_db] = lambda: mock_session
+        app.dependency_overrides[_get_db_or_503] = lambda: mock_session
         response = client.get("/v1/runs?session_id=not-a-uuid")
         assert response.status_code == 400
     finally:
-        from api.dependencies import get_db
         from api.main import app
+        from api.routers.runs import _get_db_or_503
 
-        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(_get_db_or_503, None)
         os.environ.pop("DATABASE_URL", None)
 
 

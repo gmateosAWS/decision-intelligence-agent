@@ -34,12 +34,14 @@ def _row_to_response(row, *, detail: bool = False) -> RunResponse:
     )
 
 
-def _require_db() -> None:
+def _get_db_or_503():
+    """Dependency: returns 503 (not RuntimeError) when DATABASE_URL is absent."""
     if not os.getenv("DATABASE_URL", ""):
         raise HTTPException(
             status_code=503,
             detail="Run history requires DATABASE_URL to be configured.",
         )
+    yield from get_db()
 
 
 @router.get("/runs", response_model=RunListResponse, summary="List agent runs")
@@ -47,10 +49,9 @@ def list_runs(
     session_id: Optional[str] = Query(None, description="Filter by session UUID"),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db=Depends(get_db),
+    db=Depends(_get_db_or_503),
 ) -> RunListResponse:
     """Return agent runs ordered by most-recent first, filtered by session."""
-    _require_db()
     from db.models import AgentRun
 
     q = db.query(AgentRun).order_by(AgentRun.timestamp.desc())
@@ -70,9 +71,8 @@ def list_runs(
     response_model=RunResponse,
     summary="Get run detail",
 )
-def get_run(run_id: str, db=Depends(get_db)) -> RunResponse:
+def get_run(run_id: str, db=Depends(_get_db_or_503)) -> RunResponse:
     """Return full detail for one run, including raw tool output."""
-    _require_db()
     from db.models import AgentRun
 
     row = db.query(AgentRun).filter(AgentRun.run_id == run_id).first()
