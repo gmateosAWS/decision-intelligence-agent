@@ -220,14 +220,7 @@ All 6 findings from the 2026-05-06 audit have been resolved. Verification:
 | 6.5 — CORS `allow_methods=["*"]` | P2 | Explicit allowlist, `allow_credentials=False` | `05ce957` |
 | 6.6 — FAISS `allow_dangerous_deserialization` undocumented | P2 | 13-line comment with threat model + migration path | `05ce957` |
 
-One **new potential risk** flagged (not 🔴, borderline 🟡):
-
-### Risk R1 — Integration CI requires real `OPENAI_API_KEY` to pass
-
-- **Context**: The integration job in `ci.yml` runs `python knowledge/build_index.py` (line 102) without `continue-on-error: true`. With a fake key (`sk-test-placeholder`), this step fails, blocking the integration job.
-- **Searches performed**: `grep -i "secret\|api.key\|integration.test" docs/llull_inventario_v4.md → 0 specific hits`; `grep "11.1" docs/llull_roadmap_v4.md → item 11.1 covers CI but not secrets management specifically`. Not in ADRs.
-- **Classification**: **🟡 (documented/accepted risk)** — the CI YAML has an inline comment: "Requires OPENAI_API_KEY secret (repo Settings → Secrets → Actions)". The user confirmed the key will be added to GitHub Secrets. The risk is real but acknowledged, not unplanned.
-- **Recommended action**: Add `test_retrieve_relevant_docs` to a `@pytest.mark.llm` group so the integration job can pass partially even if the key is missing, while the LLM-dependent tests are skipped on PRs where the secret is unavailable. ~30 minutes.
+No new risks to flag. The integration job now carries an explicit `if:` guard (`github.event.pull_request.head.repo.full_name == github.repository`) that skips it on PRs from external forks, and a comment documenting the Secrets requirement. `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are confirmed configured in the repository's Secrets settings and verified passing in CI.
 
 ---
 
@@ -377,22 +370,19 @@ All P0 items from the baseline have been resolved.
    field to `RunRecord` in `evaluation/observer.py`. Add per-run hard ceiling env var. These are the
    critical-path items for I2A per the roadmap. Lifts AI Layer dim 17 from 0 to 2.
 
-4. **⏱ 30 min · Risk R1 mitigation.** Add `@pytest.mark.llm` to `test_retrieve_relevant_docs` and add the
-   LLM marker to the integration CI step so the job can partially pass without a real API key.
-
 ### P2 — Tactical hygiene (compound interest)
 
-5. **Refactor `streamlit_app.py`** into 3-4 modules (UI components, business adapters, dashboard glue,
+4. **Refactor `streamlit_app.py`** into 3-4 modules (UI components, business adapters, dashboard glue,
    session state). Reduces the 1,040 LOC monolith. Lifts Codebase dim 3 to 4.
 
-6. **Split `AgentObserver`** into `RunRecorder`, `JsonlSink`, `PostgresSink`, `LangSmithBridge`. Lifts dim 3.
+5. **Split `AgentObserver`** into `RunRecorder`, `JsonlSink`, `PostgresSink`, `LangSmithBridge`. Lifts dim 3.
 
-7. **Add `pip-tools` lock file** (`requirements.lock`) for reproducible builds. Lifts dim 16 from 3 to 4.
+6. **Add `pip-tools` lock file** (`requirements.lock`) for reproducible builds. Lifts dim 16 from 3 to 4.
 
-8. **`mypy --strict` migration.** Progressive: `--strict` on `agents/` first, then expand. Currently
+7. **`mypy --strict` migration.** Progressive: `--strict` on `agents/` first, then expand. Currently
    intermediate mode. Lifts dim 17 from 4 to 5.
 
-9. **Item 10.1 PromptRegistry.** Version the inline prompts in `agents/planner.py` and `agents/judge.py`.
+8. **Item 10.1 PromptRegistry.** Version the inline prompts in `agents/planner.py` and `agents/judge.py`.
    Lifts AI Layer dim 8 from 1 to 2.
 
 ---
