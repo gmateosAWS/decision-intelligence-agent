@@ -25,12 +25,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
-    from spec.versioning import SpecVersion
+    from spec.versioning import SpecVersion as SemVer
 
 import yaml
 
 from db.engine import get_session
-from db.models import Spec, SpecVersion
+from db.models import Spec
+from db.models import SpecVersion as ORMSpecVersion
 
 logger = logging.getLogger(__name__)
 
@@ -42,18 +43,18 @@ _INITIAL_VERSION = "1.0.0"
 # ---------------------------------------------------------------------------
 
 
-def _max_version_for_domain(session: Any, domain_name: str) -> "SpecVersion":
-    """Return the highest SpecVersion stored for *domain_name* in *session*."""
-    from spec.versioning import SpecVersion
+def _max_version_for_domain(session: Any, domain_name: str) -> "SemVer":
+    """Return the highest SemVer stored for *domain_name* in *session*."""
+    from spec.versioning import SpecVersion as SemVer
 
     rows = session.query(Spec.version).filter_by(domain_name=domain_name).all()
     versions = []
     for (v,) in rows:
         try:
-            versions.append(SpecVersion.parse(v))
+            versions.append(SemVer.parse(v))
         except ValueError:
             pass
-    return max(versions, default=SpecVersion(0, 0, 0))
+    return max(versions, default=SemVer(0, 0, 0))
 
 
 # ---------------------------------------------------------------------------
@@ -96,7 +97,7 @@ def create_spec(
         session.flush()  # populate spec.id before creating version
 
         session.add(
-            SpecVersion(
+            ORMSpecVersion(
                 spec_id=spec.id,
                 version=version,
                 yaml_content=yaml_content,
@@ -169,7 +170,8 @@ def update_spec(
 
     The new row has status='draft'. Call activate_spec() to promote it.
     """
-    from spec.versioning import BumpType, SpecVersion, detect_bump_type
+    from spec.versioning import BumpType, detect_bump_type
+    from spec.versioning import SpecVersion as SemVer
 
     parsed = yaml.safe_load(yaml_content)
 
@@ -187,7 +189,7 @@ def update_spec(
             new_version = str(new_sv)
         else:
             try:
-                new_sv = SpecVersion.parse(new_version)
+                new_sv = SemVer.parse(new_version)
             except ValueError as exc:
                 raise ValueError(f"Invalid semver version: {new_version!r}") from exc
 
@@ -218,7 +220,7 @@ def update_spec(
         session.flush()
 
         session.add(
-            SpecVersion(
+            ORMSpecVersion(
                 spec_id=new_spec.id,
                 version=new_version,
                 yaml_content=yaml_content,
