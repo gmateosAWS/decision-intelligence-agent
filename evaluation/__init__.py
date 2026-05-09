@@ -11,18 +11,11 @@ Modules:
   dashboard   – CLI report + self-contained HTML dashboard generator
 """
 
-from .confidence import ConfidenceScorer
 from .metrics import compute_metrics, load_runs
 from .observer import AgentObserver
-from .sinks import JsonlSink, LangSmithBridge, PostgresSink, RunSink
 
 __all__ = [
     "AgentObserver",
-    "ConfidenceScorer",
-    "RunSink",
-    "JsonlSink",
-    "PostgresSink",
-    "LangSmithBridge",
     "load_runs",
     "compute_metrics",
 ]

@@ -194,19 +194,3 @@ def main() -> None:
 
     with tab_dashboard:
         render_dashboard()
-
-    # ------------------------------------------------------------------
-    # DIAGNOSTIC — remove before merging
-    # ------------------------------------------------------------------
-    st.sidebar.markdown("---")
-    st.sidebar.json(
-        {
-            "messages_count": len(st.session_state.get("messages", [])),
-            "current_session_id": str(st.session_state.get("session_id", "none")),
-            "turn_count": st.session_state.get("turn_count", 0),
-            "pending_query": str(st.session_state.get("_pending_query", "none")),
-            "is_new_session": st.session_state.get("is_new_session", "?"),
-            "observer_run_active": st.session_state.get("observer") is not None
-            and getattr(st.session_state.get("observer"), "_run", None) is not None,
-        }
-    )

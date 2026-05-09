@@ -133,6 +133,9 @@ def handle_query(prompt: str, graph: Any) -> RunResult:
     st.session_state.messages.append(
         {"role": "assistant", "content": result.answer, "metadata": metadata}
     )
+    st.session_state.turn_count = len(
+        [m for m in st.session_state.messages if m["role"] == "user"]
+    )
 
     # Step 5 — register turn in memory layer (no-op on failure)
     try:
