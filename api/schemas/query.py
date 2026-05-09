@@ -24,3 +24,7 @@ class QueryResponse(BaseModel):
     latency_ms: Optional[float] = None
     fallback_triggered: bool = False
     spec_version: Optional[str] = None
+    # Autonomy policy fields: non-zero when the agent's policy requires review
+    requires_confirmation: bool = False
+    requires_approval: bool = False
+    confirmation_message: Optional[str] = None

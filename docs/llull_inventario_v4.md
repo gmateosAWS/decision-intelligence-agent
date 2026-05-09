@@ -165,11 +165,13 @@ Dado un dataset del cliente, el sistema analiza estructura, correlaciones y sem�
 
 _Resuelve:_ capacidad de onboarding radicalmente diferente a cualquier competidor. Es aspiracional, pero el prototipo está diseñado para que esta pieza sea aditiva.
 
-### 3.5 Extensión del spec para declarar políticas de autonomía `[parche]`
+### 3.5 Extensión del spec para declarar políticas de autonomía `[parche]` ✅ COMPLETADO 2026-05-09
 
 Añadir al spec un campo `autonomy_policy` por tipo de decisión: consultas de conocimiento pueden ser automáticas, recomendaciones de alto impacto requieren human-in-the-loop obligatorio. El planner consulta la política antes de ejecutar una tool sensible.
 
 _Resuelve:_ el nivel de autonomía del agente es un parámetro de negocio del cliente, no una decisión técnica. Debe vivir en el spec, no hardcodeado.
+
+_Implementado:_ `spec/autonomy.py` (AutonomyLevel, ToolAutonomyPolicy, AutonomyPolicy), sección `autonomy_policy` en YAML + parser en spec_loader, planner consulta política tras selección de tool, `_route_after_planner` conditional edge en workflow, `GET/PUT /v1/specs/{id}/autonomy`, 26 tests. Base para items 7.3 + 5.3.b.
 
 ### 3.6 Versionado semántico del spec con migraciones `[feature]` ✅ COMPLETADO 2026-05-09
 

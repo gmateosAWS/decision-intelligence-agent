@@ -37,6 +37,9 @@ class RunResult:
     latencies: Dict[str, Optional[float]] = field(default_factory=dict)
     error: Optional[str] = None
     error_type: Optional[str] = None
+    requires_confirmation: bool = False
+    requires_approval: bool = False
+    confirmation_message: Optional[str] = None
 
 
 def run_query(
@@ -118,6 +121,9 @@ def run_query(
                 "synthesizer": record.get("synthesizer_latency_ms"),
                 "judge": record.get("judge_latency_ms"),
             },
+            requires_confirmation=bool(result.get("requires_confirmation", False)),
+            requires_approval=bool(result.get("requires_approval", False)),
+            confirmation_message=result.get("confirmation_message"),
         )
 
     except Exception as exc:  # noqa: BLE001

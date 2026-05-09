@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.dependencies import get_db
 from api.schemas.specs import (
+    AutonomyPolicyUpdate,
     SpecBumpRequest,
     SpecBumpResponse,
     SpecCreate,
@@ -207,3 +208,93 @@ def bump_spec(
         bump_type=bump_type_enum.value,
         auto_detected=auto_detected,
     )
+
+
+@router.get(
+    "/specs/{spec_id}/autonomy",
+    summary="Get autonomy policy for a spec",
+)
+def get_autonomy_policy(spec_id: str, db=Depends(get_db)):
+    """Return the autonomy policy declared in *spec_id*'s YAML."""
+    from db.models import Spec
+    from spec.autonomy import AutonomyPolicy
+
+    try:
+        uid = uuid.UUID(spec_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid spec_id")
+
+    row = db.get(Spec, uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Spec not found")
+
+    parsed = row.parsed_content or {}
+    ap_raw = parsed.get("autonomy_policy", {}) if isinstance(parsed, dict) else {}
+    policy = AutonomyPolicy.model_validate(ap_raw) if ap_raw else AutonomyPolicy()
+    return policy.model_dump()
+
+
+@router.put(
+    "/specs/{spec_id}/autonomy",
+    response_model=SpecResponse,
+    summary="Update autonomy policy (creates a new spec version)",
+)
+def update_autonomy_policy(
+    spec_id: str, body: AutonomyPolicyUpdate, db=Depends(get_db)
+) -> SpecResponse:
+    """Merge *body* into the current autonomy policy and create a new draft spec.
+
+    The new version is auto-bumped (MINOR — policy additions are non-breaking).
+    The new spec is activated immediately so callers see the updated policy.
+    """
+    from db.models import Spec
+    from spec.autonomy import AutonomyPolicy
+    from spec.spec_repository import (
+        _max_version_for_domain,
+    )
+    from spec.spec_repository import (
+        activate_spec as _activate,
+    )
+    from spec.spec_repository import (
+        update_spec as _update,
+    )
+    from spec.versioning import BumpType
+
+    try:
+        uid = uuid.UUID(spec_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid spec_id")
+
+    row = db.get(Spec, uid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Spec not found")
+
+    # Load current policy and apply updates
+    parsed = dict(row.parsed_content or {})
+    ap_raw = parsed.get("autonomy_policy", {}) if isinstance(parsed, dict) else {}
+    current = AutonomyPolicy.model_validate(ap_raw) if ap_raw else AutonomyPolicy()
+    merged = current.model_dump()
+    if body.default_level is not None:
+        merged["default_level"] = body.default_level
+    if body.tools is not None:
+        merged["tools"] = [t.model_dump() for t in body.tools]
+    parsed["autonomy_policy"] = merged
+
+    new_yaml = yaml.dump(parsed, allow_unicode=True, sort_keys=False)
+
+    # mypy: SQLAlchemy ORM instance attrs are str at runtime
+    current_max = _max_version_for_domain(db, cast(str, row.domain_name))
+    new_version = str(current_max.bump(BumpType.MINOR))
+
+    try:
+        new_spec = _update(
+            uid,
+            new_yaml,
+            new_version=new_version,
+            change_summary=body.change_summary or "Updated autonomy policy",
+        )
+        _activate(cast(uuid.UUID, new_spec.id))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    return _spec_to_response(new_spec)

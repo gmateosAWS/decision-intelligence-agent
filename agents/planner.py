@@ -203,12 +203,38 @@ def planner_node(state: AgentState) -> Dict:
             messages,
             fallback=_fallback_llm_structured,
         )
-        return {
+        params_dict = {p.variable: p.value for p in selection.params}
+
+        # Consult autonomy policy for the selected tool
+        from spec.autonomy import AutonomyLevel
+
+        policy_level = get_spec().autonomy_policy.get_level(selection.tool)
+
+        result: Dict = {
             "action": selection.tool,
             "reasoning": selection.reasoning,
-            "params": {p.variable: p.value for p in selection.params},
+            "params": params_dict,
             "language": selection.language,
+            "requires_confirmation": False,
+            "requires_approval": False,
+            "confirmation_message": None,
         }
+
+        if policy_level == AutonomyLevel.HUMAN_CONFIRMS:
+            result["requires_confirmation"] = True
+            result["confirmation_message"] = (
+                f"The agent wants to run **{selection.tool}** "
+                f"with parameters {params_dict or 'spec defaults'}. Confirm?"
+            )
+        elif policy_level == AutonomyLevel.HUMAN_APPROVES:
+            result["requires_approval"] = True
+            result["confirmation_message"] = (
+                f"The agent proposes to run **{selection.tool}** "
+                f"with parameters {params_dict or 'spec defaults'}. "
+                "This action requires explicit approval before execution."
+            )
+
+        return result
     except (LLMUnavailableError, Exception) as exc:
         return {
             "action": "knowledge",
@@ -217,4 +243,7 @@ def planner_node(state: AgentState) -> Dict:
             ),
             "params": {},
             "language": "en",
+            "requires_confirmation": False,
+            "requires_approval": False,
+            "confirmation_message": None,
         }

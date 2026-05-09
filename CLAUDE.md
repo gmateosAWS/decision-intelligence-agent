@@ -63,7 +63,9 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── spec/
         │    ├── spec_repository.py   CRUD: create/activate/update/seed specs in DB
         │    ├── spec_loader.py       get_spec() — DB-first, YAML fallback
-        │    └── versioning.py        SpecVersion, BumpType, validate_version, detect_bump_type
+        │    ├── versioning.py        SpecVersion, BumpType, validate_version, detect_bump_type
+        │    └── autonomy.py          AutonomyPolicy, AutonomyLevel, ToolAutonomyPolicy
+        │                             Foundation for items 7.3 + 5.3.b (per-agent policies)
         │
         ├── system/system_graph.py     DAG built from spec's causal_relationships
         ├── system/system_model.py     topological evaluation engine (formula registry)
@@ -72,12 +74,14 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── knowledge/retriever.py     pgvector search (FAISS fallback)
         │
         ├── agents/
-        │    ├── state.py              AgentState TypedDict (includes language: str)
-        │    ├── planner.py            LLM → ToolSelection(tool, reasoning, params, language)
+        │    ├── state.py              AgentState TypedDict (language, requires_confirmation,
+        │    │                         requires_approval, confirmation_message)
+        │    ├── planner.py            LLM → ToolSelection; consults AutonomyPolicy per tool
         │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback()
         │    ├── i18n.py              LANGUAGE_NAMES, get_synth/revise/directive helpers (skills-ready)
         │    ├── tools.py              tool wrappers consuming spec defaults
-        │    ├── workflow.py           LangGraph: planner → tool → synthesizer → judge → END
+        │    ├── workflow.py           LangGraph: planner →[auto]→ tool → synthesizer → judge → END
+        │    │                                            [policy]→ synthesizer (proposal) → judge
         │    ├── judge.py             online quality gate + single-pass revision
         │    └── runner.py            run_query(query, thread_id, observer, graph) → RunResult
         │                             shared by Streamlit UI + FastAPI (Directive 3)
@@ -112,8 +116,11 @@ api/
 │    ├── sessions.py      CRUD /v1/sessions
 │    ├── runs.py          GET /v1/runs
 │    ├── specs.py         CRUD /v1/specs + POST /v1/specs/{id}/bump
+│    │                    GET /v1/specs/{id}/autonomy
+│    │                    PUT /v1/specs/{id}/autonomy → new spec version (MINOR bump)
 │    └── health.py        /healthz, /readyz, /v1/debug/config
-└── schemas/             Pydantic request/response models (incl. SpecBumpRequest/Response)
+└── schemas/             Pydantic request/response models (incl. SpecBumpRequest/Response,
+                         AutonomyPolicyUpdate, QueryResponse.requires_confirmation)
 
 app.py                    REPL (legacy)
 streamlit_app.py          Thin wrapper: st.set_page_config() + from ui.app import main
@@ -270,9 +277,13 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 
 - [x] 3.6 Semantic versioning for specs: `spec/versioning.py` (SpecVersion, BumpType, detect_bump_type), semver validation in create_spec/update_spec/seed_from_yaml, auto-bump from YAML diff, monotonicity check, `POST /v1/specs/{id}/bump` endpoint, migration 003 CHECK constraint
 
-## Current work: Item 3.6 (spec semver) — Next: Item 1.6 ObjectBus
+### Item 3.5 ✅
 
-**Branch**: `feature/3.6-spec-semver`
+- [x] 3.5 Autonomy policies in spec: `spec/autonomy.py` (AutonomyLevel, ToolAutonomyPolicy, AutonomyPolicy), `autonomy_policy` section in YAML + spec_loader, planner consults policy after tool selection, conditional edge `_route_after_planner` in workflow (skips tool when policy ≠ auto), `GET/PUT /v1/specs/{id}/autonomy` endpoints, 26 new tests. Foundation for items 7.3 + 5.3.b.
+
+## Current work: Item 3.5 (autonomy policies) — Next: Item 1.6 ObjectBus
+
+**Branch**: `feature/3.5-autonomy-policy`
 
 Completed 2026-05-09.
 

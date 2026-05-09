@@ -142,6 +142,13 @@ def synthesizer_node(
     so this node only returns the synthesized draft answer.
     """
 
+    # When autonomy policy requires human intervention, skip tool synthesis
+    if state.get("requires_confirmation") or state.get("requires_approval"):
+        answer = state.get("confirmation_message") or (
+            "Human review required before this action can be executed."
+        )
+        return {"answer": answer}
+
     obs = _get_observer(config)
     query = state.get("query", "")
     action = state.get("action", "unknown")
@@ -206,6 +213,13 @@ def judge_node(
 # ---------------------------------------------------------------------------
 
 
+def _route_after_planner(state: AgentState) -> str:
+    """Skip tool execution when autonomy policy requires human intervention."""
+    if state.get("requires_confirmation") or state.get("requires_approval"):
+        return "synthesizer"
+    return "tool"
+
+
 def build_graph(checkpointer=None):
     """
     Build and compile the 4-node LangGraph workflow.
@@ -216,8 +230,8 @@ def build_graph(checkpointer=None):
         If provided, the graph persists state across invocations.
         Pass a thread_id in the config to resume a conversation.
 
-    Flow:
-        planner_node → tool_node → synthesizer_node → judge_node → END
+    Flow (auto):    planner_node → tool_node → synthesizer_node → judge_node → END
+    Flow (policy):  planner_node → synthesizer_node → judge_node → END
     """
     builder = StateGraph(AgentState)
 
@@ -227,7 +241,11 @@ def build_graph(checkpointer=None):
     builder.add_node("judge", judge_node)
 
     builder.set_entry_point("planner")
-    builder.add_edge("planner", "tool")
+    builder.add_conditional_edges(
+        "planner",
+        _route_after_planner,
+        {"tool": "tool", "synthesizer": "synthesizer"},
+    )
     builder.add_edge("tool", "synthesizer")
     builder.add_edge("synthesizer", "judge")
     builder.add_edge("judge", END)

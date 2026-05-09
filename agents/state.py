@@ -22,6 +22,9 @@ Fields
   judge_passed (bool | None)         -- whether the draft passed without revision
   judge_feedback (str | None)        -- judge's explanation of its verdict
   judge_revised  (bool | None)       -- whether the answer was rewritten once
+  requires_confirmation (bool)       -- autonomy policy: show plan, wait for OK
+  requires_approval     (bool)       -- autonomy policy: propose only, no execution
+  confirmation_message  (str | None) -- message displayed to the user for review
   history      (List[Dict[str,str]]) -- accumulated (query, answer) turn pairs;
                                         merged via operator.add so LangGraph
                                         appends rather than replacing the list
@@ -48,5 +51,9 @@ class AgentState(TypedDict, total=False):
     judge_passed: Optional[bool]
     judge_feedback: Optional[str]
     judge_revised: Optional[bool]
+    # Autonomy policy flags — set by planner_node when policy != auto
+    requires_confirmation: bool  # show plan to user and wait for OK
+    requires_approval: bool  # propose only, do not execute without approval
+    confirmation_message: Optional[str]  # message shown to the user
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]
