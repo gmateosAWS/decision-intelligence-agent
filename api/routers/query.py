@@ -59,4 +59,7 @@ def run_query_endpoint(req: QueryRequest, graph=Depends(get_graph)) -> QueryResp
         latency_ms=result.latency_ms,
         fallback_triggered=result.fallback_triggered,
         spec_version=result.spec_version,
+        requires_confirmation=result.requires_confirmation,
+        requires_approval=result.requires_approval,
+        confirmation_message=result.confirmation_message,
     )

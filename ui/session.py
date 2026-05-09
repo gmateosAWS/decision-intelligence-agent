@@ -127,6 +127,9 @@ def handle_query(prompt: str, graph: Any) -> RunResult:
         "judge_revised": result.judge_revised,
         "total_ms": result.latency_ms,
         "latencies": result.latencies,
+        "requires_confirmation": result.requires_confirmation,
+        "requires_approval": result.requires_approval,
+        "confirmation_message": result.confirmation_message,
     }
 
     # Step 4 — append assistant message

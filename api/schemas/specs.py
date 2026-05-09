@@ -56,3 +56,23 @@ class SpecBumpResponse(BaseModel):
     version: str
     bump_type: str
     auto_detected: bool
+
+
+# ── Autonomy policy schemas ────────────────────────────────────────────────────
+
+
+class ToolAutonomyPolicyUpdate(BaseModel):
+    tool: str
+    level: str = Field(..., description="'auto', 'human_confirms', or 'human_approves'")
+    conditions: List[str] = Field(default_factory=list)
+    reason: str = ""
+
+
+class AutonomyPolicyUpdate(BaseModel):
+    """Request body for PUT /v1/specs/{id}/autonomy."""
+
+    default_level: Optional[str] = Field(
+        None, description="'auto', 'human_confirms', or 'human_approves'"
+    )
+    tools: Optional[List[ToolAutonomyPolicyUpdate]] = None
+    change_summary: Optional[str] = None

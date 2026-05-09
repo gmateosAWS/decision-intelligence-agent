@@ -148,3 +148,21 @@ optimization:
   decision_variables: [price] # Variables to optimize over
   fixed_variables: # Variables held constant during optimization
     marketing_spend: 10000.0
+
+# ── AUTONOMY POLICY ───────────────────────────────────────────────────────────
+# Controls whether the agent executes tools automatically or requires human
+# confirmation/approval before acting.  One entry per tool or future skill.
+# Levels: auto | human_confirms | human_approves
+# Foundation for items 7.3 (runtime enforcement) and 5.3.b (per-agent policies).
+autonomy_policy:
+  default_level: auto
+  tools:
+    - tool: optimization
+      level: auto
+      reason: "Optimization explores parameter space safely — no external side effects"
+    - tool: simulation
+      level: auto
+      reason: "Simulation is read-only Monte Carlo — no risk"
+    - tool: knowledge
+      level: auto
+      reason: "Knowledge retrieval is read-only"

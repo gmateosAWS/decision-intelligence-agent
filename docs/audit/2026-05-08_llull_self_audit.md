@@ -129,11 +129,11 @@ Unchanged: all others. No dimension regressed.
 | 17 | LLM cost control | 0 | **0** | Unchanged. No cost tracking per run, no token counts, no per-tenant quotas, no hard ceilings. | `evaluation/observer.py:92-282` (no cost field) | 🟡 (items 8.7.a–f en I2A) |
 | 18 | Multi-turn / session continuity | 2 | **2** | Unchanged. Checkpointing via `thread_id`, history window of 3. No `ActiveAnalyticalState`. | `memory/checkpointer.py:63-95`; `agents/planner.py:185-196` | 🟡 (items 5.5, 5.10, 5.11 en I2A) |
 | 19 | Multi-agent coordination | 1 | **1** | Unchanged. No multi-agent, no prerequisites. | Single graph | 🟡 (items 5.3.a/b, 5.12, 8.7.e en I3) |
-| 20 | Agent autonomy policy | 1 | **1** | Unchanged. No `autonomy_policy` in spec, hardcoded `JUDGE_THRESHOLD`. | `agents/judge.py:37`; absence of autonomy fields | 🟡 (items 3.5, 7.3 en I2A/I3) |
+| 20 | Agent autonomy policy | 1 | **3** | ✅ Item 3.5 implemented: `spec/autonomy.py` with AutonomyLevel/ToolAutonomyPolicy/AutonomyPolicy, `autonomy_policy` section in YAML parsed by spec_loader, planner consults policy per tool, `_route_after_planner` conditional edge skips tool when policy ≠ auto, `GET/PUT /v1/specs/{id}/autonomy`. JUDGE_THRESHOLD still hardcoded — items 7.3 (runtime enforcement) and 5.3.b (per-agent policies) remain for I3. | `spec/autonomy.py`; `agents/planner.py`; `agents/workflow.py` | 🟢 (3.5 done; 7.3 + 5.3.b en I3) |
 
-**Layer 2 mean: 2.45 / 5** (was 2.40)
+**Layer 2 mean: 2.55 / 5** (was 2.45)
 
-Dimension improved: 16 (Testing and evaluation). All others unchanged. No regressions.
+Dimensions improved: 20 (Agent autonomy policy, 1→3). No regressions.
 
 ---
 

@@ -22,11 +22,13 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+from spec.autonomy import AutonomyPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +172,9 @@ class OrganizationalModelSpec:
     optimization_decision_vars: List[str]
     fixed_variables: Dict[str, float]
 
+    # Autonomy policy (defaults to all-auto for backward compatibility)
+    autonomy_policy: AutonomyPolicy = field(default_factory=AutonomyPolicy)
+
     # ── Convenience helpers ───────────────────────────────────────────────────
 
     def get_decision_var(self, name: str) -> DecisionVariable:
@@ -289,6 +294,11 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
     sim = raw.get("simulation", {})
     opt = raw.get("optimization", {})
 
+    ap_raw = raw.get("autonomy_policy", {})
+    autonomy_policy = (
+        AutonomyPolicy.model_validate(ap_raw) if ap_raw else AutonomyPolicy()
+    )
+
     return OrganizationalModelSpec(
         domain_name=raw["domain"]["name"],
         domain_description=raw["domain"]["description"],
@@ -309,6 +319,7 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
         fixed_variables={
             k: float(v) for k, v in opt.get("fixed_variables", {}).items()
         },
+        autonomy_policy=autonomy_policy,
     )
 
 
