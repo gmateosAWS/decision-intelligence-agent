@@ -168,6 +168,11 @@ decision support, system explainability, and controlled LLM interaction:
 - **Domain-agnostic parameter extraction** -- the planner extracts decision
   parameters generically from natural language using the decision-variable names
   defined in the spec.
+- **Autonomy policy control** -- per-tool execution levels (`auto`, `human_confirms`,
+  `human_approves`) are stored in the spec's `autonomy_policy` section (item 3.5); the
+  planner consults the policy after tool selection and routes through a conditional edge
+  directly to the synthesizer when confirmation or approval is required, surfacing a
+  proposal message without executing the tool. Managed via `GET/PUT /v1/specs/{id}/autonomy`.
 
 ---
 
@@ -188,9 +193,10 @@ flowchart LR
     Answer[Final Answer]
 
     User --> Planner
-    Planner -->|optimization| Opt
-    Planner -->|simulation| Sim
-    Planner -->|knowledge| Know
+    Planner -->|"auto (tool executes)"| Opt
+    Planner -->|"auto (tool executes)"| Sim
+    Planner -->|"auto (tool executes)"| Know
+    Planner -->|"human_confirms / human_approves"| Synth
     Opt --> Synth
     Sim --> Synth
     Know --> Synth
@@ -219,6 +225,7 @@ The online judge evaluates that draft against the original query and the raw too
 - **Business parameters**: unit cost and other domain constants
 - **Simulation configuration**: Monte Carlo runs, noise model
 - **Optimization configuration**: target, method, fixed variables
+- **Autonomy policy**: per-tool execution levels (`auto` / `human_confirms` / `human_approves`) -- controls when the agent requires human review before executing a tool
 
 `spec_repository.py` provides CRUD operations (`create_spec`, `activate_spec`, `update_spec`, `seed_from_yaml`, etc.) for the `specs` and `spec_versions` tables. On first startup with Postgres, `seed_from_yaml()` imports the YAML as version `1.0.0` with status `active`; subsequent startups are no-ops.
 
@@ -386,11 +393,11 @@ The vector store is loaded **lazily** (on first query, not at import time). If t
 
 The agent is implemented as a **4-node LangGraph graph**:
 
-**`planner_node`** -- Selects the appropriate tool using structured output (provider and model configurable via `PLANNER_PROVIDER` / `PLANNER_MODEL` env vars; defaults to OpenAI `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. The prompt also enforces a **Chain-of-Thought sequence** in the `reasoning` field: the LLM must articulate (1) what the user is asking, (2) whether concrete variable values are mentioned, (3) whether the intent is exploratory/optimization or conceptual, and (4) which tool fits best and why -- before committing to a tool choice. Output is a typed `ToolSelection(tool, reasoning, params, language)` object -- no string parsing. The `language` field carries the ISO 639-1 code of the query's language (detected by the planner itself), which flows through `AgentState` to the synthesizer and judge so both respond in the user's language without any separate detection call. If the LLM call fails after retries, the planner falls back to the `knowledge` tool with `language="en"` rather than crashing the graph.
+**`planner_node`** -- Selects the appropriate tool using structured output (provider and model configurable via `PLANNER_PROVIDER` / `PLANNER_MODEL` env vars; defaults to OpenAI `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. The prompt also enforces a **Chain-of-Thought sequence** in the `reasoning` field: the LLM must articulate (1) what the user is asking, (2) whether concrete variable values are mentioned, (3) whether the intent is exploratory/optimization or conceptual, and (4) which tool fits best and why -- before committing to a tool choice. Output is a typed `ToolSelection(tool, reasoning, params, language)` object -- no string parsing. The `language` field carries the ISO 639-1 code of the query's language (detected by the planner itself), which flows through `AgentState` to the synthesizer and judge so both respond in the user's language without any separate detection call. After tool selection, the planner consults the active spec's **autonomy policy** (`spec.autonomy_policy.get_level(tool)`) and sets `requires_confirmation` or `requires_approval` flags in state accordingly. If the LLM call fails after retries, the planner falls back to the `knowledge` tool with `language="en"` rather than crashing the graph.
 
 **`tool_node`** -- Executes the selected tool. Wrapped in `try/except`: errors are captured and propagated to the state rather than crashing the graph.
 
-**`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer (model configurable via `SYNTHESIZER_MODEL` env var, defaults to `gpt-4o-mini`): what do the numbers mean, what should the decision-maker do, and what risks or caveats matter.
+**`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer (model configurable via `SYNTHESIZER_MODEL` env var, defaults to `gpt-4o-mini`): what do the numbers mean, what should the decision-maker do, and what risks or caveats matter. If `requires_confirmation` or `requires_approval` is set in state (autonomy policy gate), the synthesizer short-circuits: it returns the `confirmation_message` directly without an LLM call, skipping tool execution entirely.
 
 **`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version.
 
@@ -411,6 +418,9 @@ The agent is implemented as a **4-node LangGraph graph**:
 | `judge_feedback` | Judge         | Judge explanation of why the answer was approved or revised         |
 | `judge_revised`  | Judge         | Whether the answer had to be rewritten once before delivery         |
 | `history`        | Judge         | Accumulated (query, answer) turn pairs -- merged via `operator.add` |
+| `requires_confirmation` | Planner | `True` when the active autonomy policy is `human_confirms` for the selected tool; causes the graph to bypass the tool node and surface a proposal message |
+| `requires_approval` | Planner    | `True` when the active autonomy policy is `human_approves`; stricter gate -- tool never executes without explicit approval |
+| `confirmation_message` | Planner | Human-readable proposal shown to the user when confirmation or approval is required (e.g. "The agent wants to run **optimization** with parameters …. Confirm?") |
 
 ---
 
@@ -422,6 +432,8 @@ decision-intelligence-agent/
 |   +-- organizational_model.yaml   # Seed YAML + SQLite fallback (runtime source: specs table)
 |   +-- spec_loader.py              # get_spec(): DB-first, YAML fallback; typed dataclasses
 |   +-- spec_repository.py          # CRUD: create/activate/update/seed specs in DB
+|   +-- autonomy.py                 # AutonomyLevel, ToolAutonomyPolicy, AutonomyPolicy (item 3.5)
+|   +-- versioning.py               # SpecVersion, BumpType, detect_bump_type (item 3.6)
 |   +-- __init__.py
 +-- db/
 |   +-- engine.py                   # SQLAlchemy engine, get_session() context manager
@@ -431,6 +443,7 @@ decision-intelligence-agent/
 |       +-- versions/
 |           +-- 001_initial_schema.py   # agent_sessions, agent_runs, knowledge_documents
 |           +-- 002_spec_tables.py      # specs, spec_versions, spec FK on agent_runs
+|           +-- 003_spec_version_constraint.py  # CHECK constraint on spec_versions.version (semver)
 +-- data/
 |   +-- generate_data.py            # Synthetic dataset -- all params read from spec
 +-- models/
@@ -482,6 +495,8 @@ decision-intelligence-agent/
 |   +-- agents/
 |   |   +-- test_llm_factory.py     # Unit tests: provider factory, fallback, retry, graceful error
 |   |   +-- test_planner.py         # Unit tests: language field propagation for en/es/fr/de and fallback default
+|   |   +-- test_planner_autonomy.py  # Unit tests: autonomy flags set by planner after tool selection (4 tests)
+|   |   +-- test_workflow_autonomy.py # Unit tests: conditional edge + synthesizer short-circuit (7 tests)
 |   +-- api/
 |   |   +-- test_health.py          # /healthz, /readyz, /v1/debug/config
 |   |   +-- test_query.py           # POST /v1/query (5 tests)
@@ -489,11 +504,13 @@ decision-intelligence-agent/
 |   |   +-- test_runs.py            # GET /v1/runs (4 tests)
 |   |   +-- test_specs.py           # CRUD /v1/specs (7 tests)
 |   |   +-- test_specs_bump.py      # POST /v1/specs/{id}/bump (6 tests)
+|   |   +-- test_autonomy_endpoints.py  # GET/PUT /v1/specs/{id}/autonomy (7 tests)
 |   +-- spec/
-|       +-- test_spec_repository.py # Integration tests: spec CRUD + traceability (needs Postgres)
-|       +-- test_spec_loader_db.py  # Integration + unit: DB-first load + YAML fallback
-|       +-- test_versioning.py      # Unit tests: SpecVersion, BumpType, detect_bump_type (25 tests)
-|       +-- test_spec_repository_semver.py  # Integration: semver validation + auto-bump (needs Postgres)
+|   |   +-- test_spec_repository.py # Integration tests: spec CRUD + traceability (needs Postgres)
+|   |   +-- test_spec_loader_db.py  # Integration + unit: DB-first load + YAML fallback
+|   |   +-- test_versioning.py      # Unit tests: SpecVersion, BumpType, detect_bump_type (25 tests)
+|   |   +-- test_spec_repository_semver.py  # Integration: semver validation + auto-bump (needs Postgres)
+|   |   +-- test_autonomy.py        # Unit tests: AutonomyPolicy model + get_level() (8 tests)
 +-- docs/
 |   +-- llull_roadmap_v3.md         # Iteration plan with progress tracking (I1 → I2A → I2B → I3)
 |   +-- llull_inventario_v3.md      # Full backlog (97 items)
@@ -660,6 +677,8 @@ Interactive docs available at [http://localhost:8000/docs](http://localhost:8000
 | `PUT` | `/v1/specs/{id}/activate` | Activate a spec version |
 | `GET` | `/v1/specs/{id}/versions` | Spec version history |
 | `POST` | `/v1/specs/{id}/bump` | Bump spec version (auto-detect or explicit major/minor/patch) |
+| `GET` | `/v1/specs/{id}/autonomy` | Get autonomy policy for a spec |
+| `PUT` | `/v1/specs/{id}/autonomy` | Update autonomy policy (creates a new MINOR-bumped spec version) |
 | `GET` | `/healthz` | Liveness probe (always 200) |
 | `GET` | `/readyz` | Readiness probe (checks DB + spec) |
 | `GET` | `/v1/debug/config` | Active LLM config (no secrets) |
@@ -709,6 +728,51 @@ curl -X POST /v1/specs/{id}/bump \
 ```
 
 The new spec is created as `status=draft`. Call `PUT /v1/specs/{id}/activate` to promote it.
+
+### Autonomy policy
+
+Each spec carries an `autonomy_policy` section (item 3.5) that controls per-tool execution gating:
+
+```yaml
+autonomy_policy:
+  default_level: auto       # auto | human_confirms | human_approves
+  tools:
+    - tool: optimization
+      level: auto
+      reason: "Optimization explores parameter space safely — no external side effects"
+    - tool: simulation
+      level: auto
+      reason: "Simulation is read-only Monte Carlo — no risk"
+    - tool: knowledge
+      level: auto
+      reason: "Knowledge retrieval is read-only"
+```
+
+| Level | Behaviour |
+|-------|-----------|
+| `auto` | Tool executes immediately (default) |
+| `human_confirms` | Agent shows a proposal and waits for user confirmation before executing |
+| `human_approves` | Agent proposes only — tool never executes without explicit approval |
+
+The planner consults the policy after tool selection. A **LangGraph conditional edge** (`_route_after_planner`) routes to the tool node when the level is `auto`, or directly to the synthesizer when the level requires human review. The synthesizer short-circuits to return the proposal message without an LLM call when these flags are set.
+
+The autonomy policy is versioned with the spec. `PUT /v1/specs/{id}/autonomy` merges the supplied policy into the active spec's `yaml_content` and creates a new MINOR-bumped spec version automatically (policy changes are non-breaking additions).
+
+```bash
+# Read current policy
+curl http://localhost:8000/v1/specs/{id}/autonomy
+
+# Require confirmation before optimization runs
+curl -X PUT http://localhost:8000/v1/specs/{id}/autonomy \
+  -H "Content-Type: application/json" \
+  -d '{
+    "default_level": "auto",
+    "tools": [{"tool": "optimization", "level": "human_confirms", "reason": "Requires human sign-off"}],
+    "change_summary": "Gate optimization tool"
+  }'
+```
+
+The `conditions` field in each `ToolAutonomyPolicy` entry is a reserved placeholder for item 7.3 (runtime conditional enforcement, I3), where policies will be able to trigger on spec-defined conditions (e.g. "only when `profit < 0`").
 
 ### API versioning
 
@@ -972,13 +1036,14 @@ User: "And if price is 28?"  <- planner understands the context
 
 ### `agents/workflow.py`
 
-`build_graph(checkpointer=...)` compiles the LangGraph workflow with persistent state. The graph now includes an online quality gate after synthesis:
+`build_graph(checkpointer=...)` compiles the LangGraph workflow with persistent state. The graph includes an online quality gate after synthesis and an autonomy policy conditional edge:
 
 ```
-planner -> tool -> synthesizer -> judge -> END
+planner --[auto]--> tool --> synthesizer --> judge --> END
+        --[human_confirms / human_approves]--> synthesizer (short-circuit)
 ```
 
-This keeps the answer-validation logic inside the graph itself, so the final response is governed before it reaches the user.
+The conditional edge (`_route_after_planner`) routes to `tool` when autonomy level is `auto`, or directly to `synthesizer` when the planner sets `requires_confirmation` or `requires_approval`. This keeps both answer-validation and human-in-the-loop logic inside the graph itself, so the final response is governed before it reaches the user.
 
 ### Turn flow
 
@@ -1196,6 +1261,8 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Per-node configurable LLM models via environment variables | Planner, synthesizer and judge can each use a different model; enables cost/quality trade-offs (e.g. capable model for routing, fast model for synthesis) without code changes |
 | Few-shot examples generated dynamically from the spec | Planner prompt includes routing examples built from actual decision variable names; improves tool selection accuracy while remaining fully domain-agnostic |
 | Planner detects query language (`ToolSelection.language`) | Language detection is a zero-cost byproduct of the structured planner call; the ISO 639-1 code flows through `AgentState` so the synthesizer and judge revision use pre-built per-language instruction dicts instead of generic "match the query language" heuristics that LLMs routinely ignore |
+| Autonomy policy stored in spec (`autonomy_policy`) | Per-tool execution gating (`auto` / `human_confirms` / `human_approves`) is part of the versioned domain model, not hardcoded in agent logic; changing a tool's gate level requires only a spec update via `PUT /v1/specs/{id}/autonomy`, which creates a MINOR-bumped spec version automatically — no code deploy needed |
+| Conditional edge in LangGraph for autonomy bypass | The `_route_after_planner` function lets the graph route around the tool node entirely when human review is required, instead of executing the tool and then asking for confirmation; this ensures the tool's side effects never occur without authorization |
 | Chain-of-Thought enforced in planner `reasoning` field | The prompt requires the LLM to reason through four explicit steps before selecting a tool; reduces misrouting without changing the output schema |
 | `agents/llm_factory.py` — provider-agnostic LLM factory | `get_chat_model(provider, model)` returns a `BaseChatModel` for OpenAI or Anthropic; adding a new provider requires only a new branch in the factory, not changes across all nodes |
 | Automatic provider fallback (`FALLBACK_PROVIDER`) | If the primary LLM fails (any error), `invoke_with_fallback()` transparently retries with a secondary provider; the graph never sees the exception, enabling zero-downtime provider switching |
