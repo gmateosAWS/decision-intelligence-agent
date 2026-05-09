@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, cast
 
 if TYPE_CHECKING:
     from spec.versioning import SpecVersion as SemVer
@@ -180,11 +180,14 @@ def update_spec(
         if parent is None:
             raise ValueError(f"Spec {spec_id} not found")
 
-        current_max = _max_version_for_domain(session, parent.domain_name)
+        # mypy: SQLAlchemy ORM instance attrs are str at runtime
+        current_max = _max_version_for_domain(session, cast(str, parent.domain_name))
 
         auto_detected_bump: Optional[BumpType] = None
         if new_version is None:
-            auto_detected_bump = detect_bump_type(parent.yaml_content, yaml_content)
+            auto_detected_bump = detect_bump_type(
+                cast(str, parent.yaml_content), yaml_content
+            )
             new_sv = current_max.bump(auto_detected_bump)
             new_version = str(new_sv)
         else:

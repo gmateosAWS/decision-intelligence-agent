@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import List
+from typing import List, cast
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -200,7 +200,9 @@ def bump_spec(
         raise HTTPException(status_code=422, detail=str(exc))
 
     return SpecBumpResponse(
-        spec_id=new_spec.id,
+        spec_id=cast(
+            uuid.UUID, new_spec.id
+        ),  # mypy: SQLAlchemy ORM instance attrs are str/UUID at runtime
         version=new_version,
         bump_type=bump_type_enum.value,
         auto_detected=auto_detected,
