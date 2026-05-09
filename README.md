@@ -496,7 +496,15 @@ decision-intelligence-agent/
 |   +-- llull_inventario_v3.md      # Full backlog (97 items)
 |   +-- adr-001-pgvector-over-qdrant.md  # Architecture decision record: vector store choice
 +-- app.py                          # REPL entry point (legacy, dev use)
-+-- streamlit_app.py                # Web UI: Chat tab + Dashboard tab (observability), persistent header, bordered example cards
++-- streamlit_app.py                # Thin wrapper: st.set_page_config() + ui.app.main()
++-- ui/                             # Streamlit presentation layer (split from streamlit_app.py)
+|   +-- app.py                      # main() orchestrator — multi-turn bug fix
+|   +-- components.py               # Pure render functions (render_chat_message, result cards, …)
+|   +-- dashboard.py                # render_dashboard() — observability tab
+|   +-- sidebar.py                  # render_sidebar() — session mgmt, LLM config, admin
+|   +-- session.py                  # init_session_state(), handle_query(), resume_session()
+|   +-- styles.py                   # CSS constants, logos, TOOL_LABELS, sanitize_markdown()
++-- agents/runner.py                # run_query() shared by UI + API (Directive 3 — RunResult)
 +-- docker-compose.yml              # PostgreSQL 16 + pgvector
 +-- alembic.ini                     # Alembic migration config
 +-- .env.example                    # Environment variable template

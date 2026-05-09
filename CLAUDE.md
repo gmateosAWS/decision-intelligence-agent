@@ -77,7 +77,9 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    ├── i18n.py              LANGUAGE_NAMES, get_synth/revise/directive helpers (skills-ready)
         │    ├── tools.py              tool wrappers consuming spec defaults
         │    ├── workflow.py           LangGraph: planner → tool → synthesizer → judge → END
-        │    └── judge.py             online quality gate + single-pass revision
+        │    ├── judge.py             online quality gate + single-pass revision
+        │    └── runner.py            run_query(query, thread_id, observer, graph) → RunResult
+        │                             shared by Streamlit UI + FastAPI (Directive 3)
         │
         ├── db/
         │    ├── engine.py             SQLAlchemy engine, get_session()
@@ -113,7 +115,15 @@ api/
 └── schemas/             Pydantic request/response models
 
 app.py                    REPL (legacy)
-streamlit_app.py          Web UI (chat + DAG + charts + dashboard + admin)
+streamlit_app.py          Thin wrapper: st.set_page_config() + from ui.app import main
+ui/
+├── __init__.py
+├── app.py              main() orchestrator — composes sidebar, header, tabs, chat
+├── components.py       pure render functions (render_chat_message, render_result_cards, …)
+├── dashboard.py        render_dashboard() — observability tab
+├── sidebar.py          render_sidebar() — session mgmt, LLM config, domain, admin
+├── session.py          init_session_state(), handle_query(), resume_session()
+└── styles.py           CSS constants, LOGO_*, TOOL_LABELS, sanitize_markdown()
 docker-compose.yml        PostgreSQL 16 + pgvector
 alembic.ini               migration config
 tests/                    unit + integration tests
@@ -138,8 +148,8 @@ docs/                     inventario v4, roadmap v4, ADRs, audit reports
 
 1. **`CLAUDE.md`** — architecture diagram, completed items, current work
 2. **`README.md`** — file tree, setup steps, env vars, features
-3. **`docs/llull_roadmap_v4.md`** — mark items completed, update paquete status
-4. **`docs/llull_roadmap_visual.html`** — mark items completed, update paquete status
+3. **`docs/llull_roadmap_v4.md`** — mark items completed if applicable, update paquete status
+4. **`docs/llull_roadmap_visual.html`** — mark items completed if applicable, update paquete status
 5. **`docs/llull_inventario_v4.md`** — mark items completed if applicable
 6. **`docs/adr-*.md`** — new ADR if architectural decision was made
 7. **`.env.example`** — new environment variables
@@ -253,25 +263,36 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 - [x] P2.1: `agents/i18n.py` extracted — LANGUAGE_NAMES, SYNTH_INSTRUCTIONS, REVISE_INSTRUCTIONS, get_system_language_directive(); workflow.py + judge.py refactored; 9 tests added
 - [x] P2.3: `evaluation/observer.py` split into RunSink Protocol + JsonlSink + PostgresSink + LangSmithBridge + ConfidenceScorer; public API unchanged; 28 new tests in `tests/evaluation/test_sinks.py`
 - [x] P2.4: mypy (intermediate level, --explicit-package-bases) + pip-audit (continue-on-error) added to CI Job 1; 21 pre-existing type errors fixed or suppressed
+- [x] P2.2: `streamlit_app.py` (~1040 LOC) split into `ui/` package + `agents/runner.py`; multi-turn rendering bug fixed; API and UI share same `run_query()` code path (Directive 3); 113 unit tests pass
 
-## Current work: Audit P2.3 (observer split) — Next: Item 1.6 ObjectBus
+## Current work: Audit P2.2 (Streamlit split) — Next: Item 1.6 ObjectBus
 
-**Branch**: `refactor/observer-split`
+**Branch**: `refactor/streamlit-split`
 
-Completed 2026-05-08.
+Completed 2026-05-09.
 
-### Audit P2.3 — AgentObserver split (SRP)
+### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 
-`evaluation/observer.py` was a monolith mixing RunRecord accumulation, JSONL writing, Postgres writing, confidence scoring, and LangSmith bridging. Split into:
+`streamlit_app.py` (~1040 LOC) was a monolith mixing UI rendering, session management,
+agent invocation, and dashboard logic. Split into:
 
-- `evaluation/confidence.py` — `ConfidenceScorer` (extractable skill, item 4.3)
-- `evaluation/sinks/base.py` — `RunSink` Protocol (ObjectBus-ready, item 1.6)
-- `evaluation/sinks/jsonl_sink.py` — `JsonlSink`
-- `evaluation/sinks/postgres_sink.py` — `PostgresSink` (fail-open)
-- `evaluation/sinks/langsmith_sink.py` — `LangSmithBridge` stub (TODO product)
-- `evaluation/observer.py` — thin orchestrator; public API unchanged
+- `agents/runner.py` — `RunResult` dataclass + `run_query(query, thread_id, observer, graph) → RunResult`
+  (Directive 3: shared by Streamlit UI and FastAPI, callable independently for MCP future)
+- `ui/styles.py` — CSS constants, logos, TOOL_LABELS, `sanitize_markdown()`
+- `ui/components.py` — pure render functions (no session_state access)
+- `ui/dashboard.py` — `render_dashboard()` extracted from inline code
+- `ui/sidebar.py` — `render_sidebar()` with all sidebar sections
+- `ui/session.py` — `init_session_state()`, `handle_query()`, `resume_session()`
+- `ui/app.py` — `main()` orchestrator
+- `streamlit_app.py` — 10-line thin wrapper: `st.set_page_config()` + `main()`
 
-28 tests in `tests/evaluation/test_sinks.py`. 113 unit tests pass. Callers in `workflow.py`, `api/`, `streamlit_app.py`, `app.py` require zero changes.
+**Multi-turn rendering bug fixed**: previous code rendered current-turn messages OUTSIDE
+`with tab_chat:`, causing them to appear below the tab panel. Fix: all rendering happens
+INSIDE `with tab_chat:`. `handle_query()` updates `session_state` only (no rendering).
+
+**API updated**: `api/routers/query.py` now delegates to `agents.runner.run_query()`.
+Error types (`LLMUnavailableError`) propagated via `RunResult.error_type` for 503 vs 500
+HTTP status distinction.
 
 **Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, open I2A formally.
 
