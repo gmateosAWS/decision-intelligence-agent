@@ -62,7 +62,8 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │
         ├── spec/
         │    ├── spec_repository.py   CRUD: create/activate/update/seed specs in DB
-        │    └── spec_loader.py       get_spec() — DB-first, YAML fallback
+        │    ├── spec_loader.py       get_spec() — DB-first, YAML fallback
+        │    └── versioning.py        SpecVersion, BumpType, validate_version, detect_bump_type
         │
         ├── system/system_graph.py     DAG built from spec's causal_relationships
         ├── system/system_model.py     topological evaluation engine (formula registry)
@@ -84,7 +85,7 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── db/
         │    ├── engine.py             SQLAlchemy engine, get_session()
         │    ├── models.py             AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion
-        │    └── migrations/           Alembic (001_initial_schema, 002_spec_tables)
+        │    └── migrations/           Alembic (001_initial_schema, 002_spec_tables, 003_spec_version_constraint)
         │
         ├── memory/
         │    ├── checkpointer.py       PostgresSaver (SQLite fallback)
@@ -110,9 +111,9 @@ api/
 │    ├── query.py         POST /v1/query
 │    ├── sessions.py      CRUD /v1/sessions
 │    ├── runs.py          GET /v1/runs
-│    ├── specs.py         CRUD /v1/specs
+│    ├── specs.py         CRUD /v1/specs + POST /v1/specs/{id}/bump
 │    └── health.py        /healthz, /readyz, /v1/debug/config
-└── schemas/             Pydantic request/response models
+└── schemas/             Pydantic request/response models (incl. SpecBumpRequest/Response)
 
 app.py                    REPL (legacy)
 streamlit_app.py          Thin wrapper: st.set_page_config() + from ui.app import main
@@ -265,9 +266,13 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 - [x] P2.4: mypy (intermediate level, --explicit-package-bases) + pip-audit (continue-on-error) added to CI Job 1; 21 pre-existing type errors fixed or suppressed
 - [x] P2.2: `streamlit_app.py` (~1040 LOC) split into `ui/` package + `agents/runner.py`; multi-turn rendering bug fixed; API and UI share same `run_query()` code path (Directive 3); 113 unit tests pass
 
-## Current work: Audit P2.2 (Streamlit split) — Next: Item 1.6 ObjectBus
+### Item 3.6 ✅
 
-**Branch**: `refactor/streamlit-split`
+- [x] 3.6 Semantic versioning for specs: `spec/versioning.py` (SpecVersion, BumpType, detect_bump_type), semver validation in create_spec/update_spec/seed_from_yaml, auto-bump from YAML diff, monotonicity check, `POST /v1/specs/{id}/bump` endpoint, migration 003 CHECK constraint
+
+## Current work: Item 3.6 (spec semver) — Next: Item 1.6 ObjectBus
+
+**Branch**: `feature/3.6-spec-semver`
 
 Completed 2026-05-09.
 
@@ -294,7 +299,7 @@ INSIDE `with tab_chat:`. `handle_query()` updates `session_state` only (no rende
 Error types (`LLMUnavailableError`) propagated via `RunResult.error_type` for 503 vs 500
 HTTP status distinction.
 
-**Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, open I2A formally.
+**Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, open I2A formally. Item 3.6 (spec semver) from I2A completed ahead of schedule as a standalone item.
 
 ## Pending improvements (noted, not blocking)
 

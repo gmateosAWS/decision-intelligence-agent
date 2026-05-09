@@ -296,7 +296,7 @@ Es el paso de sistema con base técnica seria a sistema que demuestra valor con 
 
 | Item                                                      | Justificación                                                                                    |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| **3.6** Versionado semántico del spec                     | Cada spec con versión major.minor.patch. Los runs quedan atados a la versión.                    |
+| ~~**3.6** Versionado semántico del spec~~ ✅ 2026-05-09   | `spec/versioning.py`: SpecVersion, BumpType, detect_bump_type. semver validation in create/update/seed. `POST /v1/specs/{id}/bump`. Migration 003 CHECK constraint. 145 tests pass. |
 | **10.4** Versionado del spec como artefacto de despliegue | PR, review, validación automática, promoción entre entornos. Aplica la disciplina de I1 al spec. |
 | **10.1** Prompt registry                                  | Los prompts del planner/synthesizer/judge versionados y evaluables. Primer paso real de LLMOps. Primer registry concreto que adopta el patrón unificado de 10.8 (que se generalizará en I3). |
 
