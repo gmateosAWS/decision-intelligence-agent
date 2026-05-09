@@ -171,7 +171,7 @@ Añadir al spec un campo `autonomy_policy` por tipo de decisión: consultas de c
 
 _Resuelve:_ el nivel de autonomía del agente es un parámetro de negocio del cliente, no una decisión técnica. Debe vivir en el spec, no hardcodeado.
 
-### 3.6 Versionado semántico del spec con migraciones `[feature]`
+### 3.6 Versionado semántico del spec con migraciones `[feature]` ✅ COMPLETADO 2026-05-09
 
 Cada spec tiene una versión semántica (major.minor.patch), y los cambios entre versiones pueden requerir migración de runs históricos o de modelos predictivos asociados. Por ejemplo, renombrar una variable requiere actualizar referencias en todas las partes del sistema que la usen.
 

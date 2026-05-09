@@ -475,7 +475,7 @@ decision-intelligence-agent/
 |   |   +-- query.py                # POST /v1/query
 |   |   +-- sessions.py             # CRUD /v1/sessions
 |   |   +-- runs.py                 # GET /v1/runs
-|   |   +-- specs.py                # CRUD /v1/specs
+|   |   +-- specs.py                # CRUD /v1/specs + POST /v1/specs/{id}/bump
 |   |   +-- health.py               # /healthz, /readyz, /v1/debug/config
 |   +-- schemas/                    # Pydantic request/response models
 +-- tests/
@@ -488,9 +488,12 @@ decision-intelligence-agent/
 |   |   +-- test_sessions.py        # CRUD /v1/sessions (6 tests)
 |   |   +-- test_runs.py            # GET /v1/runs (4 tests)
 |   |   +-- test_specs.py           # CRUD /v1/specs (7 tests)
+|   |   +-- test_specs_bump.py      # POST /v1/specs/{id}/bump (6 tests)
 |   +-- spec/
 |       +-- test_spec_repository.py # Integration tests: spec CRUD + traceability (needs Postgres)
 |       +-- test_spec_loader_db.py  # Integration + unit: DB-first load + YAML fallback
+|       +-- test_versioning.py      # Unit tests: SpecVersion, BumpType, detect_bump_type (25 tests)
+|       +-- test_spec_repository_semver.py  # Integration: semver validation + auto-bump (needs Postgres)
 +-- docs/
 |   +-- llull_roadmap_v3.md         # Iteration plan with progress tracking (I1 → I2A → I2B → I3)
 |   +-- llull_inventario_v3.md      # Full backlog (97 items)
@@ -653,9 +656,10 @@ Interactive docs available at [http://localhost:8000/docs](http://localhost:8000
 | `GET` | `/v1/runs/{run_id}` | Run detail with full raw tool output |
 | `GET` | `/v1/specs` | List specs |
 | `GET` | `/v1/specs/{id}` | Spec detail with YAML content |
-| `POST` | `/v1/specs` | Create spec from YAML body |
+| `POST` | `/v1/specs` | Create spec from YAML body (semver validated) |
 | `PUT` | `/v1/specs/{id}/activate` | Activate a spec version |
 | `GET` | `/v1/specs/{id}/versions` | Spec version history |
+| `POST` | `/v1/specs/{id}/bump` | Bump spec version (auto-detect or explicit major/minor/patch) |
 | `GET` | `/healthz` | Liveness probe (always 200) |
 | `GET` | `/readyz` | Readiness probe (checks DB + spec) |
 | `GET` | `/v1/debug/config` | Active LLM config (no secrets) |
@@ -681,6 +685,30 @@ Response:
   "spec_version": "1.0.0"
 }
 ```
+
+### Spec semantic versioning
+
+Specs use strict `MAJOR.MINOR.PATCH` versioning (item 3.6):
+
+| Bump | Trigger |
+|------|---------|
+| **major** | Variable added/removed/renamed, causal edge changed |
+| **minor** | Parameter bounds adjusted |
+| **patch** | Descriptions, metadata only |
+
+```bash
+# Auto-detect bump type from YAML diff
+curl -X POST /v1/specs/{id}/bump \
+  -H "Content-Type: application/json" \
+  -d '{"yaml_content": "<updated-yaml>"}'
+# → {"spec_id": "...", "version": "1.0.1", "bump_type": "patch", "auto_detected": true}
+
+# Explicit bump type
+curl -X POST /v1/specs/{id}/bump \
+  -d '{"yaml_content": "...", "bump_type": "minor", "change_summary": "Wider price range"}'
+```
+
+The new spec is created as `status=draft`. Call `PUT /v1/specs/{id}/activate` to promote it.
 
 ### API versioning
 
