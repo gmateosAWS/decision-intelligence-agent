@@ -122,8 +122,7 @@ def handle_query(prompt: str, graph: Any) -> RunResult:
         pass
 
     # Step 3 — delegate to shared runner (Directive 3)
-    with st.spinner("Analizando tu pregunta…"):
-        result = run_query(prompt, session_id, observer, graph)
+    result = run_query(prompt, session_id, observer, graph)
 
     # Step 4 — build metadata for display
     metadata: Dict[str, Any] = {
