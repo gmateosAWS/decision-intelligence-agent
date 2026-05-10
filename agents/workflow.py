@@ -33,6 +33,8 @@ from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, StateGraph
 
+from prompts.registry import SYNTHESIZER_SYSTEM_TEMPLATE, get_prompt_template
+
 from .i18n import get_synth_instructions, get_system_language_directive
 from .judge import judge_node as _judge_node_impl
 from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
@@ -96,6 +98,7 @@ def planner_node(
             reasoning=result.get("reasoning", ""),
             latency_ms=elapsed_ms,
             model=_PLANNER_MODEL,
+            prompt_version=result.get("planner_prompt_version"),
         )
     return result  # type: ignore[no-any-return]  # _sanitize_for_state returns Any; dict at runtime
 
@@ -156,12 +159,14 @@ def synthesizer_node(
     raw = _sanitize_for_state(state.get("raw_result") or {})
 
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
+    synth_template, synth_version = get_prompt_template(
+        "synthesizer", SYNTHESIZER_SYSTEM_TEMPLATE
+    )
     messages = [
         {
             "role": "system",
-            "content": (
-                f"You are a business intelligence assistant. "
-                f"{get_system_language_directive(language)}"
+            "content": synth_template.format(
+                language_directive=get_system_language_directive(language)
             ),
         },
         {
@@ -194,10 +199,14 @@ def synthesizer_node(
 
     if obs:
         obs.record_synthesizer(
-            answer=answer, latency_ms=elapsed_ms, model=_SYNTHESIZER_MODEL
+            answer=answer,
+            latency_ms=elapsed_ms,
+            model=_SYNTHESIZER_MODEL,
+            prompt_version=synth_version,
         )
 
-    return _sanitize_for_state({"answer": answer})  # type: ignore[no-any-return]
+    result = {"answer": answer, "synthesizer_prompt_version": synth_version}
+    return _sanitize_for_state(result)  # type: ignore[no-any-return]
 
 
 def judge_node(

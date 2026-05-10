@@ -92,6 +92,11 @@ class RunRecord:
     spec_id: Optional[str] = None
     spec_version: Optional[str] = None
 
+    # Prompt Registry traceability (item 10.1)
+    planner_prompt_version: Optional[str] = None
+    synthesizer_prompt_version: Optional[str] = None
+    judge_prompt_version: Optional[str] = None
+
 
 # ---------------------------------------------------------------------------
 # Observer
@@ -166,6 +171,7 @@ class AgentObserver:
         reasoning: str,
         latency_ms: float,
         model: Optional[str] = None,
+        prompt_version: Optional[str] = None,
     ) -> None:
         """Record the planner's tool selection."""
         if self._run:
@@ -173,6 +179,7 @@ class AgentObserver:
             self._run.reasoning = reasoning
             self._run.planner_latency_ms = latency_ms
             self._run.planner_model = model
+            self._run.planner_prompt_version = prompt_version
         self._logger.info(
             "  PLANNER     action=%-14s  latency=%6.0f ms  reason=%s",
             action,
@@ -218,12 +225,14 @@ class AgentObserver:
         answer: str,
         latency_ms: float,
         model: Optional[str] = None,
+        prompt_version: Optional[str] = None,
     ) -> None:
         """Record the synthesizer's output."""
         if self._run:
             self._run.synthesizer_latency_ms = latency_ms
             self._run.answer_length = len(answer)
             self._run.synthesizer_model = model
+            self._run.synthesizer_prompt_version = prompt_version
         self._logger.info(
             "  SYNTHESIZER                       latency=%6.0f ms  answer_chars=%d",
             latency_ms,
@@ -240,6 +249,7 @@ class AgentObserver:
         final_answer: Optional[str] = None,
         error: Optional[str] = None,
         model: Optional[str] = None,
+        prompt_version: Optional[str] = None,
     ) -> None:
         """Record online-judge evaluation and optional revision."""
         if self._run:
@@ -249,6 +259,7 @@ class AgentObserver:
             self._run.judge_revised = revised
             self._run.judge_feedback = feedback
             self._run.judge_model = model
+            self._run.judge_prompt_version = prompt_version
             if final_answer is not None:
                 self._run.answer_length = len(final_answer)
             if error and self._run.error is None:

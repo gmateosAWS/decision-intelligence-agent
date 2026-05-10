@@ -117,7 +117,7 @@ Unchanged: all others. No dimension regressed.
 | 5 | Tooling discipline | 2 | **2** | Unchanged. No `ToolSpec` with typed input/output schemas. | Baseline confirmed | 🟡 (items 4.3, 10.8) |
 | 6 | Tool safety | 2 | **2** | Unchanged. No SQL Execution Gateway; simulation adapter still manual. | `agents/tools.py:84-94` | 🟡 (item 2.10 en I2A) |
 | 7 | Model abstraction | 3 | **3** | Unchanged. Provider-agnostic factory, fallback chain. No Bedrock/Vertex/Ollama yet. | `agents/llm_factory.py:50-98` | 🟡 (item 5.6 ampliado en I2A) |
-| 8 | Prompt governance | 1 | **1** | Unchanged. Prompts remain inline Python strings, no registry, no versioning. | `agents/planner.py:117-163`; `agents/judge.py:103-130` | 🟡 (item 10.1 en I2A) |
+| 8 | Prompt governance | 1 | **3** | ✅ Fixed 2026-05-10 (item 10.1). `prompts/` registry with `draft→certified→deprecated` lifecycle; `get_prompt_template(stage, fallback)` used by all 3 agents; prompt_version propagated to `agent_runs`; 5 REST endpoints `/v1/prompts`. | `prompts/registry.py`; `prompts/models.py` | 🟡 (A/B testing 10.2, shadow eval 10.3 pending) |
 | 9 | State management | 4 | **4** | Unchanged. `AgentState` TypedDict, `_sanitize_for_state`, LangGraph append semantics. | `agents/state.py:38-52`; `agents/workflow.py:244-268` | 🟢 |
 | 10 | Memory abstraction | 1 | **1** | Unchanged. No `MemoryService` Protocol. Planner still slices `state["history"]` directly. | `agents/planner.py:185-196` | 🟡 (items 5.10, 5.11 en I2A) |
 | 11 | Retrieval / grounding | 2 | **2** | Unchanged. RAG configured; no `GroundedTokens` guardrail. | `knowledge/retriever.py:54-68` | 🟡 (item 5.9 en I2A) |

@@ -66,6 +66,11 @@ class PostgresSink:
                         error=record.get("error"),
                         spec_id=spec_uuid,
                         spec_version=record.get("spec_version"),
+                        planner_prompt_version=record.get("planner_prompt_version"),
+                        synthesizer_prompt_version=record.get(
+                            "synthesizer_prompt_version"
+                        ),
+                        judge_prompt_version=record.get("judge_prompt_version"),
                     )
                 )
         except Exception as exc:  # noqa: BLE001

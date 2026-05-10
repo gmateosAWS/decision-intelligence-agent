@@ -25,6 +25,9 @@ Fields
   requires_confirmation (bool)       -- autonomy policy: show plan, wait for OK
   requires_approval     (bool)       -- autonomy policy: propose only, no execution
   confirmation_message  (str | None) -- message displayed to the user for review
+  planner_prompt_version    (str | None) -- registry version of planner template
+  synthesizer_prompt_version (str | None) -- registry version of synthesizer template
+  judge_prompt_version      (str | None) -- registry version of judge template
   history      (List[Dict[str,str]]) -- accumulated (query, answer) turn pairs;
                                         merged via operator.add so LangGraph
                                         appends rather than replacing the list
@@ -55,5 +58,9 @@ class AgentState(TypedDict, total=False):
     requires_confirmation: bool  # show plan to user and wait for OK
     requires_approval: bool  # propose only, do not execute without approval
     confirmation_message: Optional[str]  # message shown to the user
+    # Prompt Registry traceability (item 10.1) — None when registry unavailable
+    planner_prompt_version: Optional[str]
+    synthesizer_prompt_version: Optional[str]
+    judge_prompt_version: Optional[str]
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]
