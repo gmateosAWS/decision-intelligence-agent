@@ -9,6 +9,10 @@ the same code path is used by both the UI and the FastAPI service (Directive 3).
 CRITICAL: run_agent_query() does NOT modify st.session_state.messages.
 Message appending is the exclusive responsibility of ui/app.py to avoid
 double-appends and race conditions with Streamlit's rerun cycle.
+
+All imports of agents.*, evaluation.*, and memory.* are deferred inside
+the functions that use them to prevent module-level import failures from
+cascading into a blank Streamlit page (KeyError: 'ui.session' pattern).
 """
 
 from __future__ import annotations
@@ -18,10 +22,6 @@ from typing import Any, Dict, List
 
 import streamlit as st
 
-from agents.runner import RunResult, run_query
-from evaluation.observer import AgentObserver
-from memory import get_checkpointer, register_turn
-
 # ---------------------------------------------------------------------------
 # Session state initialisation
 # ---------------------------------------------------------------------------
@@ -29,6 +29,8 @@ from memory import get_checkpointer, register_turn
 
 def init_session_state() -> None:
     """Initialise all required session_state keys (idempotent)."""
+    from evaluation.observer import AgentObserver
+
     if "session_id" not in st.session_state:
         handle_new_session()
     if "observer" not in st.session_state:
@@ -83,6 +85,7 @@ def resume_session(session_id: str, graph: Any) -> None:
 def get_or_create_graph() -> Any:
     """Return the cached LangGraph graph, building it on first call."""
     from agents.workflow import build_graph as build_agent_graph
+    from memory import get_checkpointer
 
     checkpointer = get_checkpointer()
     return build_agent_graph(checkpointer=checkpointer)
@@ -93,7 +96,7 @@ def get_or_create_graph() -> Any:
 # ---------------------------------------------------------------------------
 
 
-def run_agent_query(prompt: str, graph: Any) -> RunResult:
+def run_agent_query(prompt: str, graph: Any) -> Any:
     """
     Run one agent turn and return the result.
 
@@ -104,8 +107,11 @@ def run_agent_query(prompt: str, graph: Any) -> RunResult:
     DOES register the turn in the memory layer and invoke the agent via
     the shared runner (Directive 3 — same code as the API).
     """
+    from agents.runner import run_query
+    from memory import register_turn
+
     session_id: str = st.session_state.session_id
-    observer: AgentObserver = st.session_state.observer
+    observer = st.session_state.observer
 
     # Register session row before run_query so the FK exists when
     # PostgresSink INSERTs the agent_run row

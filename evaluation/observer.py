@@ -39,11 +39,30 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from evaluation.confidence import ConfidenceScorer
-from evaluation.sinks.base import RunSink
-from evaluation.sinks.jsonl_sink import JsonlSink
-from evaluation.sinks.langsmith_sink import LangSmithBridge
-from evaluation.sinks.postgres_sink import PostgresSink
+try:
+    from evaluation.confidence import ConfidenceScorer
+except Exception:  # noqa: BLE001
+    ConfidenceScorer = None  # type: ignore[assignment,misc]
+
+try:
+    from evaluation.sinks.base import RunSink
+except Exception:  # noqa: BLE001
+    RunSink = object  # type: ignore[assignment,misc]
+
+try:
+    from evaluation.sinks.jsonl_sink import JsonlSink
+except Exception:  # noqa: BLE001
+    JsonlSink = None  # type: ignore[assignment,misc]
+
+try:
+    from evaluation.sinks.langsmith_sink import LangSmithBridge
+except Exception:  # noqa: BLE001
+    LangSmithBridge = None  # type: ignore[assignment,misc]
+
+try:
+    from evaluation.sinks.postgres_sink import PostgresSink
+except Exception:  # noqa: BLE001
+    PostgresSink = None  # type: ignore[assignment,misc]
 
 # ---------------------------------------------------------------------------
 # Data model
@@ -133,7 +152,7 @@ class AgentObserver:
         self.session_id = uuid.uuid4().hex[:8]
         self._run: Optional[RunRecord] = None
         self._run_start: Optional[float] = None
-        self._scorer = ConfidenceScorer()
+        self._scorer = ConfidenceScorer() if ConfidenceScorer is not None else None
         self._sinks: List[RunSink] = (
             sinks if sinks is not None else self._default_sinks()
         )
@@ -214,7 +233,10 @@ class AgentObserver:
                 self._run.error = error
             elif isinstance(result, dict):
                 self._run.raw_result_keys = list(result.keys())
-                self._run.confidence_score = self._scorer.compute_from_result(result)
+                if self._scorer is not None:
+                    self._run.confidence_score = self._scorer.compute_from_result(
+                        result
+                    )
 
         status = "ERROR" if error else "OK"
         conf = (
@@ -368,11 +390,14 @@ class AgentObserver:
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _default_sinks(self) -> List[RunSink]:
-        sinks: List[RunSink] = [JsonlSink(self.log_dir)]
-        if os.getenv("DATABASE_URL", ""):
+    def _default_sinks(self) -> List[Any]:
+        sinks: List[Any] = []
+        if JsonlSink is not None:
+            sinks.append(JsonlSink(self.log_dir))
+        if os.getenv("DATABASE_URL", "") and PostgresSink is not None:
             sinks.append(PostgresSink())
-        sinks.append(LangSmithBridge())
+        if LangSmithBridge is not None:
+            sinks.append(LangSmithBridge())
         return sinks
 
     def _build_logger(self) -> logging.Logger:

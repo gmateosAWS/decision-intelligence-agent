@@ -2,6 +2,9 @@
 ui/dashboard.py
 ----------------
 Observability dashboard rendered inside the Dashboard tab.
+
+evaluation.metrics is imported lazily inside render_dashboard() to prevent
+module-level import failures from cascading into a blank Streamlit page.
 """
 
 from __future__ import annotations
@@ -9,12 +12,13 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import streamlit as st
 
-from evaluation.metrics import compute_metrics, load_runs
 from ui.styles import TOOL_COLORS
 
 
 def render_dashboard() -> None:
     """Render the observability dashboard from evaluation/metrics.py."""
+    from evaluation.metrics import compute_metrics, load_runs
+
     st.caption("Dashboard de Observabilidad")
 
     runs = load_runs()
@@ -57,7 +61,9 @@ def render_dashboard() -> None:
                 margin=dict(l=10, r=10, t=40, b=10),
                 paper_bgcolor="rgba(0,0,0,0)",
             )
-            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+            st.plotly_chart(
+                fig, use_container_width=True, config={"displayModeBar": False}
+            )
 
     with col_r:
         _node_cfg = [
@@ -85,7 +91,9 @@ def render_dashboard() -> None:
                 plot_bgcolor="rgba(0,0,0,0)",
                 yaxis=dict(gridcolor="rgba(128,128,128,0.15)"),
             )
-            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+            st.plotly_chart(
+                fig, use_container_width=True, config={"displayModeBar": False}
+            )
 
     st.divider()
 
@@ -107,4 +115,4 @@ def render_dashboard() -> None:
                     "OK": "✓" if r.get("success", True) else "✗",
                 }
             )
-        st.dataframe(rows, width="stretch", hide_index=True)
+        st.dataframe(rows, use_container_width=True, hide_index=True)
