@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TypedDict
 
 from prompts.models import PromptRecord, PromptStatus
 
@@ -297,7 +297,16 @@ JUDGE_REVISION_TEMPLATE = (
     "You revise answers for a Decision Intelligence assistant. {language_directive}"
 )
 
-_SEED_PROMPTS = [
+
+class _SeedEntry(TypedDict):
+    prompt_id: str
+    stage: str
+    content: str
+    variables: List[str]
+    description: str
+
+
+_SEED_PROMPTS: List[_SeedEntry] = [
     {
         "prompt_id": "planner",
         "stage": "planner",
@@ -355,10 +364,10 @@ def seed_prompts_from_code() -> List[PromptRecord]:
             create_prompt(
                 prompt_id=pid,
                 stage=stage,
-                content=spec["content"],  # type: ignore[arg-type]
+                content=spec["content"],
                 version="1.0.0",
-                variables=spec["variables"],  # type: ignore[arg-type]
-                description=spec["description"],  # type: ignore[arg-type]
+                variables=spec["variables"],
+                description=spec["description"],
                 owner="system",
             )
             certified = certify_prompt(pid, "1.0.0")
