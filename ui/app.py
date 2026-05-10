@@ -140,6 +140,7 @@ def main() -> None:
             card_query = render_welcome_cards()
             if card_query:
                 st.session_state["_pending_query"] = card_query
+                st.rerun()
 
         # ── 1. Render full conversation history from session_state ────
         for msg in st.session_state.messages:

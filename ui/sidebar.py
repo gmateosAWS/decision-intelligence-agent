@@ -152,7 +152,7 @@ def render_sidebar(
                 G = build_causal_graph()
                 fig_dag = _dag_figure(G)
                 st.plotly_chart(
-                    fig_dag, use_container_width=True, config={"displayModeBar": False}
+                    fig_dag, width="stretch", config={"displayModeBar": False}
                 )
             except Exception as e:  # noqa: BLE001
                 st.warning(f"DAG no disponible: {e}")

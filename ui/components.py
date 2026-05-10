@@ -81,7 +81,7 @@ def _render_simulation_cards(raw: Dict[str, Any]) -> None:
 
     st.plotly_chart(
         _simulation_figure(raw),
-        use_container_width=True,
+        width="stretch",
         config={"displayModeBar": False},
     )
 
