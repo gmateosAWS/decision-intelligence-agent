@@ -69,7 +69,13 @@ def run_query(
 
         graph = build_graph(checkpointer=get_checkpointer())
 
-    # Optional spec traceability (no-op when DATABASE_URL is absent)
+    # Bind the real session UUID so RunRecord.session_id matches agent_sessions.id
+    observer.set_session_id(thread_id)
+
+    run_id = observer.start_run(query)
+    t0 = time.perf_counter()
+
+    # Optional spec traceability — must come AFTER start_run() so self._run exists
     import os
 
     if os.getenv("DATABASE_URL", ""):
@@ -87,9 +93,6 @@ def run_query(
         except Exception:  # noqa: BLE001
             pass
 
-    run_id = observer.start_run(query)
-    t0 = time.perf_counter()
-
     try:
         cfg = observer.langsmith_config()
         cfg["configurable"]["observer"] = observer
@@ -97,6 +100,7 @@ def run_query(
 
         result = graph.invoke({"query": query, "run_id": run_id}, config=cfg)
 
+        observer.set_raw_result(result.get("raw_result") or {})
         latency_ms = (time.perf_counter() - t0) * 1000
         record = observer.end_run(success=True) or {}
 

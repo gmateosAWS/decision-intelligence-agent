@@ -114,10 +114,18 @@ def handle_query(prompt: str, graph: Any) -> RunResult:
         {"role": "user", "content": prompt, "metadata": None}
     )
 
-    # Step 2 — delegate to shared runner (Directive 3)
-    result = run_query(prompt, session_id, observer, graph)
+    # Step 2 — register session row before run_query so the FK exists when
+    # PostgresSink INSERTs the agent_run row (agent_runs.session_id → agent_sessions.id)
+    try:
+        register_turn(session_id, prompt)
+    except Exception:  # noqa: BLE001
+        pass
 
-    # Step 3 — build metadata for display
+    # Step 3 — delegate to shared runner (Directive 3)
+    with st.spinner("Analizando tu pregunta…"):
+        result = run_query(prompt, session_id, observer, graph)
+
+    # Step 4 — build metadata for display
     metadata: Dict[str, Any] = {
         "action": result.tool_used,
         "reasoning": result.reasoning,
@@ -132,7 +140,7 @@ def handle_query(prompt: str, graph: Any) -> RunResult:
         "confirmation_message": result.confirmation_message,
     }
 
-    # Step 4 — append assistant message
+    # Step 5 — append assistant message
     st.session_state.messages.append(
         {"role": "assistant", "content": result.answer, "metadata": metadata}
     )
@@ -140,11 +148,6 @@ def handle_query(prompt: str, graph: Any) -> RunResult:
         [m for m in st.session_state.messages if m["role"] == "user"]
     )
 
-    # Step 5 — register turn in memory layer (no-op on failure)
-    try:
-        register_turn(session_id, prompt)
-    except Exception:  # noqa: BLE001
-        pass
     st.session_state.is_new_session = False
 
     return result

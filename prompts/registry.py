@@ -89,7 +89,9 @@ def get_certified_prompt(stage: str) -> Optional[PromptRecord]:
                 .order_by(Prompt.changed_at.desc())
                 .first()
             )
-        return _row_to_record(row) if row else None
+            # _row_to_record must be called inside the session context so that
+            # lazy-loaded ORM attributes (e.g. variables) can still be accessed.
+            return _row_to_record(row) if row else None
     except Exception as exc:  # noqa: BLE001
         logger.warning("prompt registry read failed (%s): %s", stage, exc)
         return None
@@ -103,7 +105,7 @@ def get_prompt(prompt_id: str, version: str) -> Optional[PromptRecord]:
         get_session, Prompt = _get_session_and_model()
         with get_session() as session:
             row = session.query(Prompt).filter_by(id=prompt_id, version=version).first()
-        return _row_to_record(row) if row else None
+            return _row_to_record(row) if row else None
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "prompt registry get failed (%s@%s): %s", prompt_id, version, exc
@@ -127,7 +129,7 @@ def list_prompts(
             if status is not None:
                 q = q.filter_by(status=status.value)
             rows = q.order_by(Prompt.changed_at.desc()).all()
-        return [_row_to_record(r) for r in rows]
+            return [_row_to_record(r) for r in rows]
     except Exception as exc:  # noqa: BLE001
         logger.warning("prompt registry list failed: %s", exc)
         return []

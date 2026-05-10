@@ -229,5 +229,5 @@ def planner_node(state: AgentState) -> Dict:
             "requires_confirmation": False,
             "requires_approval": False,
             "confirmation_message": None,
-            "planner_prompt_version": None,
+            "planner_prompt_version": prompt_version,
         }

@@ -34,6 +34,10 @@ def run_query_endpoint(req: QueryRequest, graph=Depends(get_graph)) -> QueryResp
     session_id = str(session_uuid)
     observer = AgentObserver()
 
+    # Create the agent_sessions row BEFORE run_query so the FK exists when
+    # PostgresSink INSERTs the agent_run row.
+    register_turn(session_id, req.query)
+
     # run_query() calls observer.start_run() and observer.end_run() internally
     result = run_query(req.query, session_id, observer, graph)
 
@@ -47,8 +51,6 @@ def run_query_endpoint(req: QueryRequest, graph=Depends(get_graph)) -> QueryResp
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "Internal error", "message": result.error},
         )
-
-    register_turn(session_id, req.query)
 
     return QueryResponse(
         answer=result.answer,
