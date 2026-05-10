@@ -68,6 +68,7 @@ class RunRecord:
     # Tool
     tool_latency_ms: Optional[float] = None
     raw_result_keys: Optional[List[str]] = None
+    raw_result: Optional[Dict[str, Any]] = None
     confidence_score: Optional[float] = None
 
     # Synthesizer
@@ -142,11 +143,22 @@ class AgentObserver:
     # Public API
     # ------------------------------------------------------------------
 
+    def set_session_id(self, session_id: str) -> None:
+        """Override the auto-generated session_id with the caller's session UUID."""
+        self.session_id = session_id
+        if self._run:
+            self._run.session_id = session_id
+
     def set_spec(self, spec_id: Optional[str], spec_version: Optional[str]) -> None:
         """Record which spec version is active for the current run."""
         if self._run:
             self._run.spec_id = spec_id
             self._run.spec_version = spec_version
+
+    def set_raw_result(self, raw_result: Dict[str, Any]) -> None:
+        """Attach the tool's full output dict to the current run record."""
+        if self._run:
+            self._run.raw_result = raw_result
 
     def start_run(self, query: str) -> str:
         """Open a new run.  Returns the run_id for correlation."""

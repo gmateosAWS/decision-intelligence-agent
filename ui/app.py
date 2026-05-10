@@ -122,14 +122,8 @@ def main() -> None:
     # ------------------------------------------------------------------
     tab_chat, tab_dashboard = st.tabs(["Chat", "Dashboard"])
 
-    from ui.components import (
-        render_chat_message,
-        render_result_cards,
-        render_technical_details,
-        render_welcome_cards,
-    )
+    from ui.components import render_chat_message, render_welcome_cards
     from ui.dashboard import render_dashboard
-    from ui.styles import TOOL_LABELS, sanitize_markdown
 
     with tab_chat:
         # Welcome cards — shown only when no messages and no pending query
@@ -143,53 +137,10 @@ def main() -> None:
         for msg in st.session_state.messages:
             render_chat_message(msg)
 
-        # ------------------------------------------------------------------
-        # Current turn — rendered INSIDE tab_chat (this is the bug fix).
-        # Previous code rendered the current turn below the tabs, causing
-        # it to appear in the wrong context and disappear on rerun.
-        # ------------------------------------------------------------------
+        # Current turn: run the agent (spinner shown inside handle_query),
+        # then rerun so the history loop renders the new messages.
         if prompt:
-            # Show user message immediately (it's already appended by handle_query)
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            with st.chat_message("assistant"):
-                _status = st.empty()
-                _status.caption("⏳ Analizando tu pregunta…")
-
-                # Delegate to shared runner path (Directive 3)
-                result = handle_query(prompt, graph)
-
-                _status.empty()
-
-                # Render answer
-                st.markdown(sanitize_markdown(result.answer))
-
-                # Tool badge + latency
-                action = result.tool_used or ""
-                tool_label = TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
-                if tool_label and result.latency_ms:
-                    st.caption(f"{tool_label}  ·  {result.latency_ms:,.0f} ms")
-                elif result.latency_ms:
-                    st.caption(f"{result.latency_ms:,.0f} ms")
-
-                # Result cards and technical details
-                render_result_cards(action, result.raw_result)
-                render_technical_details(
-                    {
-                        "action": result.tool_used,
-                        "reasoning": result.reasoning,
-                        "raw_result": result.raw_result,
-                        "judge_score": result.judge_score,
-                        "judge_passed": result.judge_passed,
-                        "judge_revised": result.judge_revised,
-                        "total_ms": result.latency_ms,
-                        "latencies": result.latencies,
-                    }
-                )
-
-            # Trigger a full rerun so the history loop picks up both new messages.
-            # The messages were already appended to session_state by handle_query().
+            handle_query(prompt, graph)
             st.rerun()
 
     with tab_dashboard:

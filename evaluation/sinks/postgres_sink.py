@@ -40,10 +40,16 @@ class PostgresSink:
             except (ValueError, AttributeError):
                 spec_uuid = None
 
+            session_id_raw = record.get("session_id")
+            try:
+                session_uuid = uuid.UUID(session_id_raw) if session_id_raw else None
+            except (ValueError, AttributeError):
+                session_uuid = None
+
             with get_session() as session:
                 session.add(
                     AgentRun(
-                        session_id=None,
+                        session_id=session_uuid,
                         run_id=record.get("run_id", ""),
                         query=record.get("query", ""),
                         action=record.get("action"),
@@ -61,6 +67,7 @@ class PostgresSink:
                         judge_revised=record.get("judge_revised"),
                         judge_feedback=record.get("judge_feedback"),
                         judge_model=record.get("judge_model"),
+                        raw_result=record.get("raw_result"),
                         total_latency_ms=record.get("total_latency_ms"),
                         success=record.get("success", True),
                         error=record.get("error"),
