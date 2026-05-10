@@ -3,8 +3,12 @@ ui/session.py
 --------------
 Session state management and query handling for the Streamlit UI.
 
-handle_query() delegates graph invocation to agents.runner.run_query() so the
-same code path is used by both the UI and the FastAPI service (Directive 3).
+run_agent_query() delegates graph invocation to agents.runner.run_query() so
+the same code path is used by both the UI and the FastAPI service (Directive 3).
+
+CRITICAL: run_agent_query() does NOT modify st.session_state.messages.
+Message appending is the exclusive responsibility of ui/app.py to avoid
+double-appends and race conditions with Streamlit's rerun cycle.
 """
 
 from __future__ import annotations
@@ -33,6 +37,8 @@ def init_session_state() -> None:
         st.session_state.messages = []
     if "is_new_session" not in st.session_state:
         st.session_state.is_new_session = True
+    if "turn_count" not in st.session_state:
+        st.session_state.turn_count = 0
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +51,7 @@ def handle_new_session() -> None:
     st.session_state.session_id = str(uuid.uuid4())
     st.session_state.is_new_session = True
     st.session_state.messages = []
+    st.session_state.turn_count = 0
 
 
 def resume_session(session_id: str, graph: Any) -> None:
@@ -70,6 +77,7 @@ def resume_session(session_id: str, graph: Any) -> None:
     except Exception:  # noqa: BLE001
         pass
     st.session_state.messages = messages
+    st.session_state.turn_count = len([m for m in messages if m["role"] == "user"])
 
 
 def get_or_create_graph() -> Any:
@@ -81,72 +89,32 @@ def get_or_create_graph() -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Query handler — core of the multi-turn fix
+# Query handler — pure agent invocation, no session_state mutation
 # ---------------------------------------------------------------------------
 
-_SPINNER_STEPS = [
-    "Analizando tu pregunta…",
-    "Consultando el modelo causal…",
-    "Generando respuesta…",
-]
 
-
-def handle_query(prompt: str, graph: Any) -> RunResult:
+def run_agent_query(prompt: str, graph: Any) -> RunResult:
     """
-    Run one agent turn and update session_state.
+    Run one agent turn and return the result.
 
-    Flow (multi-turn bug fix):
-    1. Append user message FIRST so the next render shows it immediately.
-    2. Call agents.runner.run_query() — the same function the API uses.
-    3. Build metadata dict from RunResult.
-    4. Append assistant message to session_state.messages.
-    5. Register the turn in the memory layer.
-    6. Return the RunResult (caller decides when to st.rerun()).
+    DOES NOT modify st.session_state.messages — that is the exclusive
+    responsibility of ui/app.py to avoid double-appends and Streamlit
+    rerun race conditions.
 
-    The caller (ui/app.py) is responsible for rendering the in-progress
-    status and for calling st.rerun() after this function returns.
+    DOES register the turn in the memory layer and invoke the agent via
+    the shared runner (Directive 3 — same code as the API).
     """
     session_id: str = st.session_state.session_id
     observer: AgentObserver = st.session_state.observer
 
-    # Step 1 — append user message before processing
-    st.session_state.messages.append(
-        {"role": "user", "content": prompt, "metadata": None}
-    )
-
-    # Step 2 — register session row before run_query so the FK exists when
-    # PostgresSink INSERTs the agent_run row (agent_runs.session_id → agent_sessions.id)
+    # Register session row before run_query so the FK exists when
+    # PostgresSink INSERTs the agent_run row
     try:
         register_turn(session_id, prompt)
     except Exception:  # noqa: BLE001
         pass
 
-    # Step 3 — delegate to shared runner (Directive 3)
+    # Delegate to shared runner (Directive 3)
     result = run_query(prompt, session_id, observer, graph)
-
-    # Step 4 — build metadata for display
-    metadata: Dict[str, Any] = {
-        "action": result.tool_used,
-        "reasoning": result.reasoning,
-        "raw_result": result.raw_result,
-        "judge_score": result.judge_score,
-        "judge_passed": result.judge_passed,
-        "judge_revised": result.judge_revised,
-        "total_ms": result.latency_ms,
-        "latencies": result.latencies,
-        "requires_confirmation": result.requires_confirmation,
-        "requires_approval": result.requires_approval,
-        "confirmation_message": result.confirmation_message,
-    }
-
-    # Step 5 — append assistant message
-    st.session_state.messages.append(
-        {"role": "assistant", "content": result.answer, "metadata": metadata}
-    )
-    st.session_state.turn_count = len(
-        [m for m in st.session_state.messages if m["role"] == "user"]
-    )
-
-    st.session_state.is_new_session = False
 
     return result

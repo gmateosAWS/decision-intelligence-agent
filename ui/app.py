@@ -4,12 +4,13 @@ ui/app.py
 Main Streamlit orchestrator.  Composes sidebar, header, tabs, and chat
 interaction.
 
-Rendering pattern — history-then-inline, no st.rerun() in the query flow:
+Rendering pattern (official Streamlit chat pattern):
   1. History loop re-renders all past turns from session_state on every rerun.
-  2. When a new prompt arrives, user + assistant are rendered inline in the
-     same script execution (spinner wraps the LLM call).
-  3. session_state is updated by handle_query() so the next natural Streamlit
-     rerun (triggered by the user's next input) picks up all messages.
+  2. When a new prompt arrives, user message is rendered inline and appended
+     to session_state.  Then the agent runs inside a spinner, and the
+     assistant response is rendered inline and appended to session_state.
+  3. No st.rerun() — the next user input triggers a natural rerun.
+  4. handle_query() does NOT append messages — app.py owns the message list.
 """
 
 from __future__ import annotations
@@ -62,9 +63,9 @@ def main() -> None:
     # ------------------------------------------------------------------
     from ui.session import (
         handle_new_session,
-        handle_query,
         init_session_state,
         resume_session,
+        run_agent_query,
     )
 
     init_session_state()
@@ -134,45 +135,84 @@ def main() -> None:
     from ui.styles import TOOL_LABELS, sanitize_markdown
 
     with tab_chat:
-        # Welcome cards — only when conversation is empty.
-        # Button clicks already trigger a natural Streamlit rerun; no explicit
-        # st.rerun() needed here.
+        # Welcome cards — only when conversation is empty
         if not st.session_state.messages and not prompt:
             card_query = render_welcome_cards()
             if card_query:
                 st.session_state["_pending_query"] = card_query
 
-        # 1. Render the full conversation history from session_state
+        # ── 1. Render full conversation history from session_state ────
         for msg in st.session_state.messages:
             render_chat_message(msg)
 
-        # 2. Process and render the current turn inline — no st.rerun().
-        #    handle_query() appends user + assistant to session_state so the
-        #    next natural rerun (next user input) renders them via the loop above.
+        # ── 2. Process current turn inline (no st.rerun) ─────────────
+        #
+        # This follows the official Streamlit chat pattern:
+        # - Render user message inline AND append to session_state
+        # - Run agent inside spinner
+        # - Render assistant response inline AND append to session_state
+        # - No st.rerun() — next user input triggers natural rerun
+        #
+        # CRITICAL: handle_query/run_agent_query does NOT append messages.
+        # This function owns the message list exclusively.
         if prompt:
+            # -- User message --
+            st.session_state.messages.append(
+                {"role": "user", "content": prompt, "metadata": None}
+            )
             with st.chat_message("user"):
                 st.markdown(prompt)
 
+            # -- Agent execution + assistant message --
             with st.chat_message("assistant"):
                 with st.spinner("Analizando tu pregunta…"):
-                    handle_query(prompt, graph)
+                    result = run_agent_query(prompt, graph)
 
-                last_msg = st.session_state.messages[-1]
-                st.markdown(sanitize_markdown(last_msg["content"]))
+                # Build metadata
+                metadata = {
+                    "action": result.tool_used,
+                    "reasoning": result.reasoning,
+                    "raw_result": result.raw_result,
+                    "judge_score": result.judge_score,
+                    "judge_passed": result.judge_passed,
+                    "judge_revised": result.judge_revised,
+                    "total_ms": result.latency_ms,
+                    "latencies": result.latencies,
+                    "requires_confirmation": result.requires_confirmation,
+                    "requires_approval": result.requires_approval,
+                    "confirmation_message": result.confirmation_message,
+                }
 
-                meta = last_msg.get("metadata") or {}
-                if meta:
-                    action = meta.get("action", "")
-                    total_ms = meta.get("total_ms")
-                    tool_label = TOOL_LABELS.get(
-                        action, f"⚪ {action}" if action else ""
-                    )
-                    if tool_label and total_ms:
-                        st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
-                    elif total_ms:
-                        st.caption(f"{total_ms:,.0f} ms")
-                    render_result_cards(action, meta.get("raw_result") or {})
-                    render_technical_details(meta)
+                # Append assistant to session_state
+                st.session_state.messages.append(
+                    {
+                        "role": "assistant",
+                        "content": result.answer,
+                        "metadata": metadata,
+                    }
+                )
+                st.session_state.turn_count = len(
+                    [m for m in st.session_state.messages if m["role"] == "user"]
+                )
+                st.session_state.is_new_session = False
+
+                # Render assistant response inline
+                st.markdown(sanitize_markdown(result.answer))
+
+                # Render tool badge + latency
+                action = result.tool_used or ""
+                total_ms = result.latency_ms
+                tool_label = TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
+                if tool_label and total_ms:
+                    st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+                elif total_ms:
+                    st.caption(f"{total_ms:,.0f} ms")
+
+                # Render result cards (metrics, charts)
+                render_result_cards(action, result.raw_result or {})
+
+                # Technical details expander
+                render_technical_details(metadata)
 
     with tab_dashboard:
         render_dashboard()
