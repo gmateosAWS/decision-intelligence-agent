@@ -12,6 +12,7 @@ to disappear or misrender on subsequent reruns.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Optional
 
@@ -20,10 +21,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+_diag = logging.getLogger("llull.diag")
+logging.basicConfig(level=logging.DEBUG)
+
 
 def main() -> None:
     """Entry point — called by the thin streamlit_app.py wrapper."""
-    print(f"=== SCRIPT START === messages={len(st.session_state.get('messages', []))}")
+    _diag.info(
+        "=== SCRIPT START === messages=%d", len(st.session_state.get("messages", []))
+    )
 
     # ------------------------------------------------------------------
     # 1. Seed spec + build graph (cached across reruns)
@@ -117,7 +123,7 @@ def main() -> None:
         prompt = st.session_state.pop("_pending_query")
     elif _chat_input:
         prompt = _chat_input
-    print(f"=== INPUT CAPTURED === prompt={prompt[:80] if prompt else 'NONE'}")
+    _diag.info("=== INPUT CAPTURED === prompt=%s", prompt[:80] if prompt else "NONE")
 
     # ------------------------------------------------------------------
     # 7. Tabs
@@ -136,21 +142,26 @@ def main() -> None:
                 st.rerun()
 
         # History loop — re-renders the complete conversation on every rerun
-        print(
-            f"=== HISTORY LOOP === rendering {len(st.session_state.messages)} messages"
+        _diag.info(
+            "=== HISTORY LOOP === rendering %d messages", len(st.session_state.messages)
         )
         for msg in st.session_state.messages:
-            content_len = len(msg.get("content", ""))
-            print(f"=== RENDER === role={msg['role']} content_len={content_len}")
+            _diag.info(
+                "=== RENDER === role=%s content_len=%d",
+                msg["role"],
+                len(msg.get("content", "")),
+            )
             render_chat_message(msg)
 
         # Current turn: run the agent (spinner shown inside handle_query),
         # then rerun so the history loop renders the new messages.
         if prompt:
-            print(f"=== PRE HANDLE === messages={len(st.session_state.messages)}")
+            _diag.info("=== PRE HANDLE === messages=%d", len(st.session_state.messages))
             handle_query(prompt, graph)
-            print(f"=== POST HANDLE === messages={len(st.session_state.messages)}")
-            print(f"=== PRE RERUN === messages={len(st.session_state.messages)}")
+            _diag.info(
+                "=== POST HANDLE === messages=%d", len(st.session_state.messages)
+            )
+            _diag.info("=== PRE RERUN === messages=%d", len(st.session_state.messages))
             st.rerun()
 
     with tab_dashboard:
