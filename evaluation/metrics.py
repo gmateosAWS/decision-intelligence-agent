@@ -188,7 +188,7 @@ def compute_metrics(runs: List[Dict]) -> Dict:
         ),
         "tool_distribution": dict(tool_counts),
         "errors": errors,
-        "sessions": sorted(sessions),
+        "sessions": sorted(s for s in sessions if s is not None),
         "recent_runs": runs[-10:],
     }
 

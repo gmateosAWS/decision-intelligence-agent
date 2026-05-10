@@ -4,10 +4,12 @@ ui/app.py
 Main Streamlit orchestrator.  Composes sidebar, header, tabs, and chat
 interaction.
 
-Multi-turn rendering fix: all chat rendering (user message, processing
-status, assistant response) happens INSIDE `with tab_chat:`.  The previous
-bug rendered the current turn's messages below the tab panel, causing them
-to disappear or misrender on subsequent reruns.
+Rendering pattern — history-then-inline, no st.rerun() in the query flow:
+  1. History loop re-renders all past turns from session_state on every rerun.
+  2. When a new prompt arrives, user + assistant are rendered inline in the
+     same script execution (spinner wraps the LLM call).
+  3. session_state is updated by handle_query() so the next natural Streamlit
+     rerun (triggered by the user's next input) picks up all messages.
 """
 
 from __future__ import annotations
@@ -122,28 +124,55 @@ def main() -> None:
     # ------------------------------------------------------------------
     tab_chat, tab_dashboard = st.tabs(["Chat", "Dashboard"])
 
-    from ui.components import render_chat_message, render_welcome_cards
+    from ui.components import (
+        render_chat_message,
+        render_result_cards,
+        render_technical_details,
+        render_welcome_cards,
+    )
     from ui.dashboard import render_dashboard
+    from ui.styles import TOOL_LABELS, sanitize_markdown
 
     with tab_chat:
-        # Welcome cards — shown only when no messages and no pending query
+        # Welcome cards — only when conversation is empty.
+        # Button clicks already trigger a natural Streamlit rerun; no explicit
+        # st.rerun() needed here.
         if not st.session_state.messages and not prompt:
             card_query = render_welcome_cards()
             if card_query:
                 st.session_state["_pending_query"] = card_query
-                st.rerun()
 
-        # History loop — re-renders the complete conversation on every rerun
+        # 1. Render the full conversation history from session_state
         for msg in st.session_state.messages:
             render_chat_message(msg)
 
-        # Spinner blocks Streamlit's automatic reruns while the agent runs (~10-15 s).
-        # When handle_query() returns, both user + assistant messages are in
-        # session_state, so the subsequent st.rerun() renders them correctly.
+        # 2. Process and render the current turn inline — no st.rerun().
+        #    handle_query() appends user + assistant to session_state so the
+        #    next natural rerun (next user input) renders them via the loop above.
         if prompt:
-            with st.spinner("Analizando tu pregunta…"):
-                handle_query(prompt, graph)
-            st.rerun()
+            with st.chat_message("user"):
+                st.markdown(prompt)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Analizando tu pregunta…"):
+                    handle_query(prompt, graph)
+
+                last_msg = st.session_state.messages[-1]
+                st.markdown(sanitize_markdown(last_msg["content"]))
+
+                meta = last_msg.get("metadata") or {}
+                if meta:
+                    action = meta.get("action", "")
+                    total_ms = meta.get("total_ms")
+                    tool_label = TOOL_LABELS.get(
+                        action, f"⚪ {action}" if action else ""
+                    )
+                    if tool_label and total_ms:
+                        st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+                    elif total_ms:
+                        st.caption(f"{total_ms:,.0f} ms")
+                    render_result_cards(action, meta.get("raw_result") or {})
+                    render_technical_details(meta)
 
     with tab_dashboard:
         render_dashboard()
