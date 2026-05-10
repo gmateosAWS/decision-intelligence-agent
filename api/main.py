@@ -48,8 +48,13 @@ async def lifespan(app: FastAPI):
 
             seed_from_yaml(SPEC_PATH)
             logger.info("Spec seeded / verified on startup.")
+
+            from prompts.registry import seed_prompts_from_code
+
+            seeded = seed_prompts_from_code()
+            logger.info("Prompt registry: %d certified prompts active.", len(seeded))
     except Exception as exc:
-        logger.warning("Spec seed skipped (DB unavailable): %s", exc)
+        logger.warning("Spec/prompt seed skipped (DB unavailable): %s", exc)
 
     yield
     # Nothing to tear down — DB engine and graph are process singletons
@@ -115,10 +120,11 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # Routers
 # ---------------------------------------------------------------------------
 
-from api.routers import health, query, runs, sessions, specs  # noqa: E402
+from api.routers import health, prompts, query, runs, sessions, specs  # noqa: E402
 
 app.include_router(health.router)  # /healthz, /readyz, /v1/debug/config at root
 app.include_router(query.router, prefix="/v1")
 app.include_router(sessions.router, prefix="/v1")
 app.include_router(runs.router, prefix="/v1")
 app.include_router(specs.router, prefix="/v1")
+app.include_router(prompts.router, prefix="/v1")

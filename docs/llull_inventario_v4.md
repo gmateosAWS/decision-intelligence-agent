@@ -839,11 +839,13 @@ _Resuelve:_ el prototipo tiene un modelo. llull en producción tendrá decenas o
 
 Todo lo relacionado con gobernar la parte LLM del sistema: prompts, tools, configuración de routing, judge, evaluaciones.
 
-### 10.1 Versionado de prompts con prompt registry `[feature]`
+### 10.1 Versionado de prompts con prompt registry `[feature]` ✅
 
 Los prompts del planner, synthesizer y judge dejan de vivir en ficheros sueltos del repo. Viven en un prompt registry con versionado, diffs legibles, y asociación a métricas de evaluación. Cada cambio de prompt es un artefacto promovible con el mismo rigor que un modelo ML. LangSmith para empezar (gestionado, integrado con LangGraph), con plan de migración a alternativas self-hosted si el coste o las exigencias del cliente lo requieren.
 
 _Resuelve:_ hoy cambiar un prompt es editar código y hacer commit. No hay diff semántico, no hay evaluación antes de promover, no hay rollback fácil. Esto es deuda técnica que escala con el tamaño del equipo.
+
+**Completado 2026-05-10** — `prompts/` package (`models.py`, `registry.py`); `PromptRecord` con GovernableArtifact pattern (10.8-ready); ciclo de vida `draft→certified→deprecated`; `get_prompt_template(stage, fallback)` con fallback a template inline; `seed_prompts_from_code()` idempotente; migración 004 (tabla `prompts`, CHECKs semver+status), migración 005 (3 columnas `*_prompt_version` en `agent_runs`); 5 endpoints REST (`/v1/prompts`); `planner_prompt_version`, `synthesizer_prompt_version`, `judge_prompt_version` propagados por `AgentState` → `RunRecord` → `PostgresSink`; 220 tests pasan (15 nuevos en `tests/prompts/`, 10 en `tests/api/`).
 
 ### 10.2 Datasets de evaluación del sistema agentic `[feature]`
 

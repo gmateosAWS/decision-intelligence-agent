@@ -26,6 +26,12 @@ from typing import Any, Dict, Literal, Optional, Union
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
+from prompts.registry import (
+    JUDGE_REVISION_TEMPLATE,
+    JUDGE_SYSTEM_TEMPLATE,
+    get_prompt_template,
+)
+
 from .i18n import get_revise_instructions, get_system_language_directive
 from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from .state import AgentState
@@ -100,20 +106,13 @@ def judge_node(
     raw_text = _format_raw_result(raw_result)
     t0 = time.perf_counter()
 
+    judge_template, judge_prompt_version = get_prompt_template(
+        "judge", JUDGE_SYSTEM_TEMPLATE
+    )
     judge_messages = [
         {
             "role": "system",
-            "content": (
-                "You are an online quality judge for a Decision Intelligence "
-                "assistant.\n"
-                "Evaluate the assistant answer strictly against the user"
-                "'s query and the raw tool output.\n"
-                "Do not reward style alone. Prefer factual grounding, "
-                "quantitative consistency, and decision usefulness.\n"
-                "Approve only if the answer is clearly grounded in the tool "
-                "result and directly answers the user.\n"
-                f"Use a strict approval threshold of {_JUDGE_THRESHOLD:.2f}."
-            ),
+            "content": judge_template.format(threshold=f"{_JUDGE_THRESHOLD:.2f}"),
         },
         {
             "role": "user",
@@ -148,12 +147,14 @@ def judge_node(
                 final_answer=answer,
                 error=str(exc),
                 model=_JUDGE_MODEL,
+                prompt_version=judge_prompt_version,
             )
         return {
             "judge_score": None,
             "judge_passed": True,
             "judge_feedback": feedback,
             "judge_revised": False,
+            "judge_prompt_version": judge_prompt_version,
             "history": [{"query": query, "answer": answer}],
         }
 
@@ -184,6 +185,7 @@ def judge_node(
             revised=revised,
             final_answer=final_answer,
             model=_JUDGE_MODEL,
+            prompt_version=judge_prompt_version,
         )
 
     return {
@@ -192,6 +194,7 @@ def judge_node(
         "judge_passed": approved,
         "judge_feedback": verdict.feedback,
         "judge_revised": revised,
+        "judge_prompt_version": judge_prompt_version,
         "history": [{"query": query, "answer": final_answer}],
     }
 
@@ -208,12 +211,14 @@ def _revise_answer(
     """Generate one grounded revision using the judge feedback."""
     _init_llms()
     instructions = get_revise_instructions(language)
+    revision_template, _ = get_prompt_template(
+        "judge.revision", JUDGE_REVISION_TEMPLATE
+    )
     revision_messages = [
         {
             "role": "system",
-            "content": (
-                f"You revise answers for a Decision Intelligence assistant. "
-                f"{get_system_language_directive(language)}"
+            "content": revision_template.format(
+                language_directive=get_system_language_directive(language)
             ),
         },
         {

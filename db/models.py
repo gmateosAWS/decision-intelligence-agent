@@ -124,6 +124,11 @@ class AgentRun(Base):
     )
     spec_version = Column(Text)
 
+    # Prompt Registry traceability (item 10.1) — foundation for LineageRecord (10.10)
+    planner_prompt_version = Column(Text)
+    synthesizer_prompt_version = Column(Text)
+    judge_prompt_version = Column(Text)
+
     session = relationship("AgentSession", back_populates="runs")
 
     def __repr__(self) -> str:
@@ -180,6 +185,37 @@ class SpecVersion(Base):
 
     def __repr__(self) -> str:
         return f"<SpecVersion spec_id={self.spec_id} version={self.version}>"
+
+
+class Prompt(Base):
+    """One row per (id, version) — a versioned prompt artifact."""
+
+    __tablename__ = "prompts"
+
+    id = Column(Text, nullable=False)
+    version = Column(Text, nullable=False)
+    status = Column(
+        Text, nullable=False, default="draft"
+    )  # draft / certified / deprecated
+    stage = Column(Text, nullable=False)
+    content = Column(Text, nullable=False)
+    variables = Column(JSONB, nullable=False, default=list)
+    owner = Column(Text, nullable=False, default="")
+    description = Column(Text, nullable=False, default="")
+    created_at = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    changed_at = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    sunset_date = Column(__import__("sqlalchemy").Date, nullable=True)
+    replacement_id = Column(Text, nullable=True)
+    adr = Column(Text, nullable=True)
+
+    __table_args__ = (
+        __import__("sqlalchemy").PrimaryKeyConstraint("id", "version"),
+        __import__("sqlalchemy").Index("idx_prompts_stage", "stage"),
+        __import__("sqlalchemy").Index("idx_prompts_status", "status"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Prompt {self.id}@{self.version} status={self.status}>"
 
 
 def _build_knowledge_document_class() -> type:

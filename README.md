@@ -173,6 +173,11 @@ decision support, system explainability, and controlled LLM interaction:
   planner consults the policy after tool selection and routes through a conditional edge
   directly to the synthesizer when confirmation or approval is required, surfacing a
   proposal message without executing the tool. Managed via `GET/PUT /v1/specs/{id}/autonomy`.
+- **Prompt Registry** -- all LLM system prompts are versioned database artifacts (item 10.1);
+  agents load the certified prompt for their stage at runtime and fall back to an inline
+  template when no database is configured; each run records `planner_prompt_version`,
+  `synthesizer_prompt_version`, and `judge_prompt_version` for full LLMOps traceability.
+  Managed via `GET/POST /v1/prompts` and `PUT /v1/prompts/{id}/{version}/certify|deprecate`.
 
 ---
 
@@ -679,6 +684,11 @@ Interactive docs available at [http://localhost:8000/docs](http://localhost:8000
 | `POST` | `/v1/specs/{id}/bump` | Bump spec version (auto-detect or explicit major/minor/patch) |
 | `GET` | `/v1/specs/{id}/autonomy` | Get autonomy policy for a spec |
 | `PUT` | `/v1/specs/{id}/autonomy` | Update autonomy policy (creates a new MINOR-bumped spec version) |
+| `GET` | `/v1/prompts` | List prompts (filterable by stage and status) |
+| `GET` | `/v1/prompts/{id}/{version}` | Prompt detail |
+| `POST` | `/v1/prompts` | Create a draft prompt |
+| `PUT` | `/v1/prompts/{id}/{version}/certify` | Promote draft to certified |
+| `PUT` | `/v1/prompts/{id}/{version}/deprecate` | Deprecate a prompt |
 | `GET` | `/healthz` | Liveness probe (always 200) |
 | `GET` | `/readyz` | Readiness probe (checks DB + spec) |
 | `GET` | `/v1/debug/config` | Active LLM config (no secrets) |
@@ -1272,4 +1282,6 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | pgvector over dedicated vector DB | Knowledge embeddings stored in the existing Postgres instance (`knowledge_documents` table, `vector(1536)` column); avoids a second stateful service at current document volumes (see `docs/adr-001-pgvector-over-qdrant.md`) |
 | Spec stored and versioned in DB | The domain model is a first-class database object with history (`specs` + `spec_versions` tables); each agent run records `spec_id` and `spec_version` so recommendations are fully traceable to the exact domain model that produced them |
 | FastAPI monolith modular (not microservices) | All agent modules imported in-process; routers provide clean separation without the operational overhead of separate services. Services are extracted only when there is a concrete reason (independent scaling, separate team). |
+| Prompt Registry with inline-template fallback (`get_prompt_template(stage, fallback)`) | System prompts are versioned database artifacts; agents always have a working fallback to the inline template when no DB is configured; the registry-or-fallback pattern keeps all three agents functional in SQLite mode and in tests without a live database |
+| Prompt version propagated through `AgentState` → `RunRecord` → `agent_runs` | Every run records which exact version of each system prompt produced the answer; enables causal attribution of quality regressions to specific prompt changes without log scraping — foundation for A/B testing (item 10.2) and lineage (item 10.10) |
 | `@lru_cache` singletons for graph and DB engine | `get_graph()` and the SQLAlchemy engine are created once per process and reused across requests; avoids LangGraph rebuild overhead on every query while remaining injectable via FastAPI `Depends()` for test overrides. |

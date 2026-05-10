@@ -73,30 +73,42 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── optimization/optimizer.py  grid search over decision variable bounds
         ├── knowledge/retriever.py     pgvector search (FAISS fallback)
         │
+        ├── prompts/
+        │    ├── models.py             PromptRecord, PromptStatus (GovernableArtifact pattern, item 10.8)
+        │    └── registry.py           CRUD + lifecycle (draft→certified→deprecated); get_prompt_template()
+        │                              with inline-template fallback; seed_prompts_from_code() idempotent seed
+        │
         ├── agents/
         │    ├── state.py              AgentState TypedDict (language, requires_confirmation,
-        │    │                         requires_approval, confirmation_message)
-        │    ├── planner.py            LLM → ToolSelection; consults AutonomyPolicy per tool
+        │    │                         requires_approval, confirmation_message,
+        │    │                         planner/synthesizer/judge_prompt_version)
+        │    ├── planner.py            LLM → ToolSelection; consults AutonomyPolicy per tool;
+        │    │                         reads planner prompt from registry (fallback to inline)
         │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback()
         │    ├── i18n.py              LANGUAGE_NAMES, get_synth/revise/directive helpers (skills-ready)
         │    ├── tools.py              tool wrappers consuming spec defaults
         │    ├── workflow.py           LangGraph: planner →[auto]→ tool → synthesizer → judge → END
         │    │                                            [policy]→ synthesizer (proposal) → judge
-        │    ├── judge.py             online quality gate + single-pass revision
+        │    │                         synthesizer reads prompt from registry (fallback to inline)
+        │    ├── judge.py             online quality gate + single-pass revision;
+        │    │                         judge + judge.revision prompts from registry (fallback to inline)
         │    └── runner.py            run_query(query, thread_id, observer, graph) → RunResult
         │                             shared by Streamlit UI + FastAPI (Directive 3)
         │
         ├── db/
         │    ├── engine.py             SQLAlchemy engine, get_session()
-        │    ├── models.py             AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion
-        │    └── migrations/           Alembic (001_initial_schema, 002_spec_tables, 003_spec_version_constraint)
+        │    ├── models.py             AgentSession, AgentRun (+3 prompt_version cols),
+        │    │                         KnowledgeDocument, Spec, SpecVersion, Prompt
+        │    └── migrations/           Alembic (001–003 existing; 004 prompts table;
+        │                              005 prompt_version cols on agent_runs)
         │
         ├── memory/
         │    ├── checkpointer.py       PostgresSaver (SQLite fallback)
         │    └── session_manager.py    SQLAlchemy queries (SQLite fallback)
         │
         ├── evaluation/
-        │    ├── observer.py           thin orchestrator: RunRecord accumulation + sink dispatch
+        │    ├── observer.py           thin orchestrator: RunRecord accumulation + sink dispatch;
+        │    │                         record_planner/synthesizer/judge accept prompt_version
         │    ├── confidence.py         ConfidenceScorer: 0-1 score from tool output (extractable skill)
         │    ├── sinks/
         │    │    ├── base.py          RunSink Protocol (ObjectBus-ready, item 1.6)
@@ -109,7 +121,7 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         └── config/settings.py        lazy accessor functions over spec (no import-time IO)
 
 api/
-├── main.py              FastAPI app, lifespan, CORS (tightened per audit 6.5)
+├── main.py              FastAPI app, lifespan, CORS; seeds spec + prompt registry at startup
 ├── dependencies.py      get_db, get_graph (lru_cache singletons)
 ├── routers/
 │    ├── query.py         POST /v1/query
@@ -118,9 +130,12 @@ api/
 │    ├── specs.py         CRUD /v1/specs + POST /v1/specs/{id}/bump
 │    │                    GET /v1/specs/{id}/autonomy
 │    │                    PUT /v1/specs/{id}/autonomy → new spec version (MINOR bump)
+│    ├── prompts.py       GET/POST /v1/prompts; GET /v1/prompts/{id}/{version}
+│    │                    PUT /v1/prompts/{id}/{version}/certify|deprecate
 │    └── health.py        /healthz, /readyz, /v1/debug/config
 └── schemas/             Pydantic request/response models (incl. SpecBumpRequest/Response,
-                         AutonomyPolicyUpdate, QueryResponse.requires_confirmation)
+                         AutonomyPolicyUpdate, QueryResponse.requires_confirmation,
+                         PromptResponse, PromptCreateRequest, PromptDeprecateRequest)
 
 app.py                    REPL (legacy)
 streamlit_app.py          Thin wrapper: st.set_page_config() + from ui.app import main
@@ -179,7 +194,7 @@ PostgreSQL 16 with pgvector. Docker Compose + Alembic.
 DATABASE_URL=postgresql://llull:llull@localhost:5432/llull
 ```
 
-Five tables: `agent_sessions`, `agent_runs`, `knowledge_documents`, `specs`, `spec_versions`.
+Six tables: `agent_sessions`, `agent_runs`, `knowledge_documents`, `specs`, `spec_versions`, `prompts`.
 
 Without `DATABASE_URL`, falls back to SQLite + FAISS automatically.
 
@@ -281,11 +296,15 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 
 - [x] 3.5 Autonomy policies in spec: `spec/autonomy.py` (AutonomyLevel, ToolAutonomyPolicy, AutonomyPolicy), `autonomy_policy` section in YAML + spec_loader, planner consults policy after tool selection, conditional edge `_route_after_planner` in workflow (skips tool when policy ≠ auto), `GET/PUT /v1/specs/{id}/autonomy` endpoints, 26 new tests. Foundation for items 7.3 + 5.3.b.
 
-## Current work: Item 3.5 (autonomy policies) — Next: Item 1.6 ObjectBus
+### Item 10.1 ✅
 
-**Branch**: `feature/3.5-autonomy-policy`
+- [x] 10.1 Prompt Registry: `prompts/` package (models.py, registry.py); `PromptRecord` as first GovernableArtifact (10.8-ready); `PromptStatus` lifecycle draft→certified→deprecated; `get_prompt_template(stage, fallback)` registry-with-fallback pattern for all 3 agents; migration 004 (prompts table, semver+status CHECKs), migration 005 (3 prompt_version cols on agent_runs); `seed_prompts_from_code()` idempotent seed at startup; 5 CRUD+lifecycle REST endpoints (`/v1/prompts`); prompt_version propagated through AgentState → RunRecord → PostgresSink → agent_runs rows; 220 tests pass (15 new in tests/prompts/, 10 new in tests/api/).
 
-Completed 2026-05-09.
+## Current work: Item 10.1 (Prompt Registry) — Next: Item 1.6 ObjectBus
+
+**Branch**: `feature/10.1-prompt-registry`
+
+Completed 2026-05-10.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 
@@ -310,7 +329,7 @@ INSIDE `with tab_chat:`. `handle_query()` updates `session_state` only (no rende
 Error types (`LLMUnavailableError`) propagated via `RunResult.error_type` for 503 vs 500
 HTTP status distinction.
 
-**Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, open I2A formally. Item 3.6 (spec semver) from I2A completed ahead of schedule as a standalone item.
+**Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, continue I2A with remaining LLMOps items (10.2 A/B testing, 10.3 shadow evaluation). Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of schedule.
 
 ## Pending improvements (noted, not blocking)
 
