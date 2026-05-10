@@ -31,18 +31,21 @@ def render_chat_message(msg: Dict[str, Any]) -> None:
 
 def _render_assistant_extras(metadata: Dict[str, Any]) -> None:
     """Render tool badge, result cards, and technical details for an assistant msg."""
-    action = metadata.get("action", "")
-    raw_result = metadata.get("raw_result", {})
-    total_ms = metadata.get("total_ms")
+    try:
+        action = metadata.get("action", "")
+        raw_result = metadata.get("raw_result", {})
+        total_ms = metadata.get("total_ms")
 
-    tool_label = TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
-    if tool_label and total_ms:
-        st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
-    elif total_ms:
-        st.caption(f"{total_ms:,.0f} ms")
+        tool_label = TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
+        if tool_label and total_ms:
+            st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+        elif total_ms:
+            st.caption(f"{total_ms:,.0f} ms")
 
-    render_result_cards(action, raw_result)
-    render_technical_details(metadata)
+        render_result_cards(action, raw_result)
+        render_technical_details(metadata)
+    except Exception as e:  # noqa: BLE001
+        st.caption(f"⚠️ Error en visualización: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +81,7 @@ def _render_simulation_cards(raw: Dict[str, Any]) -> None:
 
     st.plotly_chart(
         _simulation_figure(raw),
-        width="stretch",
+        use_container_width=True,
         config={"displayModeBar": False},
     )
 

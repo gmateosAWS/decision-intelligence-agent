@@ -196,23 +196,24 @@ def main() -> None:
                 )
                 st.session_state.is_new_session = False
 
-                # Render assistant response inline
+                # Render assistant response inline — always safe
                 st.markdown(sanitize_markdown(result.answer))
 
-                # Render tool badge + latency
-                action = result.tool_used or ""
-                total_ms = result.latency_ms
-                tool_label = TOOL_LABELS.get(action, f"⚪ {action}" if action else "")
-                if tool_label and total_ms:
-                    st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
-                elif total_ms:
-                    st.caption(f"{total_ms:,.0f} ms")
-
-                # Render result cards (metrics, charts)
-                render_result_cards(action, result.raw_result or {})
-
-                # Technical details expander
-                render_technical_details(metadata)
+                # Render extras — resilient to component errors
+                try:
+                    action = result.tool_used or ""
+                    total_ms = result.latency_ms
+                    tool_label = TOOL_LABELS.get(
+                        action, f"⚪ {action}" if action else ""
+                    )
+                    if tool_label and total_ms:
+                        st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+                    elif total_ms:
+                        st.caption(f"{total_ms:,.0f} ms")
+                    render_result_cards(action, result.raw_result or {})
+                    render_technical_details(metadata)
+                except Exception as e:  # noqa: BLE001
+                    st.caption(f"⚠️ Error rendering details: {e}")
 
     with tab_dashboard:
         render_dashboard()
