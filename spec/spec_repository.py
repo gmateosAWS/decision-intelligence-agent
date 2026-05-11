@@ -57,6 +57,26 @@ def _max_version_for_domain(session: Any, domain_name: str) -> "SemVer":
     return max(versions, default=SemVer(0, 0, 0))
 
 
+def _validate_dag_acyclic(parsed: dict) -> None:
+    """Raise ValueError if causal_relationships in *parsed* form a cycle (item 3.3)."""
+    import networkx as nx  # noqa: PLC0415
+
+    G: nx.DiGraph = nx.DiGraph()
+    for rel in parsed.get("causal_relationships", []):
+        froms = rel["from"] if isinstance(rel["from"], list) else [rel["from"]]
+        targets = rel["to"] if isinstance(rel["to"], list) else [rel["to"]]
+        for t in targets:
+            for fv in froms:
+                G.add_edge(fv, t)
+    if not nx.is_directed_acyclic_graph(G):
+        cycles = list(nx.simple_cycles(G))
+        cycle_str = " → ".join(cycles[0]) if cycles else "unknown"
+        raise ValueError(
+            f"Causal graph contains a cycle: {cycle_str}. "
+            "The organizational spec must define an acyclic causal model."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -83,6 +103,7 @@ def create_spec(
         raise ValueError(f"Invalid semver version: {version!r}. Expected X.Y.Z format.")
 
     parsed = yaml.safe_load(yaml_content)
+    _validate_dag_acyclic(parsed)
     with get_session() as session:
         spec = Spec(
             domain_name=domain_name,
@@ -174,6 +195,7 @@ def update_spec(
     from spec.versioning import SpecVersion as SemVer
 
     parsed = yaml.safe_load(yaml_content)
+    _validate_dag_acyclic(parsed)
 
     with get_session() as session:
         parent = session.get(Spec, spec_id)

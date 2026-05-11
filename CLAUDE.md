@@ -300,11 +300,19 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 
 - [x] 10.1 Prompt Registry: `prompts/` package (models.py, registry.py); `PromptRecord` as first GovernableArtifact (10.8-ready); `PromptStatus` lifecycle draft→certified→deprecated; `get_prompt_template(stage, fallback)` registry-with-fallback pattern for all 3 agents; migration 004 (prompts table, semver+status CHECKs), migration 005 (3 prompt_version cols on agent_runs); `seed_prompts_from_code()` idempotent seed at startup; 5 CRUD+lifecycle REST endpoints (`/v1/prompts`); prompt_version propagated through AgentState → RunRecord → PostgresSink → agent_runs rows; 220 tests pass (15 new in tests/prompts/, 10 new in tests/api/).
 
-## Current work: Item 10.1 (Prompt Registry) — Next: Item 1.6 ObjectBus
+### Item 3.3 ✅
 
-**Branch**: `feature/10.1-prompt-registry`
+- [x] 3.3 DAG cycle assertion: `assert_dag_acyclic()` in `system/system_graph.py` (called at graph-build time); lazy-import hook in `spec_loader._parse_raw()` (called on every spec load, avoids circular import); `_validate_dag_acyclic()` in `spec_repository.create_spec()` and `update_spec()` (called before DB write, uses inline networkx). 7 tests: `tests/system/test_dag_cycle.py` (6 unit tests), `tests/api/test_spec_cycle_validation.py` (1 API test: POST /v1/specs with cycle → 422).
 
-Completed 2026-05-10.
+### Supply-chain lock files ✅
+
+- [x] `requirements.lock` and `requirements-dev.lock` generated with `pip-compile --generate-hashes --allow-unsafe`. Dockerfile uses `pip install --no-cache-dir --no-deps -r requirements.lock`. CI uses `pip install --no-deps -r requirements-dev.lock` (superset). `requirements.txt` preserved for Streamlit Community Cloud.
+
+## Current work: Item 3.3 + lockfile — Next: Item 1.6 ObjectBus
+
+**Branch**: `feature/11.1-ci-pipeline` (cherry-picked) / `fix/audit-dag-assertion-and-lockfile`
+
+Completed 2026-05-11.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 

@@ -21,7 +21,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install --no-deps -r requirements-dev.lock
 
       - name: black format check
         run: black --check .
@@ -88,7 +88,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install --no-deps -r requirements-dev.lock
 
       - name: Run database migrations
         run: alembic upgrade head
