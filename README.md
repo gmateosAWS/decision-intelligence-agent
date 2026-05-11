@@ -557,6 +557,8 @@ source venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
+> **Lock files**: `requirements.lock` and `requirements-dev.lock` are hash-pinned lock files generated with `pip-compile`. The Dockerfile and CI use these for reproducible, supply-chain-safe installs. To update dependencies after changing `requirements.txt`: `pip-compile requirements.txt -o requirements.lock --generate-hashes --allow-unsafe && pip-compile requirements-dev.txt -o requirements-dev.lock --generate-hashes --allow-unsafe`.
+
 **3. Start PostgreSQL and run migrations (optional but recommended)**
 
 ```bash

@@ -153,11 +153,13 @@ El consultor describe el modelo en lenguaje natural ("quiero optimizar el coste 
 
 _Resuelve:_ acelera radicalmente el primer paso del onboarding. Sin esto, cada dominio nuevo empieza desde cero editando a mano. Funciona en combinación con 3.1 (el borrador conversacional se refina visualmente).
 
-### 3.3 Validación automática del spec `[feature]`
+### 3.3 Validación automática del spec `[feature]` ✅ COMPLETADO (v1 — DAG acyclicity)
 
 Cuando se crea o modifica un spec, validación automática: detectar ciclos en el DAG (tiene que ser acíclico), variables sin fórmula, fórmulas inconsistentes, objetivos inalcanzables, referencias a variables no definidas, rangos contradictorios. Los errores se presentan con mensajes accionables, no stack traces.
 
 _Resuelve:_ impide que un spec mal formado llegue al runtime. Es condición necesaria para que tanto 3.1 como 3.2 sean usables por no-técnicos.
+
+_Completado 2026-05-11 (v1):_ `assert_dag_acyclic()` en `system/system_graph.py`; hook lazy en `spec_loader._parse_raw()`; `_validate_dag_acyclic()` en `spec_repository.create_spec()` y `update_spec()`. 7 tests (6 unitarios + 1 API: POST /v1/specs con ciclo → 422). Validaciones adicionales (variables sin fórmula, rangos contradictorios) quedan como v2 cuando el DAG builder visual (3.1) lo requiera.
 
 ### 3.4 Generación automática de spec a partir de datos `[bloque]`
 

@@ -299,6 +299,12 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
         AutonomyPolicy.model_validate(ap_raw) if ap_raw else AutonomyPolicy()
     )
 
+    # Lazy import: system_graph imports spec_loader at module level; importing
+    # here avoids a circular dependency while still validating acyclicity (item 3.3).
+    from system.system_graph import assert_dag_acyclic  # noqa: PLC0415
+
+    assert_dag_acyclic(relationships)
+
     return OrganizationalModelSpec(
         domain_name=raw["domain"]["name"],
         domain_description=raw["domain"]["description"],
