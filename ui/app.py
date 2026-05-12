@@ -182,6 +182,12 @@ def main() -> None:
                     "requires_confirmation": result.requires_confirmation,
                     "requires_approval": result.requires_approval,
                     "confirmation_message": result.confirmation_message,
+                    "total_cost_usd": result.total_cost_usd,
+                    "total_input_tokens": result.total_input_tokens,
+                    "total_output_tokens": result.total_output_tokens,
+                    "llm_calls_count": result.llm_calls_count,
+                    "budget_exceeded": result.budget_exceeded,
+                    "budget_exceeded_reason": result.budget_exceeded_reason,
                 }
 
                 # Append assistant to session_state
