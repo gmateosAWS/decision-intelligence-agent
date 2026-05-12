@@ -26,7 +26,8 @@ def _env_fallback() -> Optional[float]:
 def get_eur_per_usd() -> float:
     """Return EUR/USD exchange rate, cached for 1 hour.
 
-    Falls back to EUR_USD_RATE env var, then 0.92 hardcoded default.
+    Priority: cache → EUR_USD_RATE env var → Frankfurter API → 0.92 hardcoded.
+    EUR_USD_RATE acts as an explicit override; when set, no network call is made.
     Never raises; network errors are silently swallowed.
     """
     global _cached_rate, _cache_ts
@@ -34,6 +35,13 @@ def get_eur_per_usd() -> float:
     now = time.monotonic()
     if _cached_rate is not None and (now - _cache_ts) < _CACHE_TTL_S:
         return _cached_rate
+
+    # Env var is an explicit override — check before any network call.
+    env_rate = _env_fallback()
+    if env_rate is not None:
+        _cached_rate = env_rate
+        _cache_ts = now
+        return env_rate
 
     try:
         import requests  # local import keeps startup fast when requests absent
@@ -48,11 +56,10 @@ def get_eur_per_usd() -> float:
     except Exception:
         pass
 
-    # Fallback chain: env var → hardcoded
-    fallback = _env_fallback() or 0.92
-    _cached_rate = fallback
+    # Last-resort hardcoded fallback
+    _cached_rate = 0.92
     _cache_ts = now
-    return fallback
+    return 0.92
 
 
 def usd_to_eur(amount_usd: float) -> float:
