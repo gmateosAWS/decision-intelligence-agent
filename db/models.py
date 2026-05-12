@@ -22,6 +22,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    Numeric,
     Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -128,6 +129,14 @@ class AgentRun(Base):
     planner_prompt_version = Column(Text)
     synthesizer_prompt_version = Column(Text)
     judge_prompt_version = Column(Text)
+
+    # Cost tracking (item 8.7.a+b)
+    total_input_tokens = Column(Integer, nullable=False, default=0)
+    total_output_tokens = Column(Integer, nullable=False, default=0)
+    total_cost_usd = Column(Numeric(10, 6), nullable=False, default=0)
+    llm_calls_count = Column(Integer, nullable=False, default=0)
+    budget_exceeded = Column(Boolean, nullable=False, default=False)
+    budget_exceeded_reason = Column(Text)
 
     session = relationship("AgentSession", back_populates="runs")
 

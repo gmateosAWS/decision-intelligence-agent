@@ -76,6 +76,11 @@ def _load_runs_postgres() -> List[Dict]:
                 "total_latency_ms": row.total_latency_ms,
                 "success": row.success,
                 "error": row.error,
+                "total_input_tokens": row.total_input_tokens or 0,
+                "total_output_tokens": row.total_output_tokens or 0,
+                "total_cost_usd": float(row.total_cost_usd or 0),
+                "llm_calls_count": row.llm_calls_count or 0,
+                "budget_exceeded": bool(row.budget_exceeded),
             }
             for row in rows
         ]
@@ -141,6 +146,9 @@ def compute_metrics(runs: List[Dict]) -> Dict:
     judge_revisions = 0
     errors: List[str] = []
     sessions: set = set()
+    costs: List[float] = []
+    total_tokens_list: List[int] = []
+    budget_exceeded_count = 0
 
     for r in runs:
         sessions.add(r.get("session_id", "?"))
@@ -166,6 +174,19 @@ def compute_metrics(runs: List[Dict]) -> Dict:
         if not r.get("success", True) and r.get("error"):
             errors.append(r["error"])
 
+        cost = r.get("total_cost_usd", 0.0)
+        if cost:
+            costs.append(float(cost))
+        tin = r.get("total_input_tokens", 0) or 0
+        tout = r.get("total_output_tokens", 0) or 0
+        if tin or tout:
+            total_tokens_list.append(tin + tout)
+        if r.get("budget_exceeded"):
+            budget_exceeded_count += 1
+
+    total_cost = round(sum(costs), 6) if costs else None
+    total_tokens = sum(total_tokens_list) if total_tokens_list else None
+
     return {
         "total_runs": total,
         "success_count": success,
@@ -190,6 +211,11 @@ def compute_metrics(runs: List[Dict]) -> Dict:
         "errors": errors,
         "sessions": sorted(s for s in sessions if s is not None),
         "recent_runs": runs[-10:],
+        # Cost aggregates (item 8.7.a)
+        "total_cost_usd": total_cost,
+        "avg_cost_usd_per_run": (round(total_cost / len(costs), 6) if costs else None),
+        "total_tokens": total_tokens,
+        "budget_exceeded_count": budget_exceeded_count,
     }
 
 

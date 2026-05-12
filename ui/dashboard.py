@@ -37,6 +37,27 @@ def render_dashboard() -> None:
     avg_conf = metrics.get("avg_confidence_score")
     c4.metric("Confianza media", f"{avg_conf:.2f}" if avg_conf is not None else "—")
 
+    # Cost KPIs (item 8.7.a)
+    total_cost = metrics.get("total_cost_usd")
+    avg_cost = metrics.get("avg_cost_usd_per_run")
+    total_tokens = metrics.get("total_tokens")
+    budget_hits = metrics.get("budget_exceeded_count", 0)
+    if total_cost is not None or total_tokens is not None:
+        ck1, ck2, ck3, ck4 = st.columns(4)
+        ck1.metric(
+            "Coste total (USD)",
+            f"${total_cost:.4f}" if total_cost is not None else "—",
+        )
+        ck2.metric(
+            "Coste medio / run",
+            f"${avg_cost:.4f}" if avg_cost is not None else "—",
+        )
+        ck3.metric(
+            "Tokens totales",
+            f"{total_tokens:,}" if total_tokens is not None else "—",
+        )
+        ck4.metric("Budget excedido", budget_hits)
+
     st.divider()
     col_l, col_r = st.columns(2)
 

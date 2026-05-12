@@ -64,4 +64,10 @@ def run_query_endpoint(req: QueryRequest, graph=Depends(get_graph)) -> QueryResp
         requires_confirmation=result.requires_confirmation,
         requires_approval=result.requires_approval,
         confirmation_message=result.confirmation_message,
+        total_input_tokens=result.total_input_tokens,
+        total_output_tokens=result.total_output_tokens,
+        total_cost_usd=result.total_cost_usd,
+        llm_calls_count=result.llm_calls_count,
+        budget_exceeded=result.budget_exceeded,
+        budget_exceeded_reason=result.budget_exceeded_reason,
     )

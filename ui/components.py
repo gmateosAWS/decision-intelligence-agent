@@ -153,6 +153,22 @@ def render_technical_details(metadata: Dict[str, Any]) -> None:
                 if ms is not None:
                     col.metric(node.capitalize(), f"{ms:,.0f} ms")
 
+        cost_usd = metadata.get("total_cost_usd", 0.0)
+        llm_calls = metadata.get("llm_calls_count", 0)
+        tokens_in = metadata.get("total_input_tokens", 0)
+        tokens_out = metadata.get("total_output_tokens", 0)
+        budget_exceeded = metadata.get("budget_exceeded", False)
+        if llm_calls or cost_usd:
+            st.caption("**Coste LLM:**")
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.metric("Llamadas LLM", llm_calls)
+            cc2.metric("Tokens entrada", f"{tokens_in:,}")
+            cc3.metric("Tokens salida", f"{tokens_out:,}")
+            cc4.metric("Coste (USD)", f"${cost_usd:.4f}")
+        if budget_exceeded:
+            reason = metadata.get("budget_exceeded_reason", "")
+            st.warning(f"⚠️ Budget ceiling reached: {reason}")
+
 
 # ---------------------------------------------------------------------------
 # Welcome cards

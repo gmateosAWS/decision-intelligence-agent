@@ -602,6 +602,15 @@ HISTORY_WINDOW=3      # previous turns injected into the planner prompt
 
 # --- FastAPI / CORS ---
 CORS_ORIGINS=http://localhost:8501,http://localhost:3000,http://localhost:8000
+
+# --- LLM Budget ceilings per run (item 8.7.b) — 0 = no limit ---
+RUN_MAX_LLM_CALLS=20          # max LLM calls per agent run
+RUN_MAX_WALLCLOCK_S=60        # max wall-clock seconds per run
+RUN_MAX_COST_USD=1.0          # max spend in USD per run
+RUN_MAX_TOKENS=50000          # max total tokens (input + output) per run
+
+# --- Currency (item 8.7.a) ---
+EUR_USD_RATE=                  # override Frankfurter API rate; leave blank for live
 ```
 
 * Each node (`PLANNER`, `SYNTHESIZER`, `JUDGE`) can use a different provider and model independently — set `*_PROVIDER` to `"openai"` or `"anthropic"` and `*_MODEL` to the corresponding model identifier.

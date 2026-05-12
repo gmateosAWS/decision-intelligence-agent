@@ -120,7 +120,15 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # Routers
 # ---------------------------------------------------------------------------
 
-from api.routers import health, prompts, query, runs, sessions, specs  # noqa: E402
+from api.routers import (  # noqa: E402
+    budget,
+    health,
+    prompts,
+    query,
+    runs,
+    sessions,
+    specs,
+)
 
 app.include_router(health.router)  # /healthz, /readyz, /v1/debug/config at root
 app.include_router(query.router, prefix="/v1")
@@ -128,3 +136,4 @@ app.include_router(sessions.router, prefix="/v1")
 app.include_router(runs.router, prefix="/v1")
 app.include_router(specs.router, prefix="/v1")
 app.include_router(prompts.router, prefix="/v1")
+app.include_router(budget.router, prefix="/v1")

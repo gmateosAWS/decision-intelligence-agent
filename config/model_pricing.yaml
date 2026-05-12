@@ -1,0 +1,94 @@
+# LLM model pricing table (USD per 1 000 tokens)
+# Source: provider pricing pages, May 2026
+# Fields: input_per_1k_tokens, output_per_1k_tokens (USD)
+# Special value -1 means "unknown / not metered" → no cost deducted from budget
+
+models:
+  # ── OpenAI ──────────────────────────────────────────────────────────────────
+  gpt-4o:
+    input_per_1k_tokens: 0.005
+    output_per_1k_tokens: 0.015
+
+  gpt-4o-mini:
+    input_per_1k_tokens: 0.00015
+    output_per_1k_tokens: 0.0006
+
+  gpt-4-turbo:
+    input_per_1k_tokens: 0.01
+    output_per_1k_tokens: 0.03
+
+  gpt-4:
+    input_per_1k_tokens: 0.03
+    output_per_1k_tokens: 0.06
+
+  gpt-3.5-turbo:
+    input_per_1k_tokens: 0.0005
+    output_per_1k_tokens: 0.0015
+
+  o1:
+    input_per_1k_tokens: 0.015
+    output_per_1k_tokens: 0.06
+
+  o1-mini:
+    input_per_1k_tokens: 0.003
+    output_per_1k_tokens: 0.012
+
+  o3-mini:
+    input_per_1k_tokens: 0.0011
+    output_per_1k_tokens: 0.0044
+
+  # ── Anthropic ───────────────────────────────────────────────────────────────
+  claude-opus-4-20250514:
+    input_per_1k_tokens: 0.015
+    output_per_1k_tokens: 0.075
+
+  claude-sonnet-4-20250514:
+    input_per_1k_tokens: 0.003
+    output_per_1k_tokens: 0.015
+
+  claude-haiku-3-5-20241022:
+    input_per_1k_tokens: 0.0008
+    output_per_1k_tokens: 0.004
+
+  claude-opus-4-5:
+    input_per_1k_tokens: 0.015
+    output_per_1k_tokens: 0.075
+
+  claude-sonnet-4-5:
+    input_per_1k_tokens: 0.003
+    output_per_1k_tokens: 0.015
+
+  claude-haiku-4-5:
+    input_per_1k_tokens: 0.0008
+    output_per_1k_tokens: 0.004
+
+  # ── Google ──────────────────────────────────────────────────────────────────
+  gemini-1.5-pro:
+    input_per_1k_tokens: 0.00125
+    output_per_1k_tokens: 0.005
+
+  gemini-1.5-flash:
+    input_per_1k_tokens: 0.000075
+    output_per_1k_tokens: 0.0003
+
+  gemini-2.0-flash:
+    input_per_1k_tokens: 0.0001
+    output_per_1k_tokens: 0.0004
+
+  # ── Ollama (local, free) ────────────────────────────────────────────────────
+  llama3:
+    input_per_1k_tokens: 0.0
+    output_per_1k_tokens: 0.0
+
+  llama3.1:
+    input_per_1k_tokens: 0.0
+    output_per_1k_tokens: 0.0
+
+  mistral:
+    input_per_1k_tokens: 0.0
+    output_per_1k_tokens: 0.0
+
+  # ── Fallback sentinel ───────────────────────────────────────────────────────
+  unknown:
+    input_per_1k_tokens: -1
+    output_per_1k_tokens: -1

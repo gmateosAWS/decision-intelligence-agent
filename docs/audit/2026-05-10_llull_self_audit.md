@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-**Overall maturity score (dimension-weighted across 86 dimensions)**: **2.44 / 5**
+**Overall maturity score (dimension-weighted across 86 dimensions)**: **2.52 / 5** *(updated 2026-05-12 with items 8.7.a+b)*
 
 **Methodology note on arithmetic correction**: This audit computes layer means directly from the sum
 of each layer's dimension scores divided by the count. Previous audits' stated layer means did not match
@@ -145,18 +145,18 @@ Dimensions improved: 3, 5, 6, 11, 16, 18, 21 (seven of twenty-eight). No dimensi
 | 11 | Retrieval / grounding | 2 | **2** | Unchanged. RAG configured; no `GroundedTokens` guardrail. | `knowledge/retriever.py:54-68` | 🟡 (item 5.9 in I2A) |
 | 12 | Output validation | 4 | **4** | Unchanged. Structured outputs at every LLM seam. `RunResult` dataclass is a new typed contract at the graph boundary. | `agents/runner.py:19-42`; `agents/planner.py:60-88` | 🟢 |
 | 13 | Error / retry strategy | 3 | **3** | Unchanged. Exponential backoff, rate-limit detection, judge fails-open. Fail-open sinks in observer strengthen robustness. | `agents/llm_factory.py:101-165`; `evaluation/observer.py` (try/except blocks) | 🟡 (item 8.7.d) |
-| 14 | Loop control / boundedness | 1 | **1** | Unchanged. No recursion guard, no wallclock cap. Graph is a DAG (bounded by structure). | `agents/workflow.py:209-237` (no recursion_limit) | 🟡 (items 5.12, 8.7.b in I2A/I3) |
+| 14 | Loop control / boundedness | 1 | **2** | **IMPROVED.** Item 8.7.b adds `BudgetTracker` with `max_wallclock_s` and `max_llm_calls` caps enforced before every `invoke_with_fallback` call. `BudgetExceededError` aborts the run cleanly and returns a structured error. Recursion guard (item 5.12) still absent; score cannot reach 3. | `evaluation/budget.py` (`BudgetTracker.raise_if_exceeded`); `agents/llm_factory.py:144` (pre-call check); `agents/runner.py` (`BudgetExceededError` handler) | 🟡 (item 5.12 recursion guard in I3) |
 | 15 | Observability of agent runs | 4 | **4** | Unchanged in score. Now additionally records `prompt_version` per node per run. Full lineage: tool, latency, model, prompt_version, confidence, judge_score all in `agent_runs`. | `evaluation/sinks/postgres_sink.py`; `evaluation/observer.py:92-282` | 🟢 |
 | 16 | Testing and evaluation | 3 | **3** | Unchanged. 15 golden queries in CI. No real-LLM golden eval harness yet. | `tests/evaluation/test_agent_golden.py` | 🟡 (items 10.2, 10.11 in I2A/I3) |
-| 17 | LLM cost control | 0 | **0** | Unchanged. No cost tracking per run, no token counts, no per-tenant quotas. | `evaluation/observer.py` (no cost/token field in RunRecord) | 🟡 (items 8.7.a–f in I2A) |
+| 17 | LLM cost control | 0 | **3** | **IMPROVED.** Items 8.7.a + 8.7.b fully implemented: `config/model_pricing.yaml` (pricing table all providers); `evaluation/cost.py` (calculate_cost_usd); `evaluation/currency.py` (USD→EUR via Frankfurter, 1h cache); `evaluation/budget.py` (RunBudget.from_env, BudgetTracker, BudgetExceededError); tracker wired through `invoke_with_fallback` and all nodes; cost fields in RunResult → QueryResponse → RunRecord → `agent_runs` (migration 006); `/v1/budget/current` + `/v1/budget/exchange-rate` endpoints; UI cost KPIs + dashboard row. Per-tenant quotas (multi-tenant) and fallback-chain-by-budget (8.7.c/d) remain pending. | `evaluation/budget.py`; `evaluation/cost.py`; `agents/llm_factory.py:144` (tracker pre-call); `db/migrations/versions/006_*`; `api/routers/budget.py` | 🟡 (8.7.c budget reservation, 8.7.d fallback chain, 8.7.e/f multi-agent in I2A/I3) |
 | 18 | Multi-turn / session continuity | 2 | **2** | Unchanged. Checkpointing via `thread_id`; history window of 3. `requires_confirmation` and `requires_approval` are now typed state but do not add multi-turn context. | `memory/checkpointer.py:63-95`; `agents/planner.py:185-196` | 🟡 (items 5.10, 5.11 in I2A) |
 | 19 | Multi-agent coordination | 1 | **1** | Unchanged. No multi-agent, no prerequisites. | Single graph | 🟡 (items 5.3.a/b, 5.12, 8.7.e in I3) |
 | 20 | Agent autonomy policy | 3 | **3** | Unchanged. Item 3.5 complete: `spec/autonomy.py` with AutonomyLevel/ToolAutonomyPolicy/AutonomyPolicy; `_route_after_planner` conditional edge enforces policy at runtime; `GET/PUT /v1/specs/{id}/autonomy` REST endpoints; 26 tests. `JUDGE_THRESHOLD` still hardcoded — items 7.3 and 5.3.b for I3. | `spec/autonomy.py`; `agents/workflow.py` (`_route_after_planner`); `agents/state.py:58-60` | 🟢 (3.5 done; 7.3 + 5.3.b in I3) |
 
-**Layer 2 mean: 2.55 / 5** (51 / 20 dimension points)
-*(Corrected May 8 baseline: 2.50; stated May 8: 2.55)*
+**Layer 2 mean: 2.75 / 5** (55 / 20 dimension points)
+*(Corrected May 8 baseline: 2.50; May 10 baseline: 2.55)*
 
-Dimensions improved: 8 (one of twenty). No dimension regressed.
+Dimensions improved: 8, 14, 17 (three of twenty). No dimension regressed.
 
 ---
 
@@ -254,8 +254,8 @@ High-impact items only (full list available via inventory grep):
 |---|---|---|---|---|
 | Memory · dims 3, 4, 9, 10, 12, 19 (six 0-score) | `ActiveAnalyticalState` typed object | 5.10 | **I2A · highest-leverage** | Pending |
 | Memory · dim 2 | `MemoryService` Protocol + boundary lint | 5.11 | I2A | Pending |
-| AI · #17 LLM cost control | Token tracking, quotas, hard ceilings | 8.7.a–f | I2A (8.7.b critical-path) | Pending |
-| AI · #14 Loop control | Recursion guard + wallclock cap | 5.12 | I3 | Pending |
+| ~~AI · #17 LLM cost control~~ | ~~Token tracking, quotas, hard ceilings~~ | ~~8.7.a–f~~ | ~~I2A~~ | ✅ 8.7.a+b done 2026-05-12; 8.7.c/d/e/f pending |
+| AI · #14 Loop control | Recursion guard (wallclock+call caps now in place via 8.7.b) | 5.12 | I3 | Partial ↑ |
 | AI · #11 Retrieval / grounding | `GroundedTokens` guardrail | 5.9 | I2A | Pending |
 | AI · #10 Memory abstraction | `MemoryService` Protocol | 5.11 | I2A | Pending |
 | AI · #8 Prompt governance (partial) | A/B testing, shadow evaluation | 10.2, 10.3 | I2A | Pending |
@@ -327,13 +327,13 @@ prototype: the "internal callable with a clear contract" constraint is actually 
 Previous audits had inconsistencies between their stated layer means and the sum of their dimension
 scores. This audit recomputes all three baselines from the actual dimension scores:
 
-| Layer | May 6 (stated) | May 8 (stated) | May 8 (corrected) | May 10 (this audit) | Δ (corrected) |
-|---|---|---|---|---|---|
-| L1 Codebase (28 dims) | 2.96 | 3.46 | **3.39** | **3.64** | +0.25 |
-| L2 AI/Agent (20 dims) | 2.40 | 2.55 | **2.50** | **2.55** | +0.05 |
-| L3 Memory (22 dims) | 1.55 | 1.27 | **1.14** | **1.18** | +0.04 |
-| L4 Ontology (16 dims) | 2.31 | 2.31 | **2.00** | **2.06** | +0.06 |
-| **Overall (86 dims)** | **2.55** | **2.65** | **2.35** | **2.47** | **+0.12** |
+| Layer | May 6 (stated) | May 8 (stated) | May 8 (corrected) | May 10 (this audit) | May 12 (8.7.a+b) | Δ May 10→12 |
+|---|---|---|---|---|---|---|
+| L1 Codebase (28 dims) | 2.96 | 3.46 | **3.39** | **3.64** | **3.64** | +0.00 |
+| L2 AI/Agent (20 dims) | 2.40 | 2.55 | **2.50** | **2.55** | **2.75** | +0.20 |
+| L3 Memory (22 dims) | 1.55 | 1.27 | **1.14** | **1.18** | **1.18** | +0.00 |
+| L4 Ontology (16 dims) | 2.31 | 2.31 | **2.00** | **2.06** | **2.06** | +0.00 |
+| **Overall (86 dims)** | **2.55** | **2.65** | **2.35** | **2.47** | **2.52** | **+0.05** |
 
 The corrected May 8 baseline is 2.35, not 2.65. The trend is genuinely upward: +0.09 from corrected
 May 8. The apparent "decline" from stated values is entirely due to arithmetic correction, not regression.
