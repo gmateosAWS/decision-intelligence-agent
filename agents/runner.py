@@ -40,6 +40,13 @@ class RunResult:
     requires_confirmation: bool = False
     requires_approval: bool = False
     confirmation_message: Optional[str] = None
+    # Cost tracking (item 8.7.a+b)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_cost_usd: float = 0.0
+    llm_calls_count: int = 0
+    budget_exceeded: bool = False
+    budget_exceeded_reason: Optional[str] = None
 
 
 def run_query(
@@ -93,15 +100,30 @@ def run_query(
         except Exception:  # noqa: BLE001
             pass
 
+    from evaluation.budget import BudgetExceededError, BudgetTracker, RunBudget
+
+    budget = RunBudget.from_env()
+    tracker = BudgetTracker(budget=budget)
+
     try:
         cfg = observer.langsmith_config()
         cfg["configurable"]["observer"] = observer
         cfg["configurable"]["thread_id"] = thread_id
+        cfg["configurable"]["budget_tracker"] = tracker
 
         result = graph.invoke({"query": query, "run_id": run_id}, config=cfg)
 
         observer.set_raw_result(result.get("raw_result") or {})
         latency_ms = (time.perf_counter() - t0) * 1000
+
+        # Attach cost fields to observer record before finalizing
+        observer.record_cost(
+            total_input_tokens=tracker.total_input_tokens,
+            total_output_tokens=tracker.total_output_tokens,
+            total_cost_usd=tracker.total_cost_usd,
+            llm_calls_count=tracker.llm_calls,
+        )
+
         record = observer.end_run(success=True) or {}
 
         return RunResult(
@@ -128,6 +150,36 @@ def run_query(
             requires_confirmation=bool(result.get("requires_confirmation", False)),
             requires_approval=bool(result.get("requires_approval", False)),
             confirmation_message=result.get("confirmation_message"),
+            total_input_tokens=tracker.total_input_tokens,
+            total_output_tokens=tracker.total_output_tokens,
+            total_cost_usd=tracker.total_cost_usd,
+            llm_calls_count=tracker.llm_calls,
+        )
+
+    except BudgetExceededError as exc:
+        latency_ms = (time.perf_counter() - t0) * 1000
+        observer.record_cost(
+            total_input_tokens=exc.tracker.total_input_tokens,
+            total_output_tokens=exc.tracker.total_output_tokens,
+            total_cost_usd=exc.tracker.total_cost_usd,
+            llm_calls_count=exc.tracker.llm_calls,
+        )
+        observer.end_run(success=False, error=exc.reason)
+        return RunResult(
+            answer=f"⚠️ Budget ceiling reached: {exc.reason}",
+            session_id=thread_id,
+            run_id=run_id,
+            success=False,
+            latency_ms=latency_ms,
+            error=exc.reason,
+            error_type="BudgetExceededError",
+            latencies={},
+            total_input_tokens=exc.tracker.total_input_tokens,
+            total_output_tokens=exc.tracker.total_output_tokens,
+            total_cost_usd=exc.tracker.total_cost_usd,
+            llm_calls_count=exc.tracker.llm_calls,
+            budget_exceeded=True,
+            budget_exceeded_reason=exc.reason,
         )
 
     except Exception as exc:  # noqa: BLE001

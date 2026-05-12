@@ -117,6 +117,14 @@ class RunRecord:
     synthesizer_prompt_version: Optional[str] = None
     judge_prompt_version: Optional[str] = None
 
+    # Cost tracking (item 8.7.a+b)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_cost_usd: float = 0.0
+    llm_calls_count: int = 0
+    budget_exceeded: bool = False
+    budget_exceeded_reason: Optional[str] = None
+
 
 # ---------------------------------------------------------------------------
 # Observer
@@ -309,6 +317,24 @@ class AgentObserver:
         )
         if feedback:
             self._logger.info("  JUDGE NOTE  %s", self._truncate(feedback, 100))
+
+    def record_cost(
+        self,
+        total_input_tokens: int,
+        total_output_tokens: int,
+        total_cost_usd: float,
+        llm_calls_count: int,
+        budget_exceeded: bool = False,
+        budget_exceeded_reason: Optional[str] = None,
+    ) -> None:
+        """Record aggregated LLM cost for the current run (item 8.7.a+b)."""
+        if self._run:
+            self._run.total_input_tokens = total_input_tokens
+            self._run.total_output_tokens = total_output_tokens
+            self._run.total_cost_usd = total_cost_usd
+            self._run.llm_calls_count = llm_calls_count
+            self._run.budget_exceeded = budget_exceeded
+            self._run.budget_exceeded_reason = budget_exceeded_reason
 
     def end_run(
         self,

@@ -127,11 +127,14 @@ def judge_node(
             ),
         },
     ]
+    tracker = _get_tracker(config)
     try:
         verdict = invoke_with_fallback(
             _judge_structured,
             judge_messages,
             fallback=_fallback_judge_structured,
+            tracker=tracker,
+            model=_JUDGE_MODEL,
         )
     except (LLMUnavailableError, Exception) as exc:  # noqa: BLE001
         # Fail open: preserve the original answer, but log that the judge failed.
@@ -173,6 +176,7 @@ def judge_node(
             original_answer=answer,
             feedback=verdict.feedback,
             language=language,
+            tracker=tracker,
         )
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -207,6 +211,7 @@ def _revise_answer(
     original_answer: str,
     feedback: str,
     language: str = "en",
+    tracker: Any = None,
 ) -> str:
     """Generate one grounded revision using the judge feedback."""
     _init_llms()
@@ -238,6 +243,8 @@ def _revise_answer(
             _revision_llm,
             revision_messages,
             fallback=_fallback_revision_llm,
+            tracker=tracker,
+            model=_JUDGE_MODEL,
         )
         revised = (response.content or "").strip()
         return revised or original_answer
@@ -255,3 +262,9 @@ def _get_observer(config: Optional[dict]):
     if config is None:
         return None
     return config.get("configurable", {}).get("observer")
+
+
+def _get_tracker(config: Optional[dict]):
+    if config is None:
+        return None
+    return config.get("configurable", {}).get("budget_tracker")

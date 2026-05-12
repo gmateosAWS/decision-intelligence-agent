@@ -28,3 +28,10 @@ class QueryResponse(BaseModel):
     requires_confirmation: bool = False
     requires_approval: bool = False
     confirmation_message: Optional[str] = None
+    # Cost tracking (item 8.7.a+b)
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    total_cost_usd: float = 0.0
+    llm_calls_count: int = 0
+    budget_exceeded: bool = False
+    budget_exceeded_reason: Optional[str] = None

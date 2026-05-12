@@ -78,6 +78,12 @@ class PostgresSink:
                             "synthesizer_prompt_version"
                         ),
                         judge_prompt_version=record.get("judge_prompt_version"),
+                        total_input_tokens=record.get("total_input_tokens", 0),
+                        total_output_tokens=record.get("total_output_tokens", 0),
+                        total_cost_usd=record.get("total_cost_usd", 0.0),
+                        llm_calls_count=record.get("llm_calls_count", 0),
+                        budget_exceeded=record.get("budget_exceeded", False),
+                        budget_exceeded_reason=record.get("budget_exceeded_reason"),
                     )
                 )
         except Exception as exc:  # noqa: BLE001

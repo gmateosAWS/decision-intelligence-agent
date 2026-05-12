@@ -31,7 +31,7 @@ Responsibilities
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -41,6 +41,9 @@ from spec.spec_loader import get_spec
 
 from .llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
 from .state import AgentState
+
+if TYPE_CHECKING:
+    from evaluation.budget import BudgetTracker
 
 load_dotenv()
 
@@ -154,7 +157,10 @@ def _get_system_prompt() -> tuple:
     return _SYSTEM_PROMPT, _SYSTEM_PROMPT_VERSION
 
 
-def planner_node(state: AgentState) -> Dict:
+def planner_node(
+    state: AgentState,
+    tracker: Optional["BudgetTracker"] = None,
+) -> Dict:
     """
     Selects the best tool for the current query and extracts any
     decision-variable values mentioned in the query into `params`.
@@ -184,6 +190,8 @@ def planner_node(state: AgentState) -> Dict:
             _llm_structured,
             messages,
             fallback=_fallback_llm_structured,
+            tracker=tracker,
+            model=_PLANNER_MODEL,
         )
         params_dict = {p.variable: p.value for p in selection.params}
 

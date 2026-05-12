@@ -287,16 +287,16 @@
     <div class="gauge-wrap">
       <svg class="gauge-arc" viewBox="0 0 180 100" width="180" height="100">
         <path d="M 20 90 A 70 70 0 0 1 160 90" stroke="var(--border)" stroke-width="12" fill="none" stroke-linecap="round"/>
-        <!-- 2.47/5 = 49.4% of arc. Arc length ≈ 220deg → 49.4% = 108.7deg -->
+        <!-- 2.52/5 = 50.4% of arc. Arc length ≈ 220deg → 50.4% = 110.9deg -->
         <!-- Using stroke-dasharray on the path approximation -->
         <path d="M 20 90 A 70 70 0 0 1 160 90" stroke="var(--accent)" stroke-width="12" fill="none" stroke-linecap="round"
-              stroke-dasharray="188" stroke-dashoffset="95"/>
+              stroke-dasharray="188" stroke-dashoffset="93"/>
         <!-- Markers at 1,2,3,4,5 -->
         <text x="12" y="96" font-size="9" fill="var(--text3)" font-family="DM Sans,sans-serif">0</text>
         <text x="163" y="96" font-size="9" fill="var(--text3)" font-family="DM Sans,sans-serif">5</text>
       </svg>
       <div class="gauge-text">
-        <div class="gauge-score">2.47</div>
+        <div class="gauge-score">2.52</div>
         <div class="gauge-max">/ 5.00</div>
         <div class="gauge-label">overall</div>
       </div>
@@ -304,8 +304,9 @@
     <div class="exec-prose">
       <p><strong>10 dimensions improved</strong> since the May 8 audit. No regressions for the third consecutive sprint. The sprint closed the two largest remaining tactical debts: the 1,040 LOC <code>streamlit_app.py</code> monolith (now 22 lines) and the 465 LOC <code>AgentObserver</code> god-class (refactored into RunSink Protocol + 3 pluggable implementations). Additionally, two audit P2 items completed: item 3.3 (DAG cycle assertion) and supply-chain lock files.</p>
       <p><strong>Five architectural items deployed:</strong> item 3.6 (spec semver with monotonicity enforcement), item 3.5 (autonomy policies with runtime graph routing), item 10.1 (Prompt Registry with lifecycle + REST CRUD + prompt_version in agent_runs), item 3.3 (DAG cycle assertion at 3 integration points + 7 tests), supply-chain lock files (requirements.lock + requirements-dev.lock with hashes).</p>
-      <p>The dominant gap pattern is unchanged: Memory (Layer 3) and LLM cost control (AI dim 17) await item 5.10 <code>ActiveAnalyticalState</code> and 8.7.a–f. All gaps are 🟡 planned. <strong>Zero 🔴 critical findings</strong> for the third consecutive audit.</p>
-      <p style="font-size:11px; color:var(--text3);">Note: overall 2.47 reflects arithmetic correction of previous audits' stated means (corrected May 8 baseline: 2.35; actual delta: +0.12) including dims 16 and 18 improvements from this PR.</p>
+      <p><strong>May 12 update (items 8.7.a+8.7.b):</strong> LLM cost tracking and hard per-run budget ceilings deployed — YAML pricing table, <code>BudgetTracker</code> wired into every LLM call, 6 cost fields in <code>RunResult</code>/<code>QueryResponse</code>/<code>agent_runs</code>, migration 006, dashboard KPIs, <code>GET /v1/budget/current</code> + <code>/exchange-rate</code>. Dims 17 (cost control: 0→3) and 14 (loop control: 1→2, wallclock+call caps) improve with this PR. 232 unit tests pass.</p>
+      <p>The dominant remaining gap: Memory (Layer 3) awaits item 5.10 <code>ActiveAnalyticalState</code>. All gaps are 🟡 planned. <strong>Zero 🔴 critical findings</strong> for the third consecutive audit.</p>
+      <p style="font-size:11px; color:var(--text3);">Note: overall 2.52 = 216 pts across 86 dims (corrected May 8 baseline: 2.35; May 10: 2.47 → May 12: 2.52 after +4 pts from dims 14+17).</p>
     </div>
   </div>
 </section>
@@ -323,10 +324,10 @@
     </div>
     <div class="layer-card lc-l2">
       <div class="lc-title">L2 · AI / Agent Layer</div>
-      <div class="lc-score">2.55</div>
-      <div class="lc-dims">20 dimensions · 51 pts</div>
-      <div class="lc-bar"><div class="lc-fill" style="width:51%"></div></div>
-      <div class="lc-delta">vs corrected May 8: <span>+0.05</span></div>
+      <div class="lc-score">2.75</div>
+      <div class="lc-dims">20 dimensions · 55 pts</div>
+      <div class="lc-bar"><div class="lc-fill" style="width:55%"></div></div>
+      <div class="lc-delta">vs corrected May 8: <span>+0.25</span></div>
     </div>
     <div class="layer-card lc-l3">
       <div class="lc-title">L3 · Conversational Memory</div>
@@ -366,7 +367,7 @@
     </div>
     <div class="find-card">
       <div class="find-icon">↑</div>
-      <div class="find-count" style="color:var(--accent)">8</div>
+      <div class="find-count" style="color:var(--accent)">10</div>
       <div class="find-label">Dims improved this sprint</div>
     </div>
   </div>
@@ -421,7 +422,7 @@
   <div class="heatmap-group">
     <div class="heatmap-group-title hg-l2">L2 · AI / Agent Layer (20)</div>
     <div class="heatmap-grid">
-      <!-- Scores: 3,3,2,4,2,2,3,4,4,1,2,4,3,1,4,3,0,2,1,3 -->
+      <!-- Scores: 3,3,2,4,2,2,3,4,4,1,2,4,3,2,4,3,3,2,1,3 (dims 14+17 updated May 12) -->
       <div class="hm-cell s3"><div class="hm-num">L2·1</div><div class="hm-score">3</div><div class="hm-name">Agentic role</div></div>
       <div class="hm-cell s3"><div class="hm-num">L2·2</div><div class="hm-score">3</div><div class="hm-name">Agentic boundary</div></div>
       <div class="hm-cell s2"><div class="hm-num">L2·3</div><div class="hm-score">2</div><div class="hm-name">Agent separation</div></div>
@@ -435,10 +436,10 @@
       <div class="hm-cell s2"><div class="hm-num">L2·11</div><div class="hm-score">2</div><div class="hm-name">Retrieval/grounding</div></div>
       <div class="hm-cell s4"><div class="hm-num">L2·12</div><div class="hm-score">4</div><div class="hm-name">Output validation</div></div>
       <div class="hm-cell s3"><div class="hm-num">L2·13</div><div class="hm-score">3</div><div class="hm-name">Error/retry</div></div>
-      <div class="hm-cell s1"><div class="hm-num">L2·14</div><div class="hm-score">1</div><div class="hm-name">Loop control</div></div>
+      <div class="hm-cell s2"><div class="hm-num">L2·14</div><div class="hm-score">2</div><div class="hm-name">Loop control</div><div class="hm-arrow">↑</div></div>
       <div class="hm-cell s4"><div class="hm-num">L2·15</div><div class="hm-score">4</div><div class="hm-name">Run observability</div></div>
       <div class="hm-cell s3"><div class="hm-num">L2·16</div><div class="hm-score">3</div><div class="hm-name">Testing/eval</div></div>
-      <div class="hm-cell s0"><div class="hm-num">L2·17</div><div class="hm-score">0</div><div class="hm-name">Cost control</div></div>
+      <div class="hm-cell s3"><div class="hm-num">L2·17</div><div class="hm-score">3</div><div class="hm-name">Cost control</div><div class="hm-arrow">↑</div></div>
       <div class="hm-cell s2"><div class="hm-num">L2·18</div><div class="hm-score">2</div><div class="hm-name">Multi-turn</div></div>
       <div class="hm-cell s1"><div class="hm-num">L2·19</div><div class="hm-score">1</div><div class="hm-name">Multi-agent</div></div>
       <div class="hm-cell s3"><div class="hm-num">L2·20</div><div class="hm-score">3</div><div class="hm-name">Autonomy policy</div></div>
@@ -532,6 +533,9 @@
       <tr><td>L2·8 Prompt governance</td><td>3</td><td class="improved">4 ↑</td><td>Item 10.1 fully deployed: registry + lifecycle + REST + prompt_version in DB</td></tr>
       <tr><td>L3·11 Clarification governance</td><td>1</td><td class="improved">2 ↑</td><td>Item 3.5: requires_confirmation/approval as typed AgentState fields</td></tr>
       <tr><td>L4·14 Governance/versioning</td><td>3</td><td class="improved">4 ↑</td><td>Items 3.6 (spec semver) + 10.1 (prompt lifecycle) both enforced</td></tr>
+      <tr style="border-top:2px solid var(--border)"><td colspan="4" style="font-size:11px;color:var(--text3);padding:4px 0">May 12 · items 8.7.a+8.7.b</td></tr>
+      <tr><td>L2·17 Cost control</td><td>0</td><td class="improved">3 ↑</td><td>8.7.a: YAML pricing + BudgetTracker wired at every invoke_with_fallback; 8.7.b: hard ceilings (tokens, wallclock, cost, calls); migration 006; dashboard KPIs; GET /v1/budget/*</td></tr>
+      <tr><td>L2·14 Loop control</td><td>1</td><td class="improved">2 ↑</td><td>Wallclock cap + LLM-call cap enforced via BudgetTracker.raise_if_exceeded() pre-call</td></tr>
     </tbody>
   </table>
 </section>
@@ -561,10 +565,10 @@
         <td>5.11</td>
         <td><span class="iter-badge iter-i2a">I2A</span></td>
       </tr>
-      <tr>
+      <tr style="opacity:0.5;text-decoration:line-through">
         <td>L2 · dim 17</td>
-        <td><strong>LLM cost control</strong> — token tracking, quotas, hard ceilings (score: 0)</td>
-        <td>8.7.a–f</td>
+        <td><strong>LLM cost control</strong> — token tracking, quotas, hard ceilings (score: 0→3 ✅ May 12)</td>
+        <td>8.7.a–b</td>
         <td><span class="iter-badge iter-i2a">I2A</span></td>
       </tr>
       <tr>
@@ -591,10 +595,10 @@
         <td>7.1, 7.5–7.9</td>
         <td><span class="iter-badge iter-i2b">I2B</span></td>
       </tr>
-      <tr>
+      <tr style="opacity:0.5;text-decoration:line-through">
         <td>L2 · dim 14</td>
-        <td><strong>Recursion guard + wallclock cap</strong></td>
-        <td>5.12</td>
+        <td><strong>Recursion guard + wallclock cap</strong> (score: 1→2 ✅ May 12, wallclock+call caps via BudgetTracker)</td>
+        <td>5.12 (partial)</td>
         <td><span class="iter-badge iter-i3">I3</span></td>
       </tr>
       <tr>
@@ -647,7 +651,7 @@
       <ul class="remed-items">
         <li><strong>3–4 days · Item 5.10</strong> — ActiveAnalyticalState typed object. Moves 6 Memory dims from 0 to 2+. Gates 12 dimensions total. Highest-ROI item in the backlog.</li>
         <li><strong>1 day · Item 5.11</strong> — MemoryService Protocol. Follow immediately after 5.10. Lifts L1 dims 5,6 from 2,3 to 3,4. Mirrors RunSink precedent.</li>
-        <li><strong>2 days · Items 8.7.a+b</strong> — LLM cost tracking + hard ceiling env var. Lifts AI dim 17 from 0 to 2.</li>
+        <li><s><strong>2 days · Items 8.7.a+b</strong> — LLM cost tracking + hard ceiling env var. Lifts AI dim 17 from 0 to 2.</s> ✅ Done 2026-05-12: YAML pricing + BudgetTracker wired at every LLM call + hard ceilings (tokens, wallclock, cost, calls) + migration 006 + dashboard KPIs + GET /v1/budget/*. L2·17: 0→3, L2·14: 1→2.</li>
         <li><strong>1 day · Item 1.6</strong> — ObjectBus. RunSink interface is already correct; sinks become bus subscribers with no interface change needed.</li>
       </ul>
     </div>
@@ -672,7 +676,7 @@
   <div style="text-align:right">
     Previous: <a href="2026-05-06_llull_self_audit.html" style="color:var(--accent)">May 6 baseline</a> ·
     <a href="2026-05-08_llull_self_audit.html" style="color:var(--accent)">May 8 delta #1</a> ·
-    Re-audit recommended after I2A close-out (items 5.10, 5.11, 8.7.a–b) · Expected overall: ~2.80 / 5
+    Re-audit recommended after I2A close-out (items 5.10, 5.11, 1.6 ObjectBus) · Current overall: 2.52 / 5 · Expected post-I2A: ~2.80 / 5
   </div>
 </footer>
 

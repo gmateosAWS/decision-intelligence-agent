@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from evaluation.budget import BudgetTracker
+
 logger = logging.getLogger(__name__)
 
 _LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
@@ -103,6 +105,8 @@ def invoke_with_fallback(
     messages: Any,
     *,
     fallback: Optional[Any] = None,
+    tracker: Optional["BudgetTracker"] = None,
+    model: str = "",
 ) -> Any:
     """
     Invoke *primary* with exponential-backoff retries on rate-limit errors.
@@ -120,6 +124,11 @@ def invoke_with_fallback(
         Input passed verbatim to ``.invoke()``.
     fallback : Any | None
         Optional second runnable tried once if primary is exhausted.
+    tracker : BudgetTracker | None
+        If provided, budget is checked before each call and usage is recorded
+        after a successful call (item 8.7.b).
+    model : str
+        Model identifier used to look up pricing (item 8.7.a).
 
     Returns
     -------
@@ -130,12 +139,19 @@ def invoke_with_fallback(
     ------
     LLMUnavailableError
         When all providers are exhausted.
+    BudgetExceededError
+        When the per-run budget ceiling is hit before the call (item 8.7.b).
     """
+    if tracker is not None:
+        tracker.raise_if_exceeded()
+
     last_exc: Optional[Exception] = None
 
     for attempt in range(_LLM_MAX_RETRIES + 1):
         try:
-            return primary.invoke(messages)
+            response = primary.invoke(messages)
+            _record_usage(tracker, response, model)
+            return response
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             if _is_rate_limit(exc) and attempt < _LLM_MAX_RETRIES:
@@ -155,7 +171,9 @@ def invoke_with_fallback(
     if fallback is not None:
         logger.info("Switching to fallback LLM provider")
         try:
-            return fallback.invoke(messages)
+            response = fallback.invoke(messages)
+            _record_usage(tracker, response, model)
+            return response
         except Exception as exc:  # noqa: BLE001
             logger.error("Fallback LLM also failed (%s): %s", type(exc).__name__, exc)
             raise LLMUnavailableError("All LLM providers exhausted") from exc
@@ -163,3 +181,31 @@ def invoke_with_fallback(
     raise LLMUnavailableError(
         f"LLM unavailable and no fallback configured: {last_exc}"
     ) from last_exc
+
+
+def _record_usage(
+    tracker: Optional["BudgetTracker"],
+    response: Any,
+    model: str,
+) -> None:
+    """Extract token counts from a LangChain response and record them in *tracker*."""
+    if tracker is None:
+        return
+    try:
+        from evaluation.cost import calculate_cost_usd
+
+        usage = getattr(response, "usage_metadata", None) or getattr(
+            response, "response_metadata", {}
+        ).get("usage", {})
+        input_tokens = int(
+            getattr(usage, "input_tokens", None) or usage.get("prompt_tokens", 0) or 0
+        )
+        output_tokens = int(
+            getattr(usage, "output_tokens", None)
+            or usage.get("completion_tokens", 0)
+            or 0
+        )
+        cost_usd = calculate_cost_usd(model, input_tokens, output_tokens)
+        tracker.record_call(input_tokens, output_tokens, cost_usd)
+    except Exception:  # noqa: BLE001
+        tracker.record_call(0, 0, 0.0)

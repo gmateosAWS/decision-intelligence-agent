@@ -339,6 +339,15 @@ HTTP status distinction.
 
 **Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, continue I2A with remaining LLMOps items (10.2 A/B testing, 10.3 shadow evaluation). Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of schedule.
 
+### Item 8.7.a + 8.7.b ✅
+
+- [x] 8.7.a LLM cost tracking: `config/model_pricing.yaml` (pricing table, all providers), `evaluation/cost.py` (ModelPricing, calculate_cost_usd, reload_pricing), `evaluation/currency.py` (Frankfurter API USD→EUR, 1-hour cache, env fallback)
+- [x] 8.7.b Hard ceilings per run: `evaluation/budget.py` (RunBudget.from_env(), BudgetTracker, BudgetExceededError); tracker wired through `invoke_with_fallback()` in `agents/llm_factory.py`; passed via `config["configurable"]["budget_tracker"]` to all nodes (planner, synthesizer, judge, revision)
+- [x] Cost fields propagated: RunResult → QueryResponse → RunRecord → PostgresSink → `agent_runs` table (migration 006)
+- [x] Budget endpoints: `GET /v1/budget/current` + `GET /v1/budget/exchange-rate` in `api/routers/budget.py`
+- [x] UI: cost metrics in `render_technical_details()` + cost KPIs row in dashboard
+- [x] 25 new tests (test_cost.py, test_currency.py, test_budget.py, test_runner_budget.py, test_query_cost_in_response.py)
+
 ## Pending improvements (noted, not blocking)
 
 - API `POST /v1/query` should accept optional `context.month` param (noted when temporal data was added)

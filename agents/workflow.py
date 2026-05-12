@@ -89,8 +89,9 @@ def planner_node(
 ) -> Dict:
     """Calls the LLM planner and records timing via the observer."""
     obs = _get_observer(config)
+    tracker = _get_tracker(config)
     t0 = time.perf_counter()
-    result = _sanitize_for_state(_planner_node_impl(state))
+    result = _sanitize_for_state(_planner_node_impl(state, tracker=tracker))
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
         obs.record_planner(
@@ -181,12 +182,15 @@ def synthesizer_node(
     ]
 
     _syn_llm, _syn_fallback = _get_synthesizer_llms()
+    tracker = _get_tracker(config)
     t0 = time.perf_counter()
     try:
         response = invoke_with_fallback(
             _syn_llm,
             messages,
             fallback=_syn_fallback,
+            tracker=tracker,
+            model=_SYNTHESIZER_MODEL,
         )
         answer = response.content.strip()
     except (LLMUnavailableError, Exception):  # noqa: BLE001
@@ -300,3 +304,10 @@ def _get_observer(config: Optional[RunnableConfig]):
     if config is None:
         return None
     return config.get("configurable", {}).get("observer")
+
+
+def _get_tracker(config: Optional[RunnableConfig]):
+    """Extract the BudgetTracker from the configurable dict."""
+    if config is None:
+        return None
+    return config.get("configurable", {}).get("budget_tracker")

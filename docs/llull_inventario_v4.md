@@ -701,17 +701,15 @@ _Resuelve:_ transparencia hacia el cliente. Un cliente enterprise quiere poder a
 
 El control de gasto es **multi-dimensional**: tenant, run individual, slot de modelo, peer en multi-agente, y trazabilidad. Sin esto, una query patológica puede consumir 10+ llamadas LLM en stacked retries y aún así estar "dentro del budget mensual del tenant" — exactamente el problema que la auditoría del AI Layer de LlullGen reporta como **gap explícito** ("no per-request LLM-call cap; no cost-per-request cap; no wall-clock budget"). v3 cubría parcialmente solo la dimensión tenant. v4 cubre las seis dimensiones que un control completo necesita.
 
-#### 8.7.a Cuotas y presupuestos por tenant `[feature]`
+#### ✅ COMPLETADO (v1 — cost tracking) 8.7.a Cuotas y presupuestos por tenant `[feature]`
 
-(Era el 8.7 original.) Cada query registra el coste en tokens y en dinero. Presupuestos configurables por tenant, con alertas cuando se acercan al límite y bloqueo cuando lo superan. Dashboards de coste agregado por cliente y por dominio.
+(Era el 8.7 original.) Completado 2026-05-12: `config/model_pricing.yaml` (pricing table todas las providers), `evaluation/cost.py` (ModelPricing, calculate_cost_usd), `evaluation/currency.py` (Frankfurter API USD→EUR, 1h cache). Cost fields (input/output tokens, cost_usd, llm_calls) propagados desde RunResult → QueryResponse → RunRecord → agent_runs (migration 006).
 
 _Resuelve:_ los LLMs tienen coste variable. Sin control, una sesión problemática puede disparar la factura. Y un cliente enterprise va a exigir visibilidad sobre su consumo.
 
-#### 8.7.b Hard request-level budget ceilings `[feature] [v4]`
+#### ✅ COMPLETADO (v1 — hard ceilings) 8.7.b Hard request-level budget ceilings `[feature] [v4]`
 
-Cap **por run individual** independiente del cap por tenant: `max_llm_calls_per_run`, `max_wallclock_seconds_per_run`, `max_cost_usd_per_run`, `max_total_tokens_per_run`. Cuando un cap se alcanza, el run se aborta de forma controlada y devuelve la mejor respuesta parcial disponible más un mensaje claro al usuario ("este análisis ha alcanzado su presupuesto de cómputo, aquí va el resultado parcial").
-
-Sin esto, un run patológico (planner decide mal y dispara 10 retries con stacked backoff) consume al ritmo más alto del proveedor sin freno. Es el gap más claro de la auditoría AI Layer y un riesgo que tu inventario v3 no contemplaba.
+Completado 2026-05-12: `evaluation/budget.py` (RunBudget.from_env, BudgetTracker, BudgetExceededError). Tracker wired en `invoke_with_fallback` (todos los providers) y pasado vía `config["configurable"]["budget_tracker"]` a los 3 nodos (planner, synthesizer, judge + revision). `GET /v1/budget/current` + `/v1/budget/exchange-rate`. 25 tests.
 
 _Resuelve:_ runaway runs. Por defecto: 20 llamadas LLM, 60 segundos wallclock, $1 USD por run. Configurable por capability via spec.
 
