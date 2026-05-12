@@ -117,6 +117,14 @@ def run_query(
         latency_ms = (time.perf_counter() - t0) * 1000
 
         # Attach cost fields to observer record before finalizing
+        observer._logger.warning(
+            "[COST_DEBUG] tracker state before record_cost:"
+            " input=%d output=%d cost=%.6f calls=%d",
+            tracker.total_input_tokens,
+            tracker.total_output_tokens,
+            tracker.total_cost_usd,
+            tracker.llm_calls,
+        )
         observer.record_cost(
             total_input_tokens=tracker.total_input_tokens,
             total_output_tokens=tracker.total_output_tokens,

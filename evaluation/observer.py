@@ -328,6 +328,13 @@ class AgentObserver:
         budget_exceeded_reason: Optional[str] = None,
     ) -> None:
         """Record aggregated LLM cost for the current run (item 8.7.a+b)."""
+        self._logger.warning(
+            "[COST_DEBUG] record_cost: input=%d output=%d cost_usd=%.6f calls=%d",
+            total_input_tokens,
+            total_output_tokens,
+            total_cost_usd,
+            llm_calls_count,
+        )
         if self._run:
             self._run.total_input_tokens = total_input_tokens
             self._run.total_output_tokens = total_output_tokens

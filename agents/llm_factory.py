@@ -195,67 +195,31 @@ def _extract_usage(response: Any) -> tuple[int, int]:
 
     Returns (0, 0) and logs a warning for unknown shapes.
     """
-    logger.warning(
-        "[USAGE_DEBUG] type=%s is_dict=%s",
-        type(response).__name__,
-        isinstance(response, dict),
-    )
-    if isinstance(response, dict):
-        logger.warning("[USAGE_DEBUG] dict_keys=%s", list(response.keys()))
-        if "raw" in response:
-            raw = response["raw"]
-            logger.warning(
-                "[USAGE_DEBUG] raw_type=%s has_usage_metadata=%s",
-                type(raw).__name__,
-                hasattr(raw, "usage_metadata"),
-            )
-            if hasattr(raw, "usage_metadata"):
-                logger.warning(
-                    "[USAGE_DEBUG] usage_metadata_value=%r", raw.usage_metadata
-                )
-    else:
-        logger.warning(
-            "[USAGE_DEBUG] direct response has_usage_metadata=%s",
-            hasattr(response, "usage_metadata"),
-        )
-        if hasattr(response, "usage_metadata"):
-            logger.warning(
-                "[USAGE_DEBUG] usage_metadata_value=%r", response.usage_metadata
-            )
-
     # Pattern 1: direct AIMessage / BaseChatModel response
     if hasattr(response, "usage_metadata") and response.usage_metadata:
         um = response.usage_metadata
-        input_tokens = int(um.get("input_tokens", 0) or 0)
-        output_tokens = int(um.get("output_tokens", 0) or 0)
-        logger.warning(
-            "[USAGE_DEBUG] returning input=%d output=%d", input_tokens, output_tokens
+        return (
+            int(um.get("input_tokens", 0) or 0),
+            int(um.get("output_tokens", 0) or 0),
         )
-        return (input_tokens, output_tokens)
     # Pattern 2: structured output with include_raw=True → {"raw": AIMessage, ...}
     if isinstance(response, dict) and "raw" in response:
         raw = response["raw"]
         if hasattr(raw, "usage_metadata") and raw.usage_metadata:
             um = raw.usage_metadata
-            input_tokens = int(um.get("input_tokens", 0) or 0)
-            output_tokens = int(um.get("output_tokens", 0) or 0)
-            logger.warning(
-                "[USAGE_DEBUG] returning input=%d output=%d",
-                input_tokens,
-                output_tokens,
+            return (
+                int(um.get("input_tokens", 0) or 0),
+                int(um.get("output_tokens", 0) or 0),
             )
-            return (input_tokens, output_tokens)
     # Pattern 3: response_metadata.token_usage (older OpenAI shape)
     if hasattr(response, "response_metadata"):
         token_usage = response.response_metadata.get("token_usage", {})
-        input_tokens = int(token_usage.get("prompt_tokens", 0) or 0)
-        output_tokens = int(token_usage.get("completion_tokens", 0) or 0)
-        logger.warning(
-            "[USAGE_DEBUG] returning input=%d output=%d", input_tokens, output_tokens
+        return (
+            int(token_usage.get("prompt_tokens", 0) or 0),
+            int(token_usage.get("completion_tokens", 0) or 0),
         )
-        return (input_tokens, output_tokens)
     logger.warning(
-        "[USAGE_DEBUG] unknown shape — type=%s returning (0, 0)",
+        "Could not extract usage_metadata from response of type %s",
         type(response).__name__,
     )
     return (0, 0)
