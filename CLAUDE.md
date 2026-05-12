@@ -84,7 +84,12 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    │                         planner/synthesizer/judge_prompt_version)
         │    ├── planner.py            LLM → ToolSelection; consults AutonomyPolicy per tool;
         │    │                         reads planner prompt from registry (fallback to inline)
-        │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback()
+        │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback() + _extract_usage()
+        │    │                         _extract_usage() handles 3 patterns: (1) direct AIMessage.usage_metadata
+        │    │                         (synthesizer/revision), (2) dict["raw"] from with_structured_output(include_raw=True)
+        │    │                         (planner/judge), (3) response_metadata.token_usage fallback.
+        │    │                         IMPORTANT: all with_structured_output() chains MUST use include_raw=True
+        │    │                         so the raw AIMessage (with token counts) is preserved alongside the parsed model.
         │    ├── i18n.py              LANGUAGE_NAMES, get_synth/revise/directive helpers (skills-ready)
         │    ├── tools.py              tool wrappers consuming spec defaults
         │    ├── workflow.py           LangGraph: planner →[auto]→ tool → synthesizer → judge → END

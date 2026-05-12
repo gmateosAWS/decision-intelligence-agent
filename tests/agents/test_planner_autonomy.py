@@ -51,7 +51,10 @@ def test_planner_auto_no_flag() -> None:
     with (
         patch("agents.planner._init_planner_llms"),
         patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
-        patch("agents.planner.invoke_with_fallback", return_value=selection),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": selection, "raw": MagicMock()},
+        ),
         patch("agents.planner.get_spec", return_value=spec_mock),
     ):
         result = planner_node(_make_state())
@@ -72,7 +75,10 @@ def test_planner_human_confirms_flag() -> None:
     with (
         patch("agents.planner._init_planner_llms"),
         patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
-        patch("agents.planner.invoke_with_fallback", return_value=selection),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": selection, "raw": MagicMock()},
+        ),
         patch("agents.planner.get_spec", return_value=spec_mock),
     ):
         result = planner_node(_make_state())
@@ -94,7 +100,10 @@ def test_planner_human_approves_flag() -> None:
     with (
         patch("agents.planner._init_planner_llms"),
         patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
-        patch("agents.planner.invoke_with_fallback", return_value=selection),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": selection, "raw": MagicMock()},
+        ),
         patch("agents.planner.get_spec", return_value=spec_mock),
     ):
         result = planner_node(_make_state())
@@ -116,7 +125,10 @@ def test_planner_unknown_tool_uses_default_policy() -> None:
     with (
         patch("agents.planner._init_planner_llms"),
         patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
-        patch("agents.planner.invoke_with_fallback", return_value=selection),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": selection, "raw": MagicMock()},
+        ),
         patch("agents.planner.get_spec", return_value=spec_mock),
     ):
         result = planner_node(_make_state())

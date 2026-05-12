@@ -183,6 +183,48 @@ def invoke_with_fallback(
     ) from last_exc
 
 
+def _extract_usage(response: Any) -> tuple[int, int]:
+    """Extract (input_tokens, output_tokens) from a LangChain response.
+
+    Three patterns are handled, in priority order:
+
+    1. Direct AIMessage — synthesizer and revision paths (plain `.invoke()`).
+    2. Dict with ``"raw"`` key — planner and judge paths that use
+       ``.with_structured_output(Schema, include_raw=True)``.
+    3. ``response_metadata["token_usage"]`` — older OpenAI response shape.
+
+    Returns (0, 0) and logs a warning for unknown shapes.
+    """
+    # Pattern 1: direct AIMessage / BaseChatModel response
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        um = response.usage_metadata
+        return (
+            int(um.get("input_tokens", 0) or 0),
+            int(um.get("output_tokens", 0) or 0),
+        )
+    # Pattern 2: structured output with include_raw=True → {"raw": AIMessage, ...}
+    if isinstance(response, dict) and "raw" in response:
+        raw = response["raw"]
+        if hasattr(raw, "usage_metadata") and raw.usage_metadata:
+            um = raw.usage_metadata
+            return (
+                int(um.get("input_tokens", 0) or 0),
+                int(um.get("output_tokens", 0) or 0),
+            )
+    # Pattern 3: response_metadata.token_usage (older OpenAI shape)
+    if hasattr(response, "response_metadata"):
+        token_usage = response.response_metadata.get("token_usage", {})
+        return (
+            int(token_usage.get("prompt_tokens", 0) or 0),
+            int(token_usage.get("completion_tokens", 0) or 0),
+        )
+    logger.warning(
+        "Could not extract usage_metadata from response of type %s",
+        type(response).__name__,
+    )
+    return (0, 0)
+
+
 def _record_usage(
     tracker: Optional["BudgetTracker"],
     response: Any,
@@ -194,17 +236,7 @@ def _record_usage(
     try:
         from evaluation.cost import calculate_cost_usd
 
-        usage = getattr(response, "usage_metadata", None) or getattr(
-            response, "response_metadata", {}
-        ).get("usage", {})
-        input_tokens = int(
-            getattr(usage, "input_tokens", None) or usage.get("prompt_tokens", 0) or 0
-        )
-        output_tokens = int(
-            getattr(usage, "output_tokens", None)
-            or usage.get("completion_tokens", 0)
-            or 0
-        )
+        input_tokens, output_tokens = _extract_usage(response)
         cost_usd = calculate_cost_usd(model, input_tokens, output_tokens)
         tracker.record_call(input_tokens, output_tokens, cost_usd)
     except Exception:  # noqa: BLE001

@@ -14,7 +14,12 @@ import pytest
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
-from agents.llm_factory import LLMUnavailableError, get_chat_model, invoke_with_fallback
+from agents.llm_factory import (
+    LLMUnavailableError,
+    _extract_usage,
+    get_chat_model,
+    invoke_with_fallback,
+)
 
 # ---------------------------------------------------------------------------
 # get_chat_model
@@ -103,3 +108,46 @@ def test_rate_limit_exhausted_then_fallback():
 
     assert result == "fallback ok"
     fallback.invoke.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# _extract_usage
+# ---------------------------------------------------------------------------
+
+
+def test_extract_usage_from_aimessage():
+    """Pattern 1: direct AIMessage with usage_metadata (synthesizer path)."""
+    response = MagicMock()
+    response.usage_metadata = {"input_tokens": 120, "output_tokens": 45}
+    inp, out = _extract_usage(response)
+    assert inp == 120
+    assert out == 45
+
+
+def test_extract_usage_from_structured_dict():
+    """Pattern 2: include_raw=True dict with 'raw' AIMessage (planner/judge path)."""
+    raw = MagicMock()
+    raw.usage_metadata = {"input_tokens": 200, "output_tokens": 80}
+    response = {"raw": raw, "parsed": MagicMock(), "parsing_error": None}
+    inp, out = _extract_usage(response)
+    assert inp == 200
+    assert out == 80
+
+
+def test_extract_usage_fallback_to_response_metadata():
+    """Pattern 3: response_metadata.token_usage (older OpenAI shape)."""
+    response = MagicMock(spec=[])  # no usage_metadata attribute
+    response.response_metadata = {
+        "token_usage": {"prompt_tokens": 50, "completion_tokens": 30}
+    }
+    inp, out = _extract_usage(response)
+    assert inp == 50
+    assert out == 30
+
+
+def test_extract_usage_unknown_shape_returns_zeros():
+    """Unknown response shape → (0, 0) with a warning logged."""
+    response = MagicMock(spec=[])  # no relevant attributes
+    inp, out = _extract_usage(response)
+    assert inp == 0
+    assert out == 0

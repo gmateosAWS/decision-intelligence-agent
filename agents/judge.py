@@ -77,9 +77,13 @@ def _init_llms() -> None:
         _fallback_revision_llm = get_chat_model(
             _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0.1
         )
-    _judge_structured = _judge_llm.with_structured_output(JudgeVerdict)
+    # include_raw=True: returns {"raw": AIMessage, "parsed": JudgeVerdict, ...}
+    # so _record_usage() can extract token counts from the raw AIMessage.
+    _judge_structured = _judge_llm.with_structured_output(
+        JudgeVerdict, include_raw=True
+    )
     _fallback_judge_structured = (
-        _fallback_judge_llm.with_structured_output(JudgeVerdict)
+        _fallback_judge_llm.with_structured_output(JudgeVerdict, include_raw=True)
         if _fallback_judge_llm is not None
         else None
     )
@@ -129,13 +133,14 @@ def judge_node(
     ]
     tracker = _get_tracker(config)
     try:
-        verdict = invoke_with_fallback(
+        output = invoke_with_fallback(
             _judge_structured,
             judge_messages,
             fallback=_fallback_judge_structured,
             tracker=tracker,
             model=_JUDGE_MODEL,
         )
+        verdict: JudgeVerdict = output["parsed"]
     except (LLMUnavailableError, Exception) as exc:  # noqa: BLE001
         # Fail open: preserve the original answer, but log that the judge failed.
         elapsed_ms = (time.perf_counter() - t0) * 1000

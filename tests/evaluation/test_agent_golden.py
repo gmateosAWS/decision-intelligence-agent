@@ -182,7 +182,10 @@ def test_golden_routing(case: Dict[str, Any]) -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner.invoke_with_fallback", return_value=selection),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": selection, "raw": MagicMock()},
+        ),
     ):
         result = planner_node(state)
 
@@ -212,7 +215,10 @@ def test_golden_param_propagation(case: Dict[str, Any]) -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner.invoke_with_fallback", return_value=selection),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": selection, "raw": MagicMock()},
+        ),
     ):
         result = planner_node(state)
 

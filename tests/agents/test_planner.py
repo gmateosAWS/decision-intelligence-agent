@@ -43,7 +43,10 @@ def test_planner_returns_language_field():
     sel = _make_selection(language="en")
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner.invoke_with_fallback", return_value=sel),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": sel, "raw": MagicMock()},
+        ),
     ):
         result = planner_node(_state())
     assert "language" in result
@@ -55,7 +58,10 @@ def test_planner_detects_spanish():
     sel = _make_selection(tool="optimization", language="es")
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner.invoke_with_fallback", return_value=sel),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": sel, "raw": MagicMock()},
+        ),
     ):
         result = planner_node(_state("¿Cuál es el precio óptimo?"))
     assert result["language"] == "es"
@@ -66,7 +72,10 @@ def test_planner_detects_french():
     sel = _make_selection(tool="knowledge", language="fr")
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner.invoke_with_fallback", return_value=sel),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": sel, "raw": MagicMock()},
+        ),
     ):
         result = planner_node(_state("Comment fonctionne le modèle ?"))
     assert result["language"] == "fr"
@@ -94,7 +103,10 @@ def test_planner_returns_action_reasoning_params_and_language():
     )
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner.invoke_with_fallback", return_value=sel),
+        patch(
+            "agents.planner.invoke_with_fallback",
+            return_value={"parsed": sel, "raw": MagicMock()},
+        ),
     ):
         result = planner_node(_state("Was wäre wenn der Preis 50 wäre?"))
     assert result["action"] == "simulation"

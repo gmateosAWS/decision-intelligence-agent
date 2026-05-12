@@ -87,12 +87,16 @@ def _init_planner_llms() -> None:
     if _llm is not None:
         return
     _llm = get_chat_model(_PLANNER_PROVIDER, _PLANNER_MODEL, temperature=0)
-    _llm_structured = _llm.with_structured_output(ToolSelection)
+    # include_raw=True: returns {"raw": AIMessage, "parsed": ToolSelection, ...}
+    # so _record_usage() can extract token counts from the raw AIMessage.
+    _llm_structured = _llm.with_structured_output(ToolSelection, include_raw=True)
     if _FALLBACK_PROVIDER and _FALLBACK_MODEL:
         _fallback_llm = get_chat_model(
             _FALLBACK_PROVIDER, _FALLBACK_MODEL, temperature=0
         )
-        _fallback_llm_structured = _fallback_llm.with_structured_output(ToolSelection)
+        _fallback_llm_structured = _fallback_llm.with_structured_output(
+            ToolSelection, include_raw=True
+        )
 
 
 def _build_few_shot_examples(spec) -> str:
@@ -186,13 +190,14 @@ def planner_node(
     messages.append({"role": "user", "content": query})
 
     try:
-        selection: ToolSelection = invoke_with_fallback(
+        output = invoke_with_fallback(
             _llm_structured,
             messages,
             fallback=_fallback_llm_structured,
             tracker=tracker,
             model=_PLANNER_MODEL,
         )
+        selection: ToolSelection = output["parsed"]
         params_dict = {p.variable: p.value for p in selection.params}
 
         # Consult autonomy policy for the selected tool
