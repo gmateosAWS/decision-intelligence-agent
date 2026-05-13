@@ -101,6 +101,22 @@ def planner_node(
             model=_PLANNER_MODEL,
             prompt_version=result.get("planner_prompt_version"),
         )
+    # Record intent in analytical state (item 5.10) — after planner logic, fail-open
+    coordinator = _get_coordinator(config)
+    if coordinator is not None:
+        try:
+            from memory.coordinator.intent_mapping import map_tool_to_intent
+
+            intent = map_tool_to_intent(result.get("action", "knowledge"))
+            next_turn = coordinator.get_state().last_turn_id + 1
+            coordinator.set_intent(
+                intent=intent,
+                turn_id=next_turn,
+                cause="planner:tool_selection",
+                evidence=result.get("reasoning", "")[:200],
+            )
+        except Exception:  # noqa: BLE001
+            pass
     return result  # type: ignore[no-any-return]  # _sanitize_for_state returns Any; dict at runtime
 
 
@@ -132,6 +148,26 @@ def tool_node(
             latency_ms=elapsed_ms,
             error=error,
         )
+    # Record active run in analytical state (item 5.10) — after tool, fail-open
+    coordinator = _get_coordinator(config)
+    if coordinator is not None and not error:
+        try:
+            run_id = state.get("run_id") or ""
+            turn_id = coordinator.get_state().last_turn_id
+            if action == "simulation":
+                coordinator.set_active_simulation_run(
+                    run_id=run_id,
+                    turn_id=turn_id,
+                    cause="tool:simulation",
+                )
+            elif action == "optimization":
+                coordinator.set_active_optimization_run(
+                    run_id=run_id,
+                    turn_id=turn_id,
+                    cause="tool:optimization",
+                )
+        except Exception:  # noqa: BLE001
+            pass
     return {"raw_result": raw_result}
 
 
@@ -311,3 +347,10 @@ def _get_tracker(config: Optional[RunnableConfig]):
     if config is None:
         return None
     return config.get("configurable", {}).get("budget_tracker")
+
+
+def _get_coordinator(config: Optional[RunnableConfig]):
+    """Extract the MemoryCoordinator from the configurable dict."""
+    if config is None:
+        return None
+    return config.get("configurable", {}).get("memory_coordinator")

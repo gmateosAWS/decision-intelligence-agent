@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from api.schemas.sessions import SessionListResponse, SessionResponse
+from api.schemas.sessions import (
+    AnalyticalStateResponse,
+    SessionListResponse,
+    SessionResponse,
+    StateAuditResponse,
+    StateTransitionResponse,
+)
 
 router = APIRouter(tags=["sessions"])
 
@@ -59,3 +65,88 @@ def delete_session(session_id: str) -> None:
     ok = SessionManager.delete_session(session_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Session not found")
+
+
+@router.get(
+    "/sessions/{session_id}/state",
+    response_model=AnalyticalStateResponse,
+    summary="Get analytical state snapshot for a session",
+)
+def get_session_state(session_id: str) -> AnalyticalStateResponse:
+    """Return the current ActiveAnalyticalState for the given session.
+
+    The state is loaded from DB (Postgres) or returns an empty state when
+    DATABASE_URL is not set. Read-only in v1 — mutations happen implicitly
+    via the agent graph (item 5.11 will add user corrections).
+    """
+    import uuid
+
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid session_id UUID")
+
+    from memory.coordinator.coordinator import MemoryCoordinator
+
+    coordinator = MemoryCoordinator.load_from_db(session_id=sid)
+    state = coordinator.get_state()
+
+    return AnalyticalStateResponse(
+        session_id=session_id,
+        version=state.version,
+        last_turn_id=state.last_turn_id,
+        intent=state.intent.value if state.intent is not None else None,
+        metrics=[m.model_dump() for m in state.metrics],
+        active_simulation_run=state.active_simulation_run,
+        active_optimization_run=state.active_optimization_run,
+        active_scenarios=list(state.active_scenarios),
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/state/audit",
+    response_model=StateAuditResponse,
+    summary="Get analytical state audit log for a session",
+)
+def get_session_state_audit(
+    session_id: str,
+    since_turn: int = Query(
+        0, ge=0, description="Return only transitions at or after this turn"
+    ),
+) -> StateAuditResponse:
+    """Return the ordered list of state mutations for a session.
+
+    Each entry corresponds to one mutation applied to ActiveAnalyticalState.
+    Use ``since_turn`` to paginate or watch for new mutations.
+    """
+    import uuid
+
+    try:
+        sid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid session_id UUID")
+
+    from memory.coordinator.coordinator import MemoryCoordinator
+
+    coordinator = MemoryCoordinator.load_from_db(session_id=sid)
+    transitions = coordinator.get_audit_log(since_turn=since_turn)
+
+    return StateAuditResponse(
+        session_id=session_id,
+        transitions=[
+            StateTransitionResponse(
+                turn_id=t.turn_id,
+                version_before=t.version_before,
+                version_after=t.version_after,
+                slot=t.slot,
+                op=t.op.value,
+                before=t.before,
+                after=t.after,
+                cause=t.cause,
+                evidence=t.evidence,
+                timestamp=t.timestamp.isoformat(),
+            )
+            for t in transitions
+        ],
+        total=len(transitions),
+    )

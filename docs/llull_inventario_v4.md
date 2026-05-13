@@ -411,7 +411,7 @@ _Resuelve:_ defense-in-depth contra alucinación de entidades, una clase de fall
 
 **Dependencia:** 1.5 (spec as data) para que los vocabularios vivan en el spec. **Relación:** complemento perfecto de 10.7 (guardrails de output del LLM).
 
-### 5.10 Memoria analítica activa tipada `[feature] [v4]`
+### ~~5.10 Memoria analítica activa tipada~~ ✅ MVP v1 (2026-05-13) `[feature] [v4]`
 
 Pieza que captura una idea ausente en v3 y central en la Memory Architecture target de Alfred: el **estado analítico activo** entre turnos no es la conversación bruta ni un blob libre, es un objeto tipado con slots semánticos (intent activo, métricas activas, dimensiones activas, periodo activo, geografías activas, comparaciones activas, transformaciones aplicadas, ambigüedades pendientes, confirmaciones pendientes) y con provenance por slot (qué turno lo introdujo, con qué evidencia, con qué confianza).
 

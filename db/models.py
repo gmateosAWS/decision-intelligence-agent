@@ -59,8 +59,18 @@ class AgentSession(Base):
     last_active = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
     turn_count = Column(Integer, nullable=False, default=0)
 
+    # ActiveAnalyticalState persistence (item 5.10)
+    analytical_state = Column(JSONB, nullable=True, default=dict)
+    analytical_state_version = Column(Integer, nullable=False, default=0)
+
     runs = relationship(
         "AgentRun", back_populates="session", cascade="all, delete-orphan"
+    )
+    state_transitions = relationship(
+        "SessionStateTransition",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="SessionStateTransition.version_after",
     )
 
     def __repr__(self) -> str:
@@ -251,3 +261,43 @@ def _build_knowledge_document_class() -> type:
 
 
 KnowledgeDocument = _build_knowledge_document_class()
+
+
+class SessionStateTransition(Base):
+    """Audit log: one row per mutation on ActiveAnalyticalState (item 5.10)."""
+
+    __tablename__ = "session_state_transitions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_id = Column(Integer, nullable=False)
+    version_before = Column(Integer, nullable=False)
+    version_after = Column(Integer, nullable=False)
+    slot = Column(Text, nullable=False)
+    op = Column(Text, nullable=False)
+    before = Column(JSONB, nullable=True)
+    after = Column(JSONB, nullable=True)
+    cause = Column(Text, nullable=False)
+    evidence = Column(Text, nullable=True)
+    timestamp = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+
+    session = relationship("AgentSession", back_populates="state_transitions")
+
+    __table_args__ = (
+        __import__("sqlalchemy").Index(
+            "idx_session_state_transitions_session",
+            "session_id",
+            "turn_id",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SessionStateTransition session={self.session_id}"
+            f" slot={self.slot} op={self.op}>"
+        )

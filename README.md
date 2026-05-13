@@ -1145,6 +1145,53 @@ Ask a business question: And what about price 28?
 
 ---
 
+## Analytical Memory (item 5.10)
+
+### Concept
+
+Beyond LangGraph's conversational checkpointer (which stores raw turn history), llull maintains a **typed analytical state** that represents what the agent currently "understands" about the user's request:
+
+| Slot | Type | Meaning |
+|------|------|---------|
+| `intent` | `Intent` enum | Current analytical goal (optimize / simulate / explain / explore) |
+| `metrics` | `list[ResolvedMetric]` | Named metrics the user has referenced, with provenance |
+| `active_simulation_run` | `str \| None` | Run ID of the last simulation executed this session |
+| `active_optimization_run` | `str \| None` | Run ID of the last optimization executed this session |
+| `active_scenarios` | `list[str]` | Scenario run IDs being tracked |
+
+Each slot has **provenance** (which turn introduced it, by which component, with what evidence) and any slot can be **frozen** to prevent overwrite (foundation for user corrections in 5.11).
+
+### Architecture
+
+```
+memory/
+├── state/
+│   ├── types.py        Intent, ResolvedMetric, SlotProvenance
+│   ├── active.py       ActiveAnalyticalState (mutable) + FrozenActiveAnalyticalState
+│   └── audit.py        StateTransition, TransitionOp (append-only log)
+└── coordinator/
+    ├── coordinator.py  MemoryCoordinator — ONLY writer; fail-open persistence
+    └── intent_mapping.py  map_tool_to_intent(tool) → Intent
+```
+
+**Single-writer pattern**: only `MemoryCoordinator` may mutate `ActiveAnalyticalState`. All other code receives `.frozen()` snapshots (deep-copy, `ConfigDict(frozen=True)`).
+
+Every mutation appends a `StateTransition` to the audit log: `turn_id`, `slot`, `op` (SET / OVERWRITE / APPEND), `before`, `after`, `cause`, `evidence`, `timestamp`.
+
+### REST API
+
+```
+GET /v1/sessions/{id}/state            # current typed state snapshot
+GET /v1/sessions/{id}/state/audit      # full mutation history
+GET /v1/sessions/{id}/state/audit?since_turn=N  # paginated
+```
+
+### Tech debt
+
+`active_simulation_run` and similar fields currently hold `agent_runs.run_id` strings. They will become `ObjectId` references when item 1.6 (ObjectBus) lands. See `docs/tech_debt.md`.
+
+---
+
 ## Dynamic Parameter Extraction
 
 ### Goal

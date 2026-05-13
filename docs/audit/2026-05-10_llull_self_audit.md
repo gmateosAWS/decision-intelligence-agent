@@ -252,7 +252,7 @@ High-impact items only (full list available via inventory grep):
 
 | Layer · Dimension | Capability | Inventory item | Iteration | Status |
 |---|---|---|---|---|
-| Memory · dims 3, 4, 9, 10, 12, 19 (six 0-score) | `ActiveAnalyticalState` typed object | 5.10 | **I2A · highest-leverage** | Pending |
+| ~~Memory · dims 3, 4, 9, 10, 12, 19 (six 0-score)~~ | ~~`ActiveAnalyticalState` typed object~~ | ~~5.10~~ | ~~**I2A · highest-leverage**~~ | ✅ MVP v1 done 2026-05-13: typed state + MemoryCoordinator single-writer + audit log + REST endpoints; v2 slots (dims, period, geo) deferred to 5.11 |
 | Memory · dim 2 | `MemoryService` Protocol + boundary lint | 5.11 | I2A | Pending |
 | ~~AI · #17 LLM cost control~~ | ~~Token tracking, quotas, hard ceilings~~ | ~~8.7.a–f~~ | ~~I2A~~ | ✅ 8.7.a+b done 2026-05-12; 8.7.c/d/e/f pending |
 | AI · #14 Loop control | Recursion guard (wallclock+call caps now in place via 8.7.b) | 5.12 | I3 | Partial ↑ |
@@ -409,12 +409,7 @@ Zero critical findings for the second consecutive sprint.
 
 ### P1 — Highest-leverage next steps (I2A)
 
-1. **⏱ 3–4 days · Item 5.10 (ActiveAnalyticalState typed).** The single highest-ROI item in the
-   remaining backlog. Lifts 6 Memory dimensions from 0 to 2+ simultaneously. Design: a Pydantic model
-   in `memory/active_state.py` with fields for active metric, active dimensions, period, geography,
-   frozen slots, pending confirmations, provenance dict. Wire into `MemoryService` (5.11) and replace
-   the `state["history"]` slice in `agents/planner.py:185-196` with a typed call. The `requires_confirmation`
-   infrastructure from item 3.5 already provides the UI-side hook for presenting pending confirmations.
+1. ~~**⏱ 3–4 days · Item 5.10 (ActiveAnalyticalState typed).**~~ ✅ Done 2026-05-13: MVP v1 — `memory/state/` package (types, active, audit) + `memory/coordinator/` (MemoryCoordinator single-writer + IntentMapping) + migration 007 (analytical_state JSONB + session_state_transitions table) + `GET /v1/sessions/{id}/state` + `/state/audit` REST endpoints. 24 new tests (281 total). v2 slots (dimensions, period, geography) deferred to 5.11. ObjectBus dependency documented in `docs/tech_debt.md`.
 
 2. **⏱ 1 day · Item 5.11 (MemoryService Protocol).** Follow immediately after 5.10. Create
    `memory/memory_service.py` with a `MemoryService` Protocol (mirroring the `RunSink` precedent from
@@ -449,5 +444,9 @@ Zero critical findings for the second consecutive sprint.
 
 Auditor: Claude Sonnet 4.6 (Anthropic) · Methodology: llull self-audit v1.0
 Previous audits: 2026-05-06 (baseline), 2026-05-08 (delta #1)
-Next re-audit recommended: after I2A close-out (items 5.10, 5.11, 8.7.a–b land).
+Next re-audit recommended: after I2A close-out (items 5.11, 8.7.c–d, 5.9 land).
 Expected overall score after I2A: ~2.80 / 5.
+
+---
+
+**Update 2026-05-13**: Item 5.10 (ActiveAnalyticalState MVP v1) landed. Memory Layer dims 3, 4, 5, 6, 21, 22 expected to advance significantly; dim 19 advances from 0 to 1 (read-only state API now available). Full re-scoring deferred to next formal audit after 5.11 lands.
