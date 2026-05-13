@@ -442,13 +442,18 @@ decision-intelligence-agent/
 |   +-- __init__.py
 +-- db/
 |   +-- engine.py                   # SQLAlchemy engine, get_session() context manager
-|   +-- models.py                   # ORM: AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion
+|   +-- models.py                   # ORM: AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion,
+|   |                               #      Prompt, SessionStateTransition
 |   +-- migrations/
 |       +-- env.py                  # Alembic env (psycopg2 URL normalisation)
 |       +-- versions/
-|           +-- 001_initial_schema.py   # agent_sessions, agent_runs, knowledge_documents
-|           +-- 002_spec_tables.py      # specs, spec_versions, spec FK on agent_runs
-|           +-- 003_spec_version_constraint.py  # CHECK constraint on spec_versions.version (semver)
+|           +-- 001_initial_schema.py              # agent_sessions, agent_runs, knowledge_documents
+|           +-- 002_spec_tables.py                 # specs, spec_versions, spec FK on agent_runs
+|           +-- 003_spec_version_constraint.py     # CHECK constraint on spec_versions.version (semver)
+|           +-- 004_prompt_registry.py             # prompts table (item 10.1)
+|           +-- 005_add_prompt_versions_to_runs.py # planner/synthesizer/judge_prompt_version on agent_runs
+|           +-- 006_add_cost_tracking_to_agent_runs.py  # 6 cost cols on agent_runs (items 8.7.a+b)
+|           +-- 007_add_analytical_state_to_sessions.py # analytical_state JSONB + session_state_transitions (item 5.10)
 +-- data/
 |   +-- generate_data.py            # Synthetic dataset -- all params read from spec
 +-- models/
