@@ -1,13 +1,13 @@
 # ADR-004 — Stack de frontend de la plataforma llull
 
-| Campo | Valor |
-|---|---|
-| **Estado** | Propuesta |
-| **Fecha** | 2026-05-12 |
-| **Autor** | Gustavo Mateos (Architect) |
-| **Decisores** | Architect (autor), CEO Inverence (revisión) |
-| **Supersede** | — |
-| **Superseded by** | — |
+| Campo               | Valor                                                               |
+| ------------------- | ------------------------------------------------------------------- |
+| **Estado**          | Propuesta                                                           |
+| **Fecha**           | 2026-05-12                                                          |
+| **Autor**           | Gustavo Mateos (Architect)                                          |
+| **Decisores**       | Architect (autor), CEO (revisión)                                   |
+| **Supersede**       | —                                                                   |
+| **Superseded by**   | —                                                                   |
 | **Relacionada con** | ADR-002 (LangGraph orchestration), ADR-003 (reutilización LlullGen) |
 
 ---
@@ -140,21 +140,21 @@ Monorepo se reconsidera si emergen los disparadores documentados en la sección 
 
 **Adoptamos el siguiente stack de frontend para la plataforma llull:**
 
-| Capa | Tecnología | Notas |
-|---|---|---|
-| Framework de aplicación | **Next.js 14+ con App Router** | TypeScript strict mode |
-| Lenguaje | **TypeScript** | `strict: true` en `tsconfig.json` |
-| Sistema de componentes | **shadcn/ui** | Componentes vendoreados en `components/ui/` |
-| Estilado | **Tailwind CSS** | Configuración estándar de shadcn |
-| Tematización | **tweakcn** como herramienta, **CSS variables** como mecanismo | Output exportado a `app/globals.css` |
-| Editor visual de DAG | **@xyflow/react** | Para el DAG builder del item 3.1 |
-| Gestión de estado servidor | **TanStack Query (React Query)** | Estándar de facto con shadcn |
-| Cliente HTTP | **`fetch` nativo** + cliente TS generado desde OpenAPI | Sin axios |
-| Generación de tipos | **`openapi-typescript`** o **`orval`** sobre el OpenAPI de FastAPI | Cliente regenerable en CI |
-| Streaming del agente | **SSE como primera opción**, WebSocket si hace falta bidireccionalidad real | Item 6.2 del inventario |
-| Testing | **Vitest** (unit) + **Playwright** (e2e) | |
-| Linting / formato | **ESLint** + **Prettier** | |
-| Package manager | **pnpm** | |
+| Capa                       | Tecnología                                                                  | Notas                                       |
+| -------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- |
+| Framework de aplicación    | **Next.js 14+ con App Router**                                              | TypeScript strict mode                      |
+| Lenguaje                   | **TypeScript**                                                              | `strict: true` en `tsconfig.json`           |
+| Sistema de componentes     | **shadcn/ui**                                                               | Componentes vendoreados en `components/ui/` |
+| Estilado                   | **Tailwind CSS**                                                            | Configuración estándar de shadcn            |
+| Tematización               | **tweakcn** como herramienta, **CSS variables** como mecanismo              | Output exportado a `app/globals.css`        |
+| Editor visual de DAG       | **@xyflow/react**                                                           | Para el DAG builder del item 3.1            |
+| Gestión de estado servidor | **TanStack Query (React Query)**                                            | Estándar de facto con shadcn                |
+| Cliente HTTP               | **`fetch` nativo** + cliente TS generado desde OpenAPI                      | Sin axios                                   |
+| Generación de tipos        | **`openapi-typescript`** o **`orval`** sobre el OpenAPI de FastAPI          | Cliente regenerable en CI                   |
+| Streaming del agente       | **SSE como primera opción**, WebSocket si hace falta bidireccionalidad real | Item 6.2 del inventario                     |
+| Testing                    | **Vitest** (unit) + **Playwright** (e2e)                                    |                                             |
+| Linting / formato          | **ESLint** + **Prettier**                                                   |                                             |
+| Package manager            | **pnpm**                                                                    |                                             |
 
 Detalles operativos:
 

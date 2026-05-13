@@ -102,14 +102,28 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │
         ├── db/
         │    ├── engine.py             SQLAlchemy engine, get_session()
-        │    ├── models.py             AgentSession, AgentRun (+3 prompt_version cols),
+        │    ├── models.py             AgentSession (+analytical_state JSONB + version col),
+        │    │                         AgentRun (+3 prompt_version cols + 6 cost cols),
+        │    │                         SessionStateTransition (item 5.10 audit log),
         │    │                         KnowledgeDocument, Spec, SpecVersion, Prompt
-        │    └── migrations/           Alembic (001–003 existing; 004 prompts table;
-        │                              005 prompt_version cols on agent_runs)
+        │    └── migrations/           Alembic 001–007 (007: analytical_state +
+        │                              session_state_transitions table)
         │
         ├── memory/
         │    ├── checkpointer.py       PostgresSaver (SQLite fallback)
-        │    └── session_manager.py    SQLAlchemy queries (SQLite fallback)
+        │    ├── session_manager.py    SQLAlchemy queries (SQLite fallback)
+        │    ├── state/
+        │    │    ├── types.py         Intent (closed enum), ResolvedMetric, SlotProvenance
+        │    │    ├── active.py        ActiveAnalyticalState (mutable) + FrozenActiveAnalyticalState
+        │    │    │                    Single source of typed analytical context between turns.
+        │    │    │                    frozen() returns immutable deep-copy for consumers.
+        │    │    └── audit.py         StateTransition, TransitionOp — append-only mutation log
+        │    └── coordinator/
+        │         ├── coordinator.py   MemoryCoordinator — ONLY writer of ActiveAnalyticalState
+        │         │                    Single-writer pattern: all other code reads frozen() snapshots.
+        │         │                    persist_to_db() / load_from_db() — Postgres + fail-open.
+        │         │                    Injected via config["configurable"]["memory_coordinator"]
+        │         └── intent_mapping.py  map_tool_to_intent(tool) → Intent
         │
         ├── evaluation/
         │    ├── observer.py           thin orchestrator: RunRecord accumulation + sink dispatch;
@@ -170,6 +184,20 @@ docs/                     inventario v4, roadmap v4, ADRs, audit reports
 8. **API-first**: every capability callable via REST and eventually via MCP
 9. **Skills-aware**: every analytical tool is a potential skill for external consumption
 
+## MANDATORY: Consult technical debt register before implementing
+
+**Before starting any implementation, check `docs/tech_debt.md`.**
+
+If the work you are about to do touches a known debt entry (e.g., ObjectBus fields,
+ObjectId types), you MUST:
+1. Note the dependency in the PR description
+2. Implement in the constrained way documented (not the final form)
+3. Add/update the relevant `TODO(X.Y/component)` comment in code
+4. NOT remove the debt entry — it stays until the blocking item ships
+
+If the work you are completing resolves a debt entry, strike it through in
+`docs/tech_debt.md` and add a "Resolved in: [item]" note.
+
 ## MANDATORY: Documentation updates on every PR
 
 **Every PR must update ALL relevant documentation. This is not optional.**
@@ -182,6 +210,8 @@ docs/                     inventario v4, roadmap v4, ADRs, audit reports
 6. **`docs/adr-*.md`** — new ADR if architectural decision was made
 7. **`.env.example`** — new environment variables
 8. **`docs/2026-05-06_llull_self_audit.md`** — mark findings as fixed if applicable
+9. **`docs/tech_debt.md`** — add new entries for knowingly transitional implementations;
+   resolve entries when the blocking dependency ships
 
 ## MANDATORY: Pre-commit discipline
 
@@ -199,7 +229,7 @@ PostgreSQL 16 with pgvector. Docker Compose + Alembic.
 DATABASE_URL=postgresql://llull:llull@localhost:5432/llull
 ```
 
-Six tables: `agent_sessions`, `agent_runs`, `knowledge_documents`, `specs`, `spec_versions`, `prompts`.
+Seven tables: `agent_sessions`, `agent_runs`, `knowledge_documents`, `specs`, `spec_versions`, `prompts`, `session_state_transitions`.
 
 Without `DATABASE_URL`, falls back to SQLite + FAISS automatically.
 
@@ -313,11 +343,15 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 
 - [x] `requirements.lock` and `requirements-dev.lock` generated with `pip-compile --generate-hashes --allow-unsafe`. Dockerfile uses `pip install --no-cache-dir --no-deps -r requirements.lock`. CI uses `pip install --no-deps -r requirements-dev.lock` (superset). `requirements.txt` preserved for Streamlit Community Cloud.
 
-## Current work: Item 3.3 + lockfile — Next: Item 1.6 ObjectBus
+### Item 5.10 ✅
 
-**Branch**: `feature/11.1-ci-pipeline` (cherry-picked) / `fix/audit-dag-assertion-and-lockfile`
+- [x] 5.10 ActiveAnalyticalState MVP v1: `memory/state/types.py` (Intent enum, ResolvedMetric, SlotProvenance); `memory/state/active.py` (ActiveAnalyticalState mutable Pydantic model + FrozenActiveAnalyticalState immutable subclass with deep-copy via `.frozen()`); `memory/state/audit.py` (StateTransition, TransitionOp — append-only log); `memory/coordinator/coordinator.py` (MemoryCoordinator — single writer, persist_to_db/load_from_db fail-open); `memory/coordinator/intent_mapping.py` (map_tool_to_intent); migration 007 (analytical_state JSONB + session_state_transitions table); wired into `agents/runner.py` + `agents/workflow.py` (planner records intent, tool_node records active run); `GET /v1/sessions/{id}/state` + `/state/audit` read-only endpoints; `docs/tech_debt.md` (ObjectBus migration path); 24 new tests (281 total). v2 slots (dimensions, period, geography) deferred to 5.11.
 
-Completed 2026-05-11.
+## Current work: Item 5.10 ✅ — Next: Item 1.6 ObjectBus (or 5.11 state mutations)
+
+**Branch**: `feature/11.1-ci-pipeline`
+
+Completed 2026-05-13.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 
@@ -342,7 +376,7 @@ INSIDE `with tab_chat:`. `handle_query()` updates `session_state` only (no rende
 Error types (`LLMUnavailableError`) propagated via `RunResult.error_type` for 503 vs 500
 HTTP status distinction.
 
-**Next: Item 1.6 ObjectBus** — deferred until we have access to LlullGen codebase for reference (per ADR-003 Principle 1: read the code as reference). After that, continue I2A with remaining LLMOps items (10.2 A/B testing, 10.3 shadow evaluation). Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of schedule.
+Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of schedule. Item 5.10 (ActiveAnalyticalState MVP) completed 2026-05-13. Next: Item 1.6 ObjectBus deferred until LlullGen codebase is accessible (per ADR-003); 5.11 (user-correction mutations + boundary lint) is the natural continuation.
 
 ### Item 8.7.a + 8.7.b ✅
 

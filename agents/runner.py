@@ -79,6 +79,19 @@ def run_query(
     # Bind the real session UUID so RunRecord.session_id matches agent_sessions.id
     observer.set_session_id(thread_id)
 
+    # Load or create the MemoryCoordinator for this session (item 5.10).
+    # Fail-open: if coordinator creation fails, the run proceeds normally.
+    coordinator = None
+    try:
+        import uuid as _uuid
+
+        from memory.coordinator.coordinator import MemoryCoordinator
+
+        _sid = _uuid.UUID(thread_id)
+        coordinator = MemoryCoordinator.load_from_db(session_id=_sid)
+    except Exception:  # noqa: BLE001
+        pass
+
     run_id = observer.start_run(query)
     t0 = time.perf_counter()
 
@@ -110,8 +123,17 @@ def run_query(
         cfg["configurable"]["observer"] = observer
         cfg["configurable"]["thread_id"] = thread_id
         cfg["configurable"]["budget_tracker"] = tracker
+        if coordinator is not None:
+            cfg["configurable"]["memory_coordinator"] = coordinator
 
         result = graph.invoke({"query": query, "run_id": run_id}, config=cfg)
+
+        # Persist analytical state after successful graph invocation
+        if coordinator is not None:
+            try:
+                coordinator.persist_to_db()
+            except Exception:  # noqa: BLE001
+                pass
 
         observer.set_raw_result(result.get("raw_result") or {})
         latency_ms = (time.perf_counter() - t0) * 1000

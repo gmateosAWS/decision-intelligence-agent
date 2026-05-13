@@ -14,6 +14,8 @@ that ``Base.metadata.create_all()`` / autogenerate work correctly.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
+from typing import Any, Optional
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -26,7 +28,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 TIMESTAMPTZ = TIMESTAMP(timezone=True)
@@ -59,8 +61,18 @@ class AgentSession(Base):
     last_active = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
     turn_count = Column(Integer, nullable=False, default=0)
 
+    # ActiveAnalyticalState persistence (item 5.10)
+    analytical_state = Column(JSONB, nullable=True, default=dict)
+    analytical_state_version = Column(Integer, nullable=False, default=0)
+
     runs = relationship(
         "AgentRun", back_populates="session", cascade="all, delete-orphan"
+    )
+    state_transitions = relationship(
+        "SessionStateTransition",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="SessionStateTransition.version_after",
     )
 
     def __repr__(self) -> str:
@@ -251,3 +263,49 @@ def _build_knowledge_document_class() -> type:
 
 
 KnowledgeDocument = _build_knowledge_document_class()
+
+
+class SessionStateTransition(Base):
+    """Audit log: one row per mutation on ActiveAnalyticalState (item 5.10)."""
+
+    __tablename__ = "session_state_transitions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    slot: Mapped[str] = mapped_column(Text, nullable=False)
+    op: Mapped[str] = mapped_column(Text, nullable=False)
+    before: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    after: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    cause: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, server_default=func.now()
+    )
+
+    session: Mapped[AgentSession] = relationship(
+        "AgentSession", back_populates="state_transitions"
+    )
+
+    __table_args__ = (
+        __import__("sqlalchemy").Index(
+            "idx_session_state_transitions_session",
+            "session_id",
+            "turn_id",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<SessionStateTransition session={self.session_id}"
+            f" slot={self.slot} op={self.op}>"
+        )
