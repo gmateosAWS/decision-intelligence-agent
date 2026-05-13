@@ -14,6 +14,8 @@ that ``Base.metadata.create_all()`` / autogenerate work correctly.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
+from typing import Any, Optional
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -26,7 +28,7 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 TIMESTAMPTZ = TIMESTAMP(timezone=True)
@@ -268,25 +270,31 @@ class SessionStateTransition(Base):
 
     __tablename__ = "session_state_transitions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    session_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("agent_sessions.session_id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    turn_id = Column(Integer, nullable=False)
-    version_before = Column(Integer, nullable=False)
-    version_after = Column(Integer, nullable=False)
-    slot = Column(Text, nullable=False)
-    op = Column(Text, nullable=False)
-    before = Column(JSONB, nullable=True)
-    after = Column(JSONB, nullable=True)
-    cause = Column(Text, nullable=False)
-    evidence = Column(Text, nullable=True)
-    timestamp = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    turn_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    slot: Mapped[str] = mapped_column(Text, nullable=False)
+    op: Mapped[str] = mapped_column(Text, nullable=False)
+    before: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    after: Mapped[Optional[Any]] = mapped_column(JSONB, nullable=True)
+    cause: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, server_default=func.now()
+    )
 
-    session = relationship("AgentSession", back_populates="state_transitions")
+    session: Mapped[AgentSession] = relationship(
+        "AgentSession", back_populates="state_transitions"
+    )
 
     __table_args__ = (
         __import__("sqlalchemy").Index(
