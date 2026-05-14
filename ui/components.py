@@ -169,6 +169,22 @@ def render_technical_details(metadata: Dict[str, Any]) -> None:
             reason = metadata.get("budget_exceeded_reason", "")
             st.warning(f"⚠️ Budget ceiling reached: {reason}")
 
+        active_state = metadata.get("active_state")
+        if active_state:
+            st.caption("**Estado analítico activo (item 5.11):**")
+            intent_val = active_state.get("intent")
+            sim_run = active_state.get("active_simulation_run")
+            opt_run = active_state.get("active_optimization_run")
+            version = active_state.get("version", 0)
+            parts = [f"v{version}"]
+            if intent_val:
+                parts.append(f"intent: `{intent_val}`")
+            if sim_run:
+                parts.append(f"sim: `{sim_run}`")
+            if opt_run:
+                parts.append(f"opt: `{opt_run}`")
+            st.caption("  ·  ".join(parts))
+
 
 # ---------------------------------------------------------------------------
 # Welcome cards

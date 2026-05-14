@@ -141,7 +141,7 @@ Dimensions improved: 3, 5, 6, 11, 16, 18, 21 (seven of twenty-eight). No dimensi
 | 7 | Model abstraction | 3 | **3** | Unchanged. `llm_factory.py` with fallback chain. No Bedrock/Vertex yet. | `agents/llm_factory.py:50-98` | 🟡 (item 5.6 in I2A) |
 | 8 | Prompt governance | 3 | **4** | **IMPROVED.** Item 10.1 is fully deployed: `prompts/registry.py` with idempotent `seed_prompts_from_code()` at API startup; `get_prompt_template(stage, fallback)` consumed by all three agent nodes; five REST endpoints (`GET/POST /v1/prompts`, `GET /v1/prompts/{id}/{version}`, `PUT .../certify`, `PUT .../deprecate`); `prompt_version` propagated through `AgentState:62-64 → RunRecord → PostgresSink → agent_runs` table via migration 005. Inline fallback ensures no degradation when DB unavailable. A/B testing (10.2) and shadow evaluation (10.3) remain pending. | `prompts/registry.py`; `prompts/models.py`; `agents/state.py:62-64`; `api/routers/prompts.py`; migration 005 | 🟡 (A/B testing 10.2, shadow eval 10.3 in I2A) |
 | 9 | State management | 4 | **4** | Unchanged. `AgentState` TypedDict now has three additional typed fields for autonomy (`requires_confirmation`, `requires_approval`, `confirmation_message`) and three for prompt traceability (`planner/synthesizer/judge_prompt_version`). All new fields typed. | `agents/state.py:58-66` | 🟢 |
-| 10 | Memory abstraction | 1 | **1** | Unchanged. No `MemoryService` Protocol. Planner slices `state["history"]` directly. | `agents/planner.py:185-196` | 🟡 (items 5.10, 5.11 in I2A) |
+| 10 | Memory abstraction | 1 | **3** | **IMPROVED (5.10+5.11).** `MemoryService` Protocol (`core/protocols/memory.py`, `@runtime_checkable`) + `LocalMemoryService` implementation. Planner now receives `active_state: FrozenActiveAnalyticalState` via config and injects typed context (intent, active runs, metrics) as a system message — no raw `state["history"]` slicing. Boundary lint in CI blocks direct memory internals access outside `memory/`. | `core/protocols/memory.py`; `memory/service.py`; `agents/planner.py:186-219`; `scripts/check_memory_boundary.py` | 🟡 (item 5.9 GroundedTokens; multi-agent 5.3.a/b) |
 | 11 | Retrieval / grounding | 2 | **2** | Unchanged. RAG configured; no `GroundedTokens` guardrail. | `knowledge/retriever.py:54-68` | 🟡 (item 5.9 in I2A) |
 | 12 | Output validation | 4 | **4** | Unchanged. Structured outputs at every LLM seam. `RunResult` dataclass is a new typed contract at the graph boundary. | `agents/runner.py:19-42`; `agents/planner.py:60-88` | 🟢 |
 | 13 | Error / retry strategy | 3 | **3** | Unchanged. Exponential backoff, rate-limit detection, judge fails-open. Fail-open sinks in observer strengthen robustness. | `agents/llm_factory.py:101-165`; `evaluation/observer.py` (try/except blocks) | 🟡 (item 8.7.d) |
@@ -149,12 +149,12 @@ Dimensions improved: 3, 5, 6, 11, 16, 18, 21 (seven of twenty-eight). No dimensi
 | 15 | Observability of agent runs | 4 | **4** | Unchanged in score. Now additionally records `prompt_version` per node per run. Full lineage: tool, latency, model, prompt_version, confidence, judge_score all in `agent_runs`. | `evaluation/sinks/postgres_sink.py`; `evaluation/observer.py:92-282` | 🟢 |
 | 16 | Testing and evaluation | 3 | **3** | Unchanged. 15 golden queries in CI. No real-LLM golden eval harness yet. | `tests/evaluation/test_agent_golden.py` | 🟡 (items 10.2, 10.11 in I2A/I3) |
 | 17 | LLM cost control | 0 | **3** | **IMPROVED.** Items 8.7.a + 8.7.b fully implemented: `config/model_pricing.yaml` (pricing table all providers); `evaluation/cost.py` (calculate_cost_usd); `evaluation/currency.py` (USD→EUR via Frankfurter, 1h cache); `evaluation/budget.py` (RunBudget.from_env, BudgetTracker, BudgetExceededError); tracker wired through `invoke_with_fallback` and all nodes; cost fields in RunResult → QueryResponse → RunRecord → `agent_runs` (migration 006); `/v1/budget/current` + `/v1/budget/exchange-rate` endpoints; UI cost KPIs + dashboard row. Per-tenant quotas (multi-tenant) and fallback-chain-by-budget (8.7.c/d) remain pending. | `evaluation/budget.py`; `evaluation/cost.py`; `agents/llm_factory.py:144` (tracker pre-call); `db/migrations/versions/006_*`; `api/routers/budget.py` | 🟡 (8.7.c budget reservation, 8.7.d fallback chain, 8.7.e/f multi-agent in I2A/I3) |
-| 18 | Multi-turn / session continuity | 2 | **2** | Unchanged. Checkpointing via `thread_id`; history window of 3. `requires_confirmation` and `requires_approval` are now typed state but do not add multi-turn context. | `memory/checkpointer.py:63-95`; `agents/planner.py:185-196` | 🟡 (items 5.10, 5.11 in I2A) |
+| 18 | Multi-turn / session continuity | 2 | **3** | **IMPROVED (5.10+5.11).** Typed `ActiveAnalyticalState` persists structured intent and active runs across turns. Planner receives frozen snapshot via `MemoryService`; injects intent, simulation run, optimization run, and active metrics as a typed context system message. `history_window` still raw-transcript-based (no compaction), keeping score at 3 not 4. | `memory/coordinator/coordinator.py`; `agents/planner.py:186-219`; `memory/service.py` | 🟡 (item 5.13 user-correction mutations; 5.9 GroundedTokens) |
 | 19 | Multi-agent coordination | 1 | **1** | Unchanged. No multi-agent, no prerequisites. | Single graph | 🟡 (items 5.3.a/b, 5.12, 8.7.e in I3) |
 | 20 | Agent autonomy policy | 3 | **3** | Unchanged. Item 3.5 complete: `spec/autonomy.py` with AutonomyLevel/ToolAutonomyPolicy/AutonomyPolicy; `_route_after_planner` conditional edge enforces policy at runtime; `GET/PUT /v1/specs/{id}/autonomy` REST endpoints; 26 tests. `JUDGE_THRESHOLD` still hardcoded — items 7.3 and 5.3.b for I3. | `spec/autonomy.py`; `agents/workflow.py` (`_route_after_planner`); `agents/state.py:58-60` | 🟢 (3.5 done; 7.3 + 5.3.b in I3) |
 
-**Layer 2 mean: 2.75 / 5** (55 / 20 dimension points)
-*(Corrected May 8 baseline: 2.50; May 10 baseline: 2.55)*
+**Layer 2 mean: 2.85 / 5** (57 / 20 dimension points — updated 2026-05-14 for 5.10+5.11)
+*(May 10 baseline: 2.55; May 13 after 5.10: ~2.70; May 14 after 5.11: 2.85)*
 
 Dimensions improved: 8, 14, 17 (three of twenty). No dimension regressed.
 
@@ -162,16 +162,16 @@ Dimensions improved: 8, 14, 17 (three of twenty). No dimension regressed.
 
 ## 4. Layer 3 — Conversational & Analytical Memory (22 dimensions)
 
-One dimension improved since May 8 (dim 11). All others unchanged.
+One dimension improved since May 8 (dim 11 at audit time). Dims 1–6 and 19–22 updated 2026-05-14 for items 5.10 + 5.11.
 
 | # | Dimension | Score | Change | Notes |
 |---|---|---|---|---|
-| 1 | Memory system existence | 2 | — | `memory/` package with checkpointer + session_manager. No typed MemoryService. |
-| 2 | System boundary clarity | 1 | — | Planner reads `state["history"]` directly; no single seam. |
-| 3 | Structured active state | 0 | — | No `ActiveAnalyticalState`. All six 0-score dims await item 5.10. |
-| 4 | State centrality as truth | 0 | — | Transcript is the source of truth; no typed slot-based state. |
-| 5 | State traceability | 1 | — | Run-level provenance only via `run_id`; no slot provenance. |
-| 6 | State lifecycle discipline | 1 | — | Append-only transcript; no slot-transition audit log. |
+| 1 | Memory system existence | 2 | **→ 4** | **IMPROVED (5.11).** `MemoryService` Protocol (`@runtime_checkable`) + `LocalMemoryService` concrete implementation + `get_memory_service()` singleton + boundary lint enforced in CI and pre-commit. Full typed memory stack now present. |
+| 2 | System boundary clarity | 1 | **→ 3** | **IMPROVED (5.11).** Single seam: `core/protocols/memory.py::MemoryService`. Boundary lint blocks direct `memory.coordinator.*` / `memory.state.*` access outside `memory/`. Exceptions require `governance/memory_boundary_exceptions.yaml` entry. |
+| 3 | Structured active state | 0 | **→ 3** | **IMPROVED (5.10).** `ActiveAnalyticalState` (mutable) + `FrozenActiveAnalyticalState` (immutable snapshot). Typed slots: `intent`, `active_simulation_run`, `active_optimization_run`, `active_scenarios`, `metrics`. |
+| 4 | State centrality as truth | 0 | **→ 2** | **IMPROVED (5.10).** `MemoryCoordinator` is the single writer; typed slots are authoritative for structured context. Raw transcript still used for long-range context (score cannot reach 3 until 5.13 user-correction lands). |
+| 5 | State traceability | 1 | **→ 3** | **IMPROVED (5.10).** `SlotProvenance` records introduced_at_turn, introduced_by, evidence, confidence per slot. Append-only `StateTransition` audit log with op/before/after. |
+| 6 | State lifecycle discipline | 1 | **→ 3** | **IMPROVED (5.10).** `StateTransition` with `TransitionOp` (set/append/clear); append-only log; `MemoryCoordinator` is the only writer (single-writer pattern enforced by 5.11 boundary lint). |
 | 7 | Short-range memory | 3 | — | 3-turn sliding window, env-configurable; no compaction. |
 | 8 | Explicit rule quality | 1 | — | Multi-turn rules live in system prompt strings. |
 | 9 | Inheritance governance | 0 | — | No slot inheritance logic. |
@@ -184,13 +184,13 @@ One dimension improved since May 8 (dim 11). All others unchanged.
 | 16 | Memory vs prompting balance | 1 | — | All multi-turn logic in prompts, not coded rules. |
 | 17 | Complementary techniques | 2 | — | Sliding window only; no compaction, no summarization. |
 | 18 | Single-turn vs multi-turn | 2 | — | Uniform code path; no explicit first-turn vs. continuation separation. |
-| 19 | User interaction with memory | 0 | — | No slot inspection/mutation APIs. |
-| 20 | Downstream integration | 2 | — | Synthesizer and judge read from state; planner slices history directly. |
-| 21 | Coordination / orchestration | 2 | — | LangGraph orchestrates; no `MemoryCoordinator`. |
-| 22 | Coordination integrity | 1 | — | No single-coordinator gate on memory mutations. |
+| 19 | User interaction with memory | 0 | **→ 1** | **IMPROVED (5.10+5.11).** `GET /v1/sessions/{id}/state` + `/state/audit` read-only endpoints. User-driven mutations deferred to item 5.13 (score cannot reach 3 until then). |
+| 20 | Downstream integration | 2 | **→ 3** | **IMPROVED (5.11).** Planner receives `FrozenActiveAnalyticalState` snapshot via `MemoryService` and injects typed context (intent, active runs, metrics) as a system message. Synthesizer/judge read from `AgentState` result (unchanged). |
+| 21 | Coordination / orchestration | 2 | **→ 3** | **IMPROVED (5.10).** `MemoryCoordinator` single-writer pattern; `persist_to_db()`/`load_from_db()` fail-open. All writes go through the coordinator. |
+| 22 | Coordination integrity | 1 | **→ 3** | **IMPROVED (5.10+5.11).** Single-coordinator gate enforced by `MemoryService` Protocol boundary lint; no external code can mutate `ActiveAnalyticalState` directly. |
 
-**Layer 3 mean: 1.18 / 5** (26 / 22 dimension points)
-*(Corrected May 8 baseline: 1.14; stated May 8: 1.27)*
+**Layer 3 mean: 2.00 / 5** (44 / 22 dimension points — updated 2026-05-14 for 5.10+5.11)
+*(May 10 baseline: 1.18; May 14 after 5.10+5.11: 2.00 — dims 1,2,3,4,5,6,19,20,21,22 advanced)*
 
 All 21 remaining gaps are 🟡 (planned in I2A/I3). No 🔴 in this layer. The six 0-score dimensions
 (3, 4, 9, 10, 12, 19) are jointly gated by item 5.10 `ActiveAnalyticalState` — the single
@@ -253,14 +253,14 @@ High-impact items only (full list available via inventory grep):
 | Layer · Dimension | Capability | Inventory item | Iteration | Status |
 |---|---|---|---|---|
 | ~~Memory · dims 3, 4, 9, 10, 12, 19 (six 0-score)~~ | ~~`ActiveAnalyticalState` typed object~~ | ~~5.10~~ | ~~**I2A · highest-leverage**~~ | ✅ MVP v1 done 2026-05-13: typed state + MemoryCoordinator single-writer + audit log + REST endpoints; v2 slots (dims, period, geo) deferred to 5.11 |
-| Memory · dim 2 | `MemoryService` Protocol + boundary lint | 5.11 | I2A | Pending |
+| ~~Memory · dim 2~~ | ~~`MemoryService` Protocol + boundary lint~~ | ~~5.11~~ | ~~I2A~~ | ✅ done 2026-05-14: `core/protocols/memory.py` Protocol + `memory/service.py` + boundary lint CI + pre-commit |
 | ~~AI · #17 LLM cost control~~ | ~~Token tracking, quotas, hard ceilings~~ | ~~8.7.a–f~~ | ~~I2A~~ | ✅ 8.7.a+b done 2026-05-12; 8.7.c/d/e/f pending |
 | AI · #14 Loop control | Recursion guard (wallclock+call caps now in place via 8.7.b) | 5.12 | I3 | Partial ↑ |
 | AI · #11 Retrieval / grounding | `GroundedTokens` guardrail | 5.9 | I2A | Pending |
-| AI · #10 Memory abstraction | `MemoryService` Protocol | 5.11 | I2A | Pending |
+| ~~AI · #10 Memory abstraction~~ | ~~`MemoryService` Protocol~~ | ~~5.11~~ | ~~I2A~~ | ✅ done 2026-05-14 |
 | AI · #8 Prompt governance (partial) | A/B testing, shadow evaluation | 10.2, 10.3 | I2A | Pending |
 | AI · #16 Testing / eval | Real-LLM golden eval harness | 10.11 | I2A / I3 | Pending |
-| Codebase · #5 Boundary integrity | Layer-deps lint; MemoryService seam | 5.11 + 11.1 | I2A | Pending |
+| ~~Codebase · #5 Boundary integrity~~ | ~~Layer-deps lint; MemoryService seam~~ | ~~5.11 + 11.1~~ | ~~I2A~~ | ✅ done 2026-05-14: boundary lint + pre-commit hook |
 | Codebase · #15 Security posture | Auth, RLS, encryption, audit log | 7.1, 7.5, 7.6–7.9 | I2B | Pending |
 | Codebase · #28 Production-readiness | Composite of 7.x + 8.x | multiple | I2B + I3 | Pending |
 | Ontology · #6, #7 Vocabulary / synonyms | `VocabularyRegistry` + synonym fields | 10.8 (I3), 5.9 (I2A) | I2A / I3 | Pending |
@@ -450,3 +450,5 @@ Expected overall score after I2A: ~2.80 / 5.
 ---
 
 **Update 2026-05-13**: Item 5.10 (ActiveAnalyticalState MVP v1) landed. Memory Layer dims 3, 4, 5, 6, 21, 22 expected to advance significantly; dim 19 advances from 0 to 1 (read-only state API now available). Full re-scoring deferred to next formal audit after 5.11 lands.
+
+**Update 2026-05-14**: Item 5.11 (MemoryService Protocol + boundary lint) landed. `core/protocols/memory.py` (`MemoryService` Protocol, `@runtime_checkable`) + `memory/service.py` (`LocalMemoryService`, process-level singleton via `get_memory_service()`) + boundary lint in CI and pre-commit + planner reads `FrozenActiveAnalyticalState` snapshot and injects typed context system message. Score updates applied to AI Agent dims 10 (1→3) and 18 (2→3); Memory dims 1 (2→4), 2 (1→3), 3 (0→3), 4 (0→2), 5 (1→3), 6 (1→3), 19 (0→1), 20 (2→3), 21 (2→3), 22 (1→3). Layer 2 mean: 2.75 → 2.85. Layer 3 mean: 1.18 → 2.00. 303 unit tests. Next recommended re-audit: after 5.13 (user-correction mutations) or 1.6 ObjectBus lands.

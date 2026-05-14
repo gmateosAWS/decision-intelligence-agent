@@ -1,7 +1,7 @@
 """
 tests/agents/test_workflow_state_integration.py
 -------------------------------------------------
-Verify that the LangGraph workflow correctly wires MemoryCoordinator.
+Verify that the LangGraph workflow correctly wires MemoryService (item 5.11).
 All offline — no real LLM calls, no DB.
 """
 
@@ -10,16 +10,18 @@ from __future__ import annotations
 import uuid
 from unittest.mock import MagicMock, patch
 
+from memory import LocalMemoryService
 from memory.coordinator.coordinator import MemoryCoordinator
 from memory.state.types import Intent
 
 
-def _make_config(coordinator=None):
+def _make_config(memory_service=None):
     return {
         "configurable": {
             "observer": None,
             "budget_tracker": None,
-            "memory_coordinator": coordinator,
+            "memory_service": memory_service,
+            "thread_id": str(uuid.uuid4()),
         }
     }
 
@@ -48,10 +50,18 @@ def _make_planner_selection(tool: str = "optimization") -> MagicMock:
 
 
 def test_workflow_records_intent_after_planner() -> None:
-    """planner_node must call coordinator.set_intent when coordinator present."""
-    coordinator = MemoryCoordinator(session_id=uuid.uuid4())
+    """planner_node must record intent on the MemoryService when service present."""
+    svc = LocalMemoryService()
+    sid = uuid.uuid4()
     sel = _make_planner_selection("simulation")
-    config = _make_config(coordinator)
+    config = {
+        "configurable": {
+            "observer": None,
+            "budget_tracker": None,
+            "memory_service": svc,
+            "thread_id": str(sid),
+        }
+    }
 
     with (
         patch("agents.planner._init_planner_llms"),
@@ -73,18 +83,24 @@ def test_workflow_records_intent_after_planner() -> None:
 
         planner_node(_make_state("simulation"), config=config)
 
-    assert coordinator.get_state().intent == Intent.SIMULATE
-    log = coordinator.get_audit_log()
+    state = svc.get_active_state(sid)
+    assert state.intent == Intent.SIMULATE
+    log = svc.read_audit(sid)
     assert any(t.slot == "intent" for t in log)
 
 
 def test_workflow_records_active_run_after_tool() -> None:
-    """tool_node must call coordinator.set_active_simulation_run on success."""
-    coordinator = MemoryCoordinator(session_id=uuid.uuid4())
-    # Pre-set intent so turn_id is non-zero
-    coordinator.set_intent(Intent.SIMULATE, turn_id=1, cause="planner:tool_selection")
-
-    config = _make_config(coordinator)
+    """tool_node must record the active simulation run on the MemoryService."""
+    svc = LocalMemoryService()
+    sid = uuid.uuid4()
+    config = {
+        "configurable": {
+            "observer": None,
+            "budget_tracker": None,
+            "memory_service": svc,
+            "thread_id": str(sid),
+        }
+    }
     state = _make_state("simulation")
 
     with patch("agents.workflow.simulation_tool", return_value={"scenario": "ok"}):
@@ -92,8 +108,9 @@ def test_workflow_records_active_run_after_tool() -> None:
 
         tool_node(state, config=config)
 
-    assert coordinator.get_state().active_simulation_run == "test_run_001"
-    log = coordinator.get_audit_log()
+    active = svc.get_active_state(sid)
+    assert active.active_simulation_run == "test_run_001"
+    log = svc.read_audit(sid)
     assert any(t.slot == "active_simulation_run" for t in log)
 
 
@@ -112,7 +129,7 @@ def test_workflow_creates_coordinator_per_session() -> None:
 
 
 def test_workflow_works_without_coordinator() -> None:
-    """If no coordinator in config, planner_node must complete without error."""
+    """If no memory_service in config, planner_node must complete without error."""
     config = {"configurable": {"observer": None, "budget_tracker": None}}
     sel = _make_planner_selection("knowledge")
 

@@ -188,6 +188,7 @@ def main() -> None:
                     "llm_calls_count": result.llm_calls_count,
                     "budget_exceeded": result.budget_exceeded,
                     "budget_exceeded_reason": result.budget_exceeded_reason,
+                    "active_state": result.active_state,
                 }
 
                 # Append assistant to session_state

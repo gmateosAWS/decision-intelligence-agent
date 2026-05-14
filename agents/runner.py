@@ -47,6 +47,8 @@ class RunResult:
     llm_calls_count: int = 0
     budget_exceeded: bool = False
     budget_exceeded_reason: Optional[str] = None
+    # Analytical state snapshot after the run (item 5.11)
+    active_state: Optional[Dict[str, Any]] = None
 
 
 def run_query(
@@ -79,18 +81,18 @@ def run_query(
     # Bind the real session UUID so RunRecord.session_id matches agent_sessions.id
     observer.set_session_id(thread_id)
 
-    # Load or create the MemoryCoordinator for this session (item 5.10).
-    # Fail-open: if coordinator creation fails, the run proceeds normally.
-    coordinator = None
+    # Resolve session UUID for MemoryService (item 5.11).
+    import uuid as _uuid
+
+    from memory import get_memory_service
+
+    _sid: Optional[_uuid.UUID] = None
     try:
-        import uuid as _uuid
-
-        from memory.coordinator.coordinator import MemoryCoordinator
-
         _sid = _uuid.UUID(thread_id)
-        coordinator = MemoryCoordinator.load_from_db(session_id=_sid)
-    except Exception:  # noqa: BLE001
+    except (ValueError, AttributeError):
         pass
+
+    memory_svc = get_memory_service()
 
     run_id = observer.start_run(query)
     t0 = time.perf_counter()
@@ -123,15 +125,16 @@ def run_query(
         cfg["configurable"]["observer"] = observer
         cfg["configurable"]["thread_id"] = thread_id
         cfg["configurable"]["budget_tracker"] = tracker
-        if coordinator is not None:
-            cfg["configurable"]["memory_coordinator"] = coordinator
+        cfg["configurable"]["memory_service"] = memory_svc
 
         result = graph.invoke({"query": query, "run_id": run_id}, config=cfg)
 
-        # Persist analytical state after successful graph invocation
-        if coordinator is not None:
+        # Capture typed state snapshot after the run (item 5.11).
+        active_state_dict: Optional[Dict[str, Any]] = None
+        if _sid is not None:
             try:
-                coordinator.persist_to_db()
+                snapshot = memory_svc.get_active_state(_sid)
+                active_state_dict = snapshot.model_dump(mode="json")
             except Exception:  # noqa: BLE001
                 pass
 
@@ -176,6 +179,7 @@ def run_query(
             total_output_tokens=tracker.total_output_tokens,
             total_cost_usd=tracker.total_cost_usd,
             llm_calls_count=tracker.llm_calls,
+            active_state=active_state_dict,
         )
 
     except BudgetExceededError as exc:

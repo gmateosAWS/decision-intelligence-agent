@@ -75,9 +75,10 @@ def delete_session(session_id: str) -> None:
 def get_session_state(session_id: str) -> AnalyticalStateResponse:
     """Return the current ActiveAnalyticalState for the given session.
 
-    The state is loaded from DB (Postgres) or returns an empty state when
-    DATABASE_URL is not set. Read-only in v1 — mutations happen implicitly
-    via the agent graph (item 5.11 will add user corrections).
+    Backed by the MemoryService Protocol (item 5.11). The state is loaded from
+    DB (Postgres) or returns an empty state when DATABASE_URL is not set.
+    Read-only in v1 — mutations happen implicitly via the agent graph.
+    Item 5.13 will add user-driven correction endpoints.
     """
     import uuid
 
@@ -86,10 +87,9 @@ def get_session_state(session_id: str) -> AnalyticalStateResponse:
     except ValueError:
         raise HTTPException(status_code=422, detail="Invalid session_id UUID")
 
-    from memory.coordinator.coordinator import MemoryCoordinator
+    from memory import get_memory_service
 
-    coordinator = MemoryCoordinator.load_from_db(session_id=sid)
-    state = coordinator.get_state()
+    state = get_memory_service().get_active_state(sid)
 
     return AnalyticalStateResponse(
         session_id=session_id,
@@ -126,10 +126,9 @@ def get_session_state_audit(
     except ValueError:
         raise HTTPException(status_code=422, detail="Invalid session_id UUID")
 
-    from memory.coordinator.coordinator import MemoryCoordinator
+    from memory import get_memory_service
 
-    coordinator = MemoryCoordinator.load_from_db(session_id=sid)
-    transitions = coordinator.get_audit_log(since_turn=since_turn)
+    transitions = get_memory_service().read_audit(sid, since_turn=since_turn)
 
     return StateAuditResponse(
         session_id=session_id,

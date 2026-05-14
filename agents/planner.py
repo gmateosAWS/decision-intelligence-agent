@@ -31,7 +31,7 @@ Responsibilities
 from __future__ import annotations
 
 import os
-from typing import TYPE_CHECKING, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -164,10 +164,15 @@ def _get_system_prompt() -> tuple:
 def planner_node(
     state: AgentState,
     tracker: Optional["BudgetTracker"] = None,
+    active_state: Optional[Any] = None,
 ) -> Dict:
     """
     Selects the best tool for the current query and extracts any
     decision-variable values mentioned in the query into `params`.
+
+    active_state: frozen ActiveAnalyticalState snapshot from the MemoryService
+    (typed as Any to avoid importing memory internals here — the boundary lint
+    enforces that planner.py stays on the facade side).
 
     Returns: {action, reasoning, params, planner_prompt_version, ...}
     """
@@ -177,6 +182,39 @@ def planner_node(
 
     system_prompt, prompt_version = _get_system_prompt()
     messages = [{"role": "system", "content": system_prompt}]
+
+    # Inject typed analytical state context when available (item 5.11).
+    # This is complementary to history — the typed state takes priority for
+    # structured facts; the history transcript provides raw conversational context.
+    if active_state is not None:
+        context_lines = []
+        intent = getattr(active_state, "intent", None)
+        if intent is not None:
+            context_lines.append(f"- Previous turn intent: {intent.value}")
+        sim_run = getattr(active_state, "active_simulation_run", None)
+        if sim_run is not None:
+            context_lines.append(
+                f"- Active simulation run from a previous turn (run_id: {sim_run})."
+                " Follow-ups about simulation results reference this run."
+            )
+        opt_run = getattr(active_state, "active_optimization_run", None)
+        if opt_run is not None:
+            context_lines.append(
+                f"- Active optimization run from a previous turn (run_id: {opt_run})."
+                " Follow-ups about optimization results reference this run."
+            )
+        metrics = getattr(active_state, "metrics", [])
+        if metrics:
+            metric_names = ", ".join(getattr(m, "name", str(m)) for m in metrics)
+            context_lines.append(f"- Active metrics in scope: {metric_names}")
+        if context_lines:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": "TYPED ANALYTICAL STATE (from previous turns):\n"
+                    + "\n".join(context_lines),
+                }
+            )
 
     recent = history[-_HISTORY_WINDOW:]
     for turn in recent:

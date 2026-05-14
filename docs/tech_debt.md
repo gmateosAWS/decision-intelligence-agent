@@ -6,6 +6,52 @@ final form should be, and the migration path.
 
 ---
 
+## 5.11 → 5.13: MemoryService `propose_state_update` / `commit_state_update` stubs
+
+**Status:** Open. Created 2026-05-14.
+**Blocker:** Item 5.13 (user-correction mutations — explicit slot override flow).
+**Affected:** `core/protocols/memory.py`, `memory/service.py`
+
+### Current state (v1)
+
+`propose_state_update` and `commit_state_update` are v1 placeholder methods in the
+`MemoryService` Protocol. They return empty `StateProposal` and `StateCommitResult`
+objects without performing any actual state mutation.
+
+```python
+# TODO(5.13/MemoryService): propose/commit are stubs — full flow deferred to item 5.13.
+# When 5.13 lands: propose_state_update reads current frozen state + incoming LLM
+# evidence and returns a StateProposal listing which slots would change.
+# commit_state_update applies approved mutations via MemoryCoordinator and persists.
+```
+
+### Target state (when 5.13 lands)
+
+`propose_state_update` will:
+1. Read the current frozen `ActiveAnalyticalState` snapshot
+2. Apply incoming user-correction evidence from `StateProposal.pending_mutations`
+3. Return a `StateProposal` listing slots-to-change with before/after values
+
+`commit_state_update` will:
+1. Validate `StateCommitDecision.approved_mutations` against the proposal
+2. Apply approved mutations via the single-writer `MemoryCoordinator`
+3. Persist to DB and return a `StateCommitResult` with the new version
+
+### Migration path
+
+1. Item 5.13 lands with the user-correction mutation flow
+2. Implement `propose_state_update` on `LocalMemoryService` with full mutation logic
+3. Implement `commit_state_update` applying approved mutations through `MemoryCoordinator`
+4. Extend `POST /v1/sessions/{id}/state/corrections` endpoint (already planned in 5.13)
+5. Remove the TODO comment from both methods
+
+### Risk if not migrated
+
+- Users cannot explicitly correct misidentified intent or stale slot values
+- State errors propagate silently across turns until the session resets
+
+---
+
 ## 5.10 → 1.6: ObjectId fields in ActiveAnalyticalState
 
 **Status:** Open. Created 2026-05-13.

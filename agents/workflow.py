@@ -90,8 +90,21 @@ def planner_node(
     """Calls the LLM planner and records timing via the observer."""
     obs = _get_observer(config)
     tracker = _get_tracker(config)
+    memory = _get_memory_service(config)
+    session_id = _get_session_id(config)
+
+    # Read typed state before planning so planner can use it as context (item 5.11).
+    active_state = None
+    if memory is not None and session_id is not None:
+        try:
+            active_state = memory.get_active_state(session_id)
+        except Exception:  # noqa: BLE001
+            pass
+
     t0 = time.perf_counter()
-    result = _sanitize_for_state(_planner_node_impl(state, tracker=tracker))
+    result = _sanitize_for_state(
+        _planner_node_impl(state, tracker=tracker, active_state=active_state)
+    )
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
         obs.record_planner(
@@ -101,16 +114,14 @@ def planner_node(
             model=_PLANNER_MODEL,
             prompt_version=result.get("planner_prompt_version"),
         )
-    # Record intent in analytical state (item 5.10) — after planner logic, fail-open
-    coordinator = _get_coordinator(config)
-    if coordinator is not None:
+    # Record tool selection in analytical state — fail-open (item 5.11).
+    if memory is not None and session_id is not None:
         try:
-            from memory.coordinator.intent_mapping import map_tool_to_intent
-
-            intent = map_tool_to_intent(result.get("action", "knowledge"))
-            next_turn = coordinator.get_state().last_turn_id + 1
-            coordinator.set_intent(
-                intent=intent,
+            current = memory.get_active_state(session_id)
+            next_turn = current.last_turn_id + 1
+            memory.record_tool_selection(
+                session_id=session_id,
+                tool=result.get("action", "knowledge"),
                 turn_id=next_turn,
                 cause="planner:tool_selection",
                 evidence=result.get("reasoning", "")[:200],
@@ -148,24 +159,20 @@ def tool_node(
             latency_ms=elapsed_ms,
             error=error,
         )
-    # Record active run in analytical state (item 5.10) — after tool, fail-open
-    coordinator = _get_coordinator(config)
-    if coordinator is not None and not error:
+    # Record active run via MemoryService — fail-open (item 5.11).
+    memory = _get_memory_service(config)
+    session_id = _get_session_id(config)
+    if memory is not None and session_id is not None and not error:
         try:
             run_id = state.get("run_id") or ""
-            turn_id = coordinator.get_state().last_turn_id
-            if action == "simulation":
-                coordinator.set_active_simulation_run(
-                    run_id=run_id,
-                    turn_id=turn_id,
-                    cause="tool:simulation",
-                )
-            elif action == "optimization":
-                coordinator.set_active_optimization_run(
-                    run_id=run_id,
-                    turn_id=turn_id,
-                    cause="tool:optimization",
-                )
+            turn_id = memory.get_active_state(session_id).last_turn_id
+            memory.record_active_run(
+                session_id=session_id,
+                tool=action,
+                run_id=run_id,
+                turn_id=turn_id,
+                cause=f"tool:{action}",
+            )
         except Exception:  # noqa: BLE001
             pass
     return {"raw_result": raw_result}
@@ -349,8 +356,23 @@ def _get_tracker(config: Optional[RunnableConfig]):
     return config.get("configurable", {}).get("budget_tracker")
 
 
-def _get_coordinator(config: Optional[RunnableConfig]):
-    """Extract the MemoryCoordinator from the configurable dict."""
+def _get_memory_service(config: Optional[RunnableConfig]):
+    """Extract the LocalMemoryService from the configurable dict (item 5.11)."""
     if config is None:
         return None
-    return config.get("configurable", {}).get("memory_coordinator")
+    return config.get("configurable", {}).get("memory_service")
+
+
+def _get_session_id(config: Optional[RunnableConfig]):
+    """Extract and parse the session UUID from the configurable thread_id."""
+    if config is None:
+        return None
+    raw = config.get("configurable", {}).get("thread_id")
+    if not raw:
+        return None
+    try:
+        import uuid as _uuid
+
+        return _uuid.UUID(raw)
+    except (ValueError, AttributeError):
+        return None

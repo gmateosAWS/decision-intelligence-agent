@@ -446,7 +446,9 @@ _Resuelve:_ continuidad real entre turnos sin depender de que el LLM "se acuerde
 
 **Dependencia:** 1.5, 1.6. **Habilita:** 5.3 (multi-agente coherente), 5.11, 10.5.
 
-### 5.11 MemoryService — interfaz única de acceso a memoria `[feature] [v4]`
+### ~~5.11 MemoryService — interfaz única de acceso a memoria~~ ✅ `[feature] [v4]`
+
+**Completado 2026-05-14.**
 
 Protocolo Python tipado (en `core/protocols/memory.py`) que es la **única seam de acceso a memoria fuera del paquete `memory/`**. Orchestrator, agentes, rutas API consumen exclusivamente este protocolo — nunca leen `conversation_history` raw, nunca lanzan SQL contra `memory_store` directamente, nunca asignan atributos a `ActiveAnalyticalState`.
 
