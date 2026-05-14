@@ -1,0 +1,17 @@
+# governance/memory_boundary_exceptions.yaml
+# ──────────────────────────────────────────
+# Files allowed to bypass the memory boundary lint (item 5.11).
+#
+# Each entry MUST have a reason and a sunset date.
+# The lint ratchets — entries are removed as code is cleaned up, never added
+# without justification.
+#
+# See scripts/check_memory_boundary.py and docs/audit/ for the rationale.
+#
+# Format:
+#   exceptions:
+#     - file: relative/path/to/file.py
+#       reason: "Why this exception is needed"
+#       sunset: "YYYY-MM-DD or item that removes the need"
+#
+exceptions: []

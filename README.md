@@ -476,8 +476,16 @@ decision-intelligence-agent/
 |   +-- planner.py                  # LLM planner: dynamic prompt + structured output + fallback policy
 |   +-- judge.py                    # Online answer-quality judge and single-pass reviser
 |   +-- workflow.py                 # LangGraph: planner -> tool -> synthesizer -> judge
++-- core/                           # Shared contracts and protocols (item 5.11)
+|   +-- protocols/
+|   |   +-- memory.py               # MemoryService Protocol (@runtime_checkable) — 7 methods
++-- governance/
+|   +-- memory_boundary_exceptions.yaml  # Allowlist for justified boundary-lint exceptions
++-- scripts/
+|   +-- check_memory_boundary.py    # Boundary lint: blocks direct memory internals access (item 5.11)
 +-- memory/
-|   +-- __init__.py                 # Public exports
+|   +-- __init__.py                 # Public exports + get_memory_service() singleton
+|   +-- service.py                  # LocalMemoryService — concrete MemoryService impl (item 5.11)
 |   +-- checkpointer.py             # PostgresSaver (SqliteSaver fallback) + session helpers
 |   +-- session_manager.py          # CRUD: Postgres primary, SQLite fallback
 +-- evaluation/
@@ -991,8 +999,11 @@ Give the agent **persistent multi-turn memory** and a **session management** sys
 ```
 app.py (REPL)
 |
++-- core/
+|   +-- protocols/memory.py  MemoryService Protocol (@runtime_checkable)
 +-- memory/
-|   +-- __init__.py          Public exports
+|   +-- __init__.py          Public exports + get_memory_service() singleton
+|   +-- service.py           LocalMemoryService — concrete MemoryService impl (item 5.11)
 |   +-- checkpointer.py      PostgresSaver (SqliteSaver fallback) + session helpers
 |   +-- session_manager.py   CRUD: Postgres primary, SQLite fallback
 |

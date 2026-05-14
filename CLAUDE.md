@@ -118,11 +118,15 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    │    │                    Single source of typed analytical context between turns.
         │    │    │                    frozen() returns immutable deep-copy for consumers.
         │    │    └── audit.py         StateTransition, TransitionOp — append-only mutation log
+        │    ├── service.py             LocalMemoryService — concrete MemoryService implementation.
+        │    │                          Coordinator cache (session_id → MemoryCoordinator).
+        │    │                          _get_or_load() lazy DB load, fail-open on error.
+        │    │                          get_memory_service() singleton (process-level).
         │    └── coordinator/
         │         ├── coordinator.py   MemoryCoordinator — ONLY writer of ActiveAnalyticalState
         │         │                    Single-writer pattern: all other code reads frozen() snapshots.
         │         │                    persist_to_db() / load_from_db() — Postgres + fail-open.
-        │         │                    Injected via config["configurable"]["memory_coordinator"]
+        │         │                    Used only by LocalMemoryService (item 5.11 boundary).
         │         └── intent_mapping.py  map_tool_to_intent(tool) → Intent
         │
         ├── evaluation/
@@ -138,6 +142,23 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    └── dashboard.py          HTML dashboard
         │
         └── config/settings.py        lazy accessor functions over spec (no import-time IO)
+
+core/                                 Shared contracts and protocols (PEP 544) — item 5.11
+├── __init__.py
+└── protocols/
+     ├── __init__.py
+     └── memory.py                   MemoryService Protocol (@runtime_checkable) — 7 methods.
+                                     StateProposal, StateCommitDecision, StateCommitResult (v1 stubs).
+                                     Only seam through which agents/API/UI interact with memory.
+
+governance/
+└── memory_boundary_exceptions.yaml  Allowlist for justified exceptions to memory boundary lint.
+                                     Empty in v1 — entries added with sunset dates as tech debt resolves.
+
+scripts/
+└── check_memory_boundary.py         Boundary lint (item 5.11) — blocks direct imports of
+                                     memory.coordinator.* / memory.state.* outside memory/.
+                                     Run in CI + pre-commit; excluded from its own scan.
 
 api/
 ├── main.py              FastAPI app, lifespan, CORS; seeds spec + prompt registry at startup
@@ -347,11 +368,15 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 
 - [x] 5.10 ActiveAnalyticalState MVP v1: `memory/state/types.py` (Intent enum, ResolvedMetric, SlotProvenance); `memory/state/active.py` (ActiveAnalyticalState mutable Pydantic model + FrozenActiveAnalyticalState immutable subclass with deep-copy via `.frozen()`); `memory/state/audit.py` (StateTransition, TransitionOp — append-only log); `memory/coordinator/coordinator.py` (MemoryCoordinator — single writer, persist_to_db/load_from_db fail-open); `memory/coordinator/intent_mapping.py` (map_tool_to_intent); migration 007 (analytical_state JSONB + session_state_transitions table); wired into `agents/runner.py` + `agents/workflow.py` (planner records intent, tool_node records active run); `GET /v1/sessions/{id}/state` + `/state/audit` read-only endpoints; `docs/tech_debt.md` (ObjectBus migration path); 24 new tests (281 total). v2 slots (dimensions, period, geography) deferred to 5.11.
 
-## Current work: Item 5.10 ✅ — Next: Item 1.6 ObjectBus (or 5.11 state mutations)
+### Item 5.11 ✅
+
+- [x] 5.11 MemoryService Protocol: `core/protocols/memory.py` (`MemoryService` Protocol with `@runtime_checkable`, 7 methods); `memory/service.py` (`LocalMemoryService` — concrete implementation with coordinator cache, lazy DB load, fail-open); `memory/__init__.py` updated with `LocalMemoryService` + `get_memory_service()` process-level singleton; `agents/runner.py` + `agents/workflow.py` + `api/routers/sessions.py` refactored to use service (not coordinator directly); `agents/planner.py` reads frozen `active_state` snapshot and injects typed context into prompt; `scripts/check_memory_boundary.py` (boundary lint — blocks direct imports of `memory.coordinator.*` / `memory.state.*` outside `memory/`); `governance/memory_boundary_exceptions.yaml` (allowlist for justified exceptions); boundary lint in CI + pre-commit hook; `propose_state_update` / `commit_state_update` as v1 stubs (see `docs/tech_debt.md`, unblocked by 5.13); 22 new tests (303 total, includes 11 protocol, 4 planner, 5 lint, 2 API v2).
+
+## Current work: Item 5.11 ✅ — Next: Item 1.6 ObjectBus (or 5.13 state mutations)
 
 **Branch**: `feature/11.1-ci-pipeline`
 
-Completed 2026-05-13.
+5.11 Completed 2026-05-14.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 
@@ -376,7 +401,7 @@ INSIDE `with tab_chat:`. `handle_query()` updates `session_state` only (no rende
 Error types (`LLMUnavailableError`) propagated via `RunResult.error_type` for 503 vs 500
 HTTP status distinction.
 
-Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of schedule. Item 5.10 (ActiveAnalyticalState MVP) completed 2026-05-13. Next: Item 1.6 ObjectBus deferred until LlullGen codebase is accessible (per ADR-003); 5.11 (user-correction mutations + boundary lint) is the natural continuation.
+Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of schedule. Item 5.10 (ActiveAnalyticalState MVP) completed 2026-05-13. Item 5.11 (MemoryService Protocol + boundary lint) completed 2026-05-14. Next: Item 1.6 ObjectBus deferred until LlullGen codebase is accessible (per ADR-003); 5.13 (user-correction mutations) is the natural continuation of 5.11.
 
 ### Item 8.7.a + 8.7.b ✅
 

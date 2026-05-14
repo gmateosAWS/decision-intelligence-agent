@@ -266,7 +266,7 @@ KnowledgeDocument = _build_knowledge_document_class()
 
 
 class SessionStateTransition(Base):
-    """Audit log: one row per mutation on ActiveAnalyticalState (item 5.10)."""
+    """Audit log: one row per mutation on ActiveAnalyticalState — item 5.10."""
 
     __tablename__ = "session_state_transitions"
 

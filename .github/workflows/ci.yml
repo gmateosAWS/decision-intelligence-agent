@@ -35,7 +35,10 @@ jobs:
                --warn-return-any --warn-unused-configs \
                --explicit-package-bases \
                agents/ api/ spec/ system/ simulation/ optimization/ \
-               config/ db/ memory/ evaluation/ prompts/
+               config/ db/ memory/ evaluation/ prompts/ core/
+
+      - name: Memory boundary lint (item 5.11)
+        run: python scripts/check_memory_boundary.py
 
       - name: Unit tests with coverage
         run: pytest -m "not integration" --tb=short -q --cov=. --cov-report=term-missing

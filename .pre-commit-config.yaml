@@ -9,3 +9,12 @@ repos:
     hooks:
       - id: ruff
       - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: memory-boundary
+        name: Memory boundary lint (item 5.11)
+        entry: python scripts/check_memory_boundary.py
+        language: system
+        pass_filenames: false
+        always_run: true
