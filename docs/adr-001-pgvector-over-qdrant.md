@@ -1,7 +1,17 @@
 # ADR-001 — pgvector over Qdrant for vector search
 
-**Status**: Accepted  
-**Date**: 2026-04-23  
+> **⚠️ STATUS: SUPERSEDED** by [ADR-005 — Vector store strategy for the enterprise multi-agent platform](./ADR-005-vector-store-strategy.md) on 2026-05-06.
+>
+> ADR-001 documented the original prototype-phase decision (April 2026) when the project scope was "few hundred to few thousand documents, single agent, batch-built index, moderate accuracy requirements". The premises declared in this ADR no longer describe the system being built: llull is now an enterprise multi-agent decision intelligence platform targeting regulated sectors with millions of vectors per tenant and strict multi-tenancy isolation. ADR-005 supersedes this document with a re-evaluation under the new premises and a new technical landscape (pgvectorscale, Qdrant 1.16 Tiered Multitenancy, pgvector 0.7+).
+>
+> The decision in ADR-005 is **not** "switch to Qdrant" — it is "evolve from `pgvector + ivfflat` to `pgvector + pgvectorscale (StreamingDiskANN)` within the same Postgres instance, with documented migration triggers for partial-to-Qdrant evolution when objective conditions are met". The conclusion shares vendor with ADR-001 but for different reasons and under different premises.
+>
+> The body of ADR-001 below is preserved unchanged for historical traceability of the reasoning at the time of its writing.
+
+---
+
+**Status (original)**: Accepted (2026-04-23) · Superseded (2026-05-06)
+**Date**: 2026-04-23
 **Decider**: Gustavo Mateos
 
 ## Context

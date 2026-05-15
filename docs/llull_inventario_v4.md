@@ -24,17 +24,29 @@ Reemplazar `SqliteSaver` por `AsyncPostgresSaver` para el checkpointing del graf
 
 _Resuelve:_ el prototipo no aguanta concurrencia real, no permite queries analíticas sobre runs históricos, y no sirve como base para multi-tenancy. Postgres es el punto de partida para todo lo demás en esta sección.
 
-### 1.2 Capa vectorial sobre pgvector `[feature]` ✅ COMPLETADO
+### 1.2 Capa vectorial sobre pgvector + pgvectorscale `[feature]` ✅ COMPLETADO
 
-Reemplazar el índice FAISS local por la extensión `pgvector` de PostgreSQL. El knowledge layer pasa a ser una tabla más de Postgres, con filtros por metadata (tenant, dominio, categoría) como cláusulas WHERE. Elimina la necesidad de mantener un store separado y sincronizarlo con el resto del estado.
+Reemplazar el índice FAISS local por la extensión `pgvector` de PostgreSQL como primera fase, y evolucionar el índice de `ivfflat` a `StreamingDiskANN` (pgvectorscale, Timescale, OSS PostgreSQL License) cuando el volumen y la latencia lo justifiquen. El knowledge layer pasa a ser una tabla más de Postgres, con filtros por metadata (tenant, dominio, categoría) como cláusulas WHERE nativas. Elimina la necesidad de mantener un store separado y sincronizarlo con el resto del estado.
 
-_Resuelve:_ FAISS local no soporta multi-tenancy, no tiene filtros nativos, no tiene replicación y no escala a miles de documentos por cliente. Para el volumen previsible del primer año de llull (decenas de miles de docs por cliente), pgvector es suficiente.
+_Resuelve:_ FAISS local no soporta multi-tenancy, no tiene filtros nativos, no tiene replicación y no escala a miles de documentos por cliente. pgvector + pgvectorscale cubre el rango completo de volúmenes esperados (decenas de miles a decenas de millones de vectores por tenant) dentro del mismo Postgres instance, postergando la complejidad operacional de un vector store dedicado hasta que los triggers objetivos (ver 1.3) se activen.
 
-### 1.3 Ruta de migración a Qdrant identificada pero no ejecutada `[parche]` ✅ COMPLETADO
+_Referencia: ADR-005 — Vector store strategy for the enterprise multi-agent platform._
 
-Documentar explícitamente en qué condiciones (volumen, latencia, features avanzadas como hybrid search) migraríamos el vector store a Qdrant. Tener el plan escrito no implica hacerlo — implica que cuando el síntoma aparezca, no hay que rediseñar desde cero.
+### 1.3 Triggers objetivos para evolución a Qdrant identificados `[parche]` ✅ COMPLETADO
 
-_Resuelve:_ evita parálisis por análisis al elegir vector DB, y deja claro que pgvector es un punto de partida consciente, no una decisión permanente.
+Definir formalmente cinco condiciones observables que dispararían la migración parcial del vector store de pgvector + pgvectorscale a Qdrant para uno o más tenants. Los triggers son:
+
+1. **Volumen**: colección supera 50 M vectores por tenant de forma sostenida.
+2. **Latencia p95**: búsqueda semántica supera 50 ms durante 30 días consecutivos bajo carga normal.
+3. **Aislamiento contractual**: un cliente requiere aislamiento de infraestructura que RLS de Postgres no puede satisfacer (instancia física separada exigida por auditor o regulador).
+4. **Multitenancy estratificado**: necesidad de tiered multitenancy con colecciones de distintas densidades en el mismo cluster que Qdrant 1.16 gestiona nativamente.
+5. **Búsqueda híbrida**: necesidad de dense + sparse search (BM25 + embeddings) a escala que supere las capacidades de `pg_bm25` sobre pgvector.
+
+Compromiso operacional: evaluar los cinco triggers cada 6 meses como parte del ciclo de auditoría de plataforma. Ningún trigger activo = sin migración. Trigger activo = PoC de migración parcial, no big-bang.
+
+_Resuelve:_ evita parálisis por análisis y blinda la decisión actual (pgvector + pgvectorscale) contra el ruido del mercado. Cuando el síntoma aparezca, hay criterios objetivos, no debate de opiniones.
+
+_Referencia: ADR-005, sección Migration triggers._
 
 ### 1.4 Redis como capa caliente para memoria de agentes `[feature]`
 
@@ -523,7 +535,7 @@ _Resuelve:_ mismo principio que 6.1.a. Desacopla la optimización y permite sust
 
 RAG y gestión del índice vectorial expuestos como servicio. Endpoints para ingerir documentos, hacer queries semánticas, administrar el índice, gestionar permisos por documento. Encapsula la elección de vector store (pgvector, Qdrant, etc.) detrás de una interfaz estable.
 
-_Resuelve:_ permite cambiar el vector store subyacente (migrar de pgvector a Qdrant, por ejemplo) sin que nada más se entere. Y permite que la ingesta de documentos sea un flujo independiente del flujo conversacional.
+_Resuelve:_ permite cambiar el vector store subyacente (migrar de pgvector + pgvectorscale a Qdrant cuando se activen los triggers de ADR-005, por ejemplo) sin que nada más se entere. Y permite que la ingesta de documentos sea un flujo independiente del flujo conversacional.
 
 #### 6.1.d Spec Service `[feature]`
 
@@ -582,6 +594,8 @@ Sustituir el REPL de terminal (`app.py`) por una aplicación web Streamlit que p
 No reemplaza la API REST (6.1.e) sino que la complementa: Streamlit es la interfaz para demos, consultores y usuarios internos; la API es para integraciones programáticas.
 
 **Implementado:** `streamlit_app.py`. UX polish para demo con dirección: welcome block con 3 cards de ejemplo, mensajes staged durante el procesamiento, badge tool+latencia bajo cada respuesta, gráficos y métricas mostrados directamente (sin expander), detalles técnicos en expander colapsado. Desplegado en Streamlit Community Cloud con Neon (pgvector). Self-bootstrap: genera datos, entrena modelo y construye índice de conocimiento en el primer arranque.
+
+**Mitigación FAISS (ADR-005):** el despliegue en Streamlit Community Cloud usa el path de fallback SQLite + FAISS (sin Docker). Por decisión de ADR-005, FAISS queda confinado exclusivamente a entornos de desarrollo local y demos sin Docker — nunca en staging ni producción. `allow_dangerous_deserialization=True` se activa solo en este path de fallback. Staging y producción usan siempre pgvector + pgvectorscale sobre Postgres.
 
 _Resuelve:_ el REPL es suficiente para desarrollo pero no para mostrar el producto a clientes, consultores o dirección. Una interfaz visual reduce la barrera de entrada y hace tangible lo que el agente puede hacer. Además, es la pieza que permite hacer demos en vivo sin necesidad de explicar la línea de comandos.
 
@@ -984,6 +998,8 @@ Pipeline de entrega del código, tests, build, despliegue por entornos. La base 
 ### 11.1 Pipeline CI con linting, tests y build `[feature]` ✅ COMPLETADO
 
 GitHub Actions o GitLab CI con etapas: linting (ruff, black, mypy), tests unitarios (pytest con cobertura mínima), tests de integración (contenedores efímeros con Postgres, Redis, Kafka), build de imágenes multi-stage firmadas con cosign, generación de SBOM. Bloqueante en cada PR a main.
+
+Sub-requisito pendiente (ADR-005): cuando se active pgvectorscale en staging, el job de integración debe verificar que la imagen de Postgres incluye la extensión `timescaledb/pgvectorscale` y que el índice `StreamingDiskANN` se crea correctamente en el contenedor de test. Este chequeo se añade en el mismo job de integración existente — no requiere una etapa nueva.
 
 _Resuelve:_ el suelo de cualquier proyecto serio. Sin CI no hay calidad consistente del código, y el ritmo de cambio se ralentiza al crecer el equipo.
 

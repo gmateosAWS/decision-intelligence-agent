@@ -379,7 +379,7 @@ The optimum reflects the trade-off between lower volume and higher margin per un
 
 ### Knowledge Layer (`knowledge/`)
 
-A FAISS vector database indexes **20 domain documents** across 6 categories:
+A **pgvector** vector store (Postgres extension) indexes **20 domain documents** across 6 categories. When `DATABASE_URL` is not set (local dev without Docker), the system falls back to a FAISS index automatically — per ADR-005, FAISS is confined to this local-dev fallback path and is never used in staging or production.
 
 | Category         | Content                                                      |
 | ---------------- | ------------------------------------------------------------ |
@@ -532,7 +532,8 @@ decision-intelligence-agent/
 +-- docs/
 |   +-- llull_roadmap_v3.md         # Iteration plan with progress tracking (I1 → I2A → I2B → I3)
 |   +-- llull_inventario_v3.md      # Full backlog (97 items)
-|   +-- adr-001-pgvector-over-qdrant.md  # Architecture decision record: vector store choice
+|   +-- adr-001-pgvector-over-qdrant.md  # ADR-001: original vector store choice (⚠️ SUPERSEDED by ADR-005)
+|   +-- ADR-005-vector-store-strategy.md # ADR-005: pgvector + pgvectorscale strategy, 5 Qdrant triggers
 +-- app.py                          # REPL entry point (legacy, dev use)
 +-- streamlit_app.py                # Thin wrapper: st.set_page_config() + ui.app.main()
 +-- ui/                             # Streamlit presentation layer (split from streamlit_app.py)
@@ -1353,7 +1354,7 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Exponential backoff on rate limits (HTTP 429) | `invoke_with_fallback()` retries up to `LLM_MAX_RETRIES` times with 2^n-second delays before escalating to the fallback provider; prevents cascading failures under API throttling |
 | Streamlit as a pure presentation layer | `streamlit_app.py` wraps the existing graph without touching agent code; all session persistence, observability, and LLM orchestration flows through the same stack as `app.py` |
 | PostgreSQL as primary persistence with dual-backend fallback | Every stateful component (checkpointer, sessions, runs, knowledge, specs) targets Postgres when `DATABASE_URL` is set and falls back to SQLite/FAISS/YAML automatically; no code branches in business logic |
-| pgvector over dedicated vector DB | Knowledge embeddings stored in the existing Postgres instance (`knowledge_documents` table, `vector(1536)` column); avoids a second stateful service at current document volumes (see `docs/adr-001-pgvector-over-qdrant.md`) |
+| pgvector + pgvectorscale over dedicated vector DB | Knowledge embeddings stored in the existing Postgres instance (`knowledge_documents` table, `vector(1536)` column); current index: `ivfflat`; will evolve to `StreamingDiskANN` (pgvectorscale) when the five objective triggers defined in ADR-005 are met. FAISS fallback confined to local dev without Docker. (See `docs/ADR-005-vector-store-strategy.md`) |
 | Spec stored and versioned in DB | The domain model is a first-class database object with history (`specs` + `spec_versions` tables); each agent run records `spec_id` and `spec_version` so recommendations are fully traceable to the exact domain model that produced them |
 | FastAPI monolith modular (not microservices) | All agent modules imported in-process; routers provide clean separation without the operational overhead of separate services. Services are extracted only when there is a concrete reason (independent scaling, separate team). |
 | Prompt Registry with inline-template fallback (`get_prompt_template(stage, fallback)`) | System prompts are versioned database artifacts; agents always have a working fallback to the inline template when no DB is configured; the registry-or-fallback pattern keeps all three agents functional in SQLite mode and in tests without a live database |

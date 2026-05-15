@@ -209,11 +209,11 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 <span class="iter-name">Iteración 1 — Fundación productiva</span>
 <span class="iter-tag" style="background:var(--purple-50);color:var(--purple-800)">19 items</span>
 </div>
-<p class="iter-desc">Servicio desplegable con API REST, PostgreSQL, pgvector, ObjectBus para artefactos analíticos, specs versionados en BD, pipeline CI, interfaz web y primeros tests del agente.</p>
+<p class="iter-desc">Servicio desplegable con API REST, PostgreSQL, pgvector + pgvectorscale (ADR-005), ObjectBus para artefactos analíticos, specs versionados en BD, pipeline CI, interfaz web y primeros tests del agente.</p>
 <div class="packages">
 <div class="pkg pkg-persist status-done">
 <div class="pkg-label">Persistencia (1A)</div>
-<div class="pkg-items">PostgreSQL + pgvector<br>Spec as data · Runs en Postgres<br>ADR-001 pgvector vs Qdrant<br><span style="opacity:0.6">⏳ <b>ObjectBus 3-tier</b> (hot/warm/cold) — pendiente</span></div>
+<div class="pkg-items">PostgreSQL + pgvector + pgvectorscale<br>Spec as data · Runs en Postgres<br>ADR-005 vector store strategy (supersedes ADR-001)<br>5 triggers formales Qdrant · FAISS solo en local dev<br><span style="opacity:0.6">⏳ <b>ObjectBus 3-tier</b> (hot/warm/cold) — pendiente</span></div>
 </div>
 <div class="pkg pkg-api status-done">
 <div class="pkg-label">API y servicio (1B)</div>
@@ -368,7 +368,7 @@ h1 { font-size: 22px; font-weight: 500; margin-bottom: 6px; letter-spacing: -0.3
 </div>
 
 <div class="footer-notes">
-v4 · Integra los aprendizajes derivados del análisis de las 4 auditorías de LlullGen y de las 4 arquitecturas objetivo · 19 items nuevos respecto a v3 (en negrita en cada paquete) · Decisiones declaradas en ADR-001 (pgvector), ADR-002 (LangGraph como motor de orquestación), ADR-003 (política de reutilización de componentes de LlullGen) · Cada iteración entrega valor demostrable independientemente · Las iteraciones tienen criterio de entrega, no fecha
+v4 · Integra los aprendizajes derivados del análisis de las 4 auditorías de LlullGen y de las 4 arquitecturas objetivo · 19 items nuevos respecto a v3 (en negrita en cada paquete) · Decisiones declaradas en ADR-001 (pgvector, ⚠️ superseded), ADR-002 (LangGraph como motor de orquestación), ADR-003 (política de reutilización de componentes de LlullGen), ADR-005 (pgvector + pgvectorscale, supersedes ADR-001) · Cada iteración entrega valor demostrable independientemente · Las iteraciones tienen criterio de entrega, no fecha
 </div>
 
 </body>

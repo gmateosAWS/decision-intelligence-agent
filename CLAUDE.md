@@ -19,7 +19,7 @@ Every change must be production-ready: proper error handling, tests, migrations,
 Before implementing, verify the change aligns with:
 
 - The CEO's "llull Decision Intelligence Architecture" diagram (7 blocks + transversals)
-- The ADRs (001 pgvector, 002 LangGraph orchestration, 003 LlullGen component reuse)
+- The ADRs (001 pgvector ⚠️ superseded, 002 LangGraph orchestration, 003 LlullGen component reuse, 005 pgvector + pgvectorscale strategy)
 - The inventory v4 (116 items) and roadmap v4 — check if later items subsume or extend what you're doing
 - The skills engine concept (item 4.3) — every capability should eventually be exposable as a skill/MCP server
 
@@ -71,7 +71,7 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── system/system_model.py     topological evaluation engine (formula registry)
         ├── simulation/montecarlo.py   Monte Carlo with noise from spec (temporal + non-linear)
         ├── optimization/optimizer.py  grid search over decision variable bounds
-        ├── knowledge/retriever.py     pgvector search (FAISS fallback)
+        ├── knowledge/retriever.py     pgvector search (FAISS fallback — local dev only, per ADR-005)
         │
         ├── prompts/
         │    ├── models.py             PromptRecord, PromptStatus (GovernableArtifact pattern, item 10.8)
@@ -321,7 +321,7 @@ Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning,
 
 ### Paquete 1A ✅
 
-- [x] 1.1 PostgreSQL, 1.2 pgvector, 8.1 runs in Postgres, 1.5 spec as data, 1.3 ADR
+- [x] 1.1 PostgreSQL, 1.2 pgvector + pgvectorscale (ADR-005), 8.1 runs in Postgres, 1.5 spec as data, 1.3 triggers formales
 
 ### Paquete 1B ✅
 
@@ -422,7 +422,8 @@ Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of sc
 
 - `docs/llull_inventario_v4.md` — full backlog (116 items)
 - `docs/llull_roadmap_v4.md` — iteration plan with progress
-- `docs/adr-001-pgvector-over-qdrant.md`
+- `docs/adr-001-pgvector-over-qdrant.md` ⚠️ SUPERSEDED by ADR-005
 - `docs/adr-002-langgraph-orchestration.md` (ADR-002)
 - `docs/adr-003-llullgen-component-reuse-policy.md` (ADR-003)
+- `docs/ADR-005-vector-store-strategy.md` (ADR-005) — pgvector + pgvectorscale strategy, supersedes ADR-001
 - `docs/2026-05-06_llull_self_audit.md` — architecture audit with findings

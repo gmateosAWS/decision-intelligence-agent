@@ -624,13 +624,13 @@
     <div class="strength-item"><div class="strength-num">8.1</div><div class="strength-text">Single coherent architecture end-to-end — no zombie patterns, no coexisting paradigms</div></div>
     <div class="strength-item"><div class="strength-num">8.2</div><div class="strength-text">Spec-driven design that is actually spec-driven — consumed by every layer that should consume it</div></div>
     <div class="strength-item"><div class="strength-num">8.3</div><div class="strength-text">Type discipline above the size class — 27 Pydantic/TypedDict references, structured outputs at every LLM seam</div></div>
-    <div class="strength-item"><div class="strength-num">8.4</div><div class="strength-text">Dual-backend pattern consistent across modules (Postgres ↔ SQLite, pgvector ↔ FAISS)</div></div>
+    <div class="strength-item"><div class="strength-num">8.4</div><div class="strength-text">Dual-backend pattern consistent across modules (Postgres ↔ SQLite, pgvector + pgvectorscale ↔ FAISS-local-dev-only per ADR-005)</div></div>
     <div class="strength-item"><div class="strength-num">8.5</div><div class="strength-text">Observability built in from day one — full per-run lineage with prompt_version now attributed</div></div>
     <div class="strength-item"><div class="strength-num">8.6</div><div class="strength-text">Explicit error-handling discipline — 38 broad excepts, 27 marked <code>noqa: BLE001</code></div></div>
     <div class="strength-item"><div class="strength-num">8.7</div><div class="strength-text">Active fix discipline — every hotfix commits understanding, not just a patch</div></div>
     <div class="strength-item"><div class="strength-num">8.8</div><div class="strength-text">Documentation that matches the code — CLAUDE.md, README, ADRs all current</div></div>
     <div class="strength-item"><div class="strength-num">8.9</div><div class="strength-text">220 tests that test behavior, not mocks — 15 golden queries as routing oracle</div></div>
-    <div class="strength-item"><div class="strength-num">8.10</div><div class="strength-text">Production-grade CI: black → ruff → mypy → pytest+coverage → pip-audit; integration job with real pgvector Postgres</div></div>
+    <div class="strength-item"><div class="strength-num">8.10</div><div class="strength-text">Production-grade CI: black → ruff → mypy → pytest+coverage → pip-audit; integration job with real pgvector Postgres (pgvectorscale CI check pending ADR-005 staging activation)</div></div>
     <div class="strength-item"><div class="strength-num">8.11</div><div class="strength-text">Dead-code at 0.0% across 116 Python files — sustained across three sprints</div></div>
     <div class="strength-item"><div class="strength-num">8.12 <span style="color:#22c55e">new</span></div><div class="strength-text"><code>ui/</code> package: pure render functions in components.py (no session_state), state in session.py, orchestration in app.py — genuinely clean separation maintained under deadline pressure</div></div>
     <div class="strength-item"><div class="strength-num">8.13 <span style="color:#22c55e">new</span></div><div class="strength-text"><code>RunSink</code> Protocol: ObjectBus-ready seam (item 1.6) — three pluggable implementations, interface correct today, no refactor needed when ObjectBus lands</div></div>
@@ -677,7 +677,8 @@
     Previous: <a href="2026-05-06_llull_self_audit.html" style="color:var(--accent)">May 6 baseline</a> ·
     <a href="2026-05-08_llull_self_audit.html" style="color:var(--accent)">May 8 delta #1</a> ·
     Update 2026-05-13: Item 5.10 (ActiveAnalyticalState MVP v1) landed — Memory Layer dims 3,4,5,6,21,22 advancing. ·
-    Update 2026-05-14: Item 5.11 (MemoryService Protocol + boundary lint) landed — L2·10: 1→3, L2·18: 2→3; L3·1: 2→4, L3·2: 1→3, L3·3: 0→3, L3·4: 0→2, L3·5: 1→3, L3·6: 1→3, L3·19: 0→1, L3·20: 2→3, L3·21: 2→3, L3·22: 1→3. Layer 2 mean: 2.85. Layer 3 mean: 2.00. 303 unit tests. Re-audit recommended after 5.13 or 1.6 lands. · Expected post-I2A: ~2.80 / 5
+    Update 2026-05-14: Item 5.11 (MemoryService Protocol + boundary lint) landed — L2·10: 1→3, L2·18: 2→3; L3·1: 2→4, L3·2: 1→3, L3·3: 0→3, L3·4: 0→2, L3·5: 1→3, L3·6: 1→3, L3·19: 0→1, L3·20: 2→3, L3·21: 2→3, L3·22: 1→3. Layer 2 mean: 2.85. Layer 3 mean: 2.00. 303 unit tests. Re-audit recommended after 5.13 or 1.6 lands. · Expected post-I2A: ~2.80 / 5 ·
+    Update 2026-05-15: ADR-005 (pgvector + pgvectorscale, supersedes ADR-001) — docs aligned. FAISS confinement formalized (local dev only). Five Qdrant triggers formally defined. L1·15 FAISS threat model closed for production. L1·28 knowledge-layer production boundary clarified. L3·13 StreamingDiskANN noted as future retrieval enhancement.
   </div>
 </footer>
 
