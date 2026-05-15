@@ -1,4 +1,4 @@
-# ADR-004 — Vector store strategy for the enterprise multi-agent platform
+# ADR-005 — Vector store strategy for the enterprise multi-agent platform
 
 | Campo | Valor |
 |---|---|
