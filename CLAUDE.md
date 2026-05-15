@@ -303,6 +303,66 @@ pip-audit --strict --desc               # supply-chain scan (run manually or in 
 
 Spec-driven principle, graph structure, `ToolSelection` schema (tool, reasoning, params, language), `_NODE_FORMULAS` registry.
 
+## Plan review discipline (before any implementation)
+
+Inspired by Garry Tan's Claude Code senior engineer prompt, adapted to llull's
+spec-driven workflow. The architectural decisions are taken upstream (Claude + architect)
+and arrive in the prompt as a detailed spec. Claude Code's role is NOT to redesign,
+but to act as a senior reviewer who catches subtle issues BEFORE writing code.
+
+Every implementation prompt that lands on Claude Code must begin with a "Plan review"
+phase before touching any code:
+
+### Plan review — required output before implementation
+
+1. **Restatement (5–6 lines)**: summarize the intent of the item in your own words.
+   State what changes, what stays, and what is the user-visible effect.
+
+2. **Concrete risks (2–3 items)**: name specific risks tied to the existing code,
+   not generic ones. Examples of good risks:
+     - "If I add field X to AgentState, the PostgresSink INSERT at sinks/postgres_sink.py:46
+       needs the new column or it will fail silently."
+     - "The boundary lint at scripts/check_memory_boundary.py will block imports if I
+       forget to add the new module to its allowlist."
+   Examples of bad (too generic) risks:
+     - "This might break things." → useless.
+     - "Tests might fail." → not actionable.
+
+3. **Assumptions to confirm (if any)**: list assumptions you are about to make that
+   are not explicit in the prompt. Stop and ask if any is uncertain. If all are
+   obvious from the existing code, say "no clarifications needed" and proceed.
+
+4. **Engineering principles to follow (acknowledge):**
+   - DRY — flag duplication aggressively before introducing it.
+   - Tests are mandatory; better too many than too few.
+   - "Engineered enough" — not fragile, not over-engineered.
+   - Correctness and edge cases > implementation speed.
+   - Explicit > clever.
+   - Backward compatibility is non-negotiable unless the prompt explicitly says
+     otherwise. The UI and the API must keep working identically.
+
+Only after the Plan review is shown should implementation start. The user reads
+the Plan review and either approves or sends adjustments before any code lands.
+
+For routine items (small, well-bounded, obvious risk profile), the Plan review
+can be condensed to 3–4 lines. For BIG changes (touching the agent workflow, the
+memory layer, the API contracts, the database schema, the CI pipeline, the spec
+system, the prompt registry), the Plan review is mandatory in full form.
+
+### What this is NOT
+
+This discipline does NOT mean Claude Code redesigns the architecture. The
+architecture is decided upstream and lives in:
+- The Memory Architecture target documents
+- The five Architectural Directives in this CLAUDE.md
+- ADR-002, ADR-003, ADR-005
+- The inventory v4 and roadmap v4
+
+Claude Code's review is a final safety net against subtle integration mistakes,
+not an invitation to question architectural decisions.
+
+---
+
 ## Git workflow
 
 `feature/<item-id>-<desc>`, commits `[<item-id>] <desc>`, PRs into main.
