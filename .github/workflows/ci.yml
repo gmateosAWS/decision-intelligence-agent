@@ -37,6 +37,9 @@ jobs:
                agents/ api/ spec/ system/ simulation/ optimization/ \
                config/ db/ memory/ evaluation/ prompts/ core/
 
+      - name: Strict mypy on agents/ (L1 dim 17)
+        run: mypy --config-file=mypy-agents-strict.ini --explicit-package-bases agents/
+
       - name: Memory boundary lint (item 5.11)
         run: python scripts/check_memory_boundary.py
 

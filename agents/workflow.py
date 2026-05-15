@@ -54,7 +54,7 @@ _synthesizer_llm = None
 _synthesizer_fallback_llm = None
 
 
-def _get_synthesizer_llms():
+def _get_synthesizer_llms() -> tuple[Any, Any]:
     global _synthesizer_llm, _synthesizer_fallback_llm
     if _synthesizer_llm is None:
         _synthesizer_llm = get_chat_model(
@@ -86,7 +86,7 @@ _TOOLS: Dict[str, Any] = {
 def planner_node(
     state: AgentState,
     config: Optional[RunnableConfig] = None,
-) -> Dict:
+) -> dict[str, Any]:
     """Calls the LLM planner and records timing via the observer."""
     obs = _get_observer(config)
     tracker = _get_tracker(config)
@@ -102,7 +102,7 @@ def planner_node(
             pass
 
     t0 = time.perf_counter()
-    result = _sanitize_for_state(
+    result: dict[str, Any] = _sanitize_for_state(
         _planner_node_impl(state, tracker=tracker, active_state=active_state)
     )
     elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -128,20 +128,20 @@ def planner_node(
             )
         except Exception:  # noqa: BLE001
             pass
-    return result  # type: ignore[no-any-return]  # _sanitize_for_state returns Any; dict at runtime
+    return result
 
 
 def tool_node(
     state: AgentState,
     config: Optional[RunnableConfig] = None,
-) -> Dict:
+) -> dict[str, Any]:
     """Executes the tool selected by the planner."""
     obs = _get_observer(config)
-    action = state.get("action", "knowledge")
+    action: str = state.get("action") or "knowledge"
     tool_fn = _TOOLS.get(action, knowledge_tool)
 
     t0 = time.perf_counter()
-    raw_result: Optional[Dict] = None
+    raw_result: Optional[dict[str, Any]] = None
     error: Optional[str] = None
 
     try:
@@ -181,7 +181,7 @@ def tool_node(
 def synthesizer_node(
     state: AgentState,
     config: Optional[RunnableConfig] = None,
-) -> Dict:
+) -> dict[str, Any]:
     """
     Converts the raw tool output into a business-oriented answer.
 
@@ -252,16 +252,18 @@ def synthesizer_node(
             prompt_version=synth_version,
         )
 
-    result = {"answer": answer, "synthesizer_prompt_version": synth_version}
-    return _sanitize_for_state(result)  # type: ignore[no-any-return]
+    raw = {"answer": answer, "synthesizer_prompt_version": synth_version}
+    sanitized: dict[str, Any] = _sanitize_for_state(raw)
+    return sanitized
 
 
 def judge_node(
     state: AgentState,
     config: Optional[RunnableConfig] = None,
-) -> Dict:
+) -> dict[str, Any]:
     """Evaluate and optionally revise the synthesized answer."""
-    return _sanitize_for_state(_judge_node_impl(state, config))  # type: ignore[no-any-return]
+    sanitized: dict[str, Any] = _sanitize_for_state(_judge_node_impl(state, config))
+    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -276,7 +278,7 @@ def _route_after_planner(state: AgentState) -> str:
     return "tool"
 
 
-def build_graph(checkpointer=None):
+def build_graph(checkpointer: Any = None) -> Any:
     """
     Build and compile the 4-node LangGraph workflow.
 
@@ -342,28 +344,28 @@ def _sanitize_for_state(value: Any) -> Any:
     return str(value)
 
 
-def _get_observer(config: Optional[RunnableConfig]):
+def _get_observer(config: Optional[RunnableConfig]) -> Any:
     """Extract the AgentObserver from the configurable dict."""
     if config is None:
         return None
     return config.get("configurable", {}).get("observer")
 
 
-def _get_tracker(config: Optional[RunnableConfig]):
+def _get_tracker(config: Optional[RunnableConfig]) -> Any:
     """Extract the BudgetTracker from the configurable dict."""
     if config is None:
         return None
     return config.get("configurable", {}).get("budget_tracker")
 
 
-def _get_memory_service(config: Optional[RunnableConfig]):
+def _get_memory_service(config: Optional[RunnableConfig]) -> Any:
     """Extract the LocalMemoryService from the configurable dict (item 5.11)."""
     if config is None:
         return None
     return config.get("configurable", {}).get("memory_service")
 
 
-def _get_session_id(config: Optional[RunnableConfig]):
+def _get_session_id(config: Optional[RunnableConfig]) -> Any:
     """Extract and parse the session UUID from the configurable thread_id."""
     if config is None:
         return None

@@ -99,7 +99,7 @@ def _init_planner_llms() -> None:
         )
 
 
-def _build_few_shot_examples(spec) -> str:
+def _build_few_shot_examples(spec: Any) -> str:
     """
     Builds 3 dynamic routing examples from the first decision variable in the spec.
 
@@ -125,7 +125,7 @@ def _build_few_shot_examples(spec) -> str:
     )
 
 
-def _build_system_prompt() -> tuple:
+def _build_system_prompt() -> tuple[str, Optional[str]]:
     """
     Build the rendered planner system prompt from the active spec.
 
@@ -153,7 +153,7 @@ _SYSTEM_PROMPT: Optional[str] = None
 _SYSTEM_PROMPT_VERSION: Optional[str] = None
 
 
-def _get_system_prompt() -> tuple:
+def _get_system_prompt() -> tuple[str, Optional[str]]:
     """Return (rendered_prompt, version) — cached after first call."""
     global _SYSTEM_PROMPT, _SYSTEM_PROMPT_VERSION
     if _SYSTEM_PROMPT is None:
@@ -165,7 +165,7 @@ def planner_node(
     state: AgentState,
     tracker: Optional["BudgetTracker"] = None,
     active_state: Optional[Any] = None,
-) -> Dict:
+) -> dict[str, Any]:
     """
     Selects the best tool for the current query and extracts any
     decision-variable values mentioned in the query into `params`.
@@ -243,7 +243,7 @@ def planner_node(
 
         policy_level = get_spec().autonomy_policy.get_level(selection.tool)
 
-        result: Dict = {
+        result: dict[str, Any] = {
             "action": selection.tool,
             "reasoning": selection.reasoning,
             "params": params_dict,

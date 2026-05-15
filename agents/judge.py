@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, Literal, Optional, Union
+from typing import Any, Dict, Literal, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -89,9 +89,7 @@ def _init_llms() -> None:
     )
 
 
-def judge_node(
-    state: AgentState, config: Optional[Union[dict, Any]] = None
-) -> Dict[str, Any]:
+def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any]:
     """
     Evaluate the synthesized answer and optionally revise it once.
 
@@ -102,7 +100,7 @@ def judge_node(
     obs = _get_observer(config)
 
     query = state.get("query", "")
-    action = state.get("action", "unknown")
+    action: str = state.get("action") or "unknown"
     language = state.get("language", "en")
     raw_result = state.get("raw_result") or {}
     answer = (state.get("answer") or "").strip()
@@ -263,13 +261,13 @@ def _format_raw_result(raw_result: Dict[str, Any]) -> str:
     return "\n".join(f"- {k}: {v}" for k, v in raw_result.items())
 
 
-def _get_observer(config: Optional[dict]):
+def _get_observer(config: Optional[dict[str, Any]]) -> Any:
     if config is None:
         return None
     return config.get("configurable", {}).get("observer")
 
 
-def _get_tracker(config: Optional[dict]):
+def _get_tracker(config: Optional[dict[str, Any]]) -> Any:
     if config is None:
         return None
     return config.get("configurable", {}).get("budget_tracker")
