@@ -179,7 +179,7 @@ La Iteración 2 original se ha subdividido en **I2A** (datos reales + calidad de
 
 ### Criterio de entrega
 
-Al final de esta iteración, llull es un **servicio desplegable con API REST, persistencia en PostgreSQL, búsqueda vectorial sobre pgvector, ObjectBus para artefactos analíticos por sesión, specs versionados en base de datos, pipeline CI funcional, los primeros tests del sistema agentic, y una interfaz web visual (Streamlit) que permite hacer demos sin necesidad de terminal**. Todavía no tiene multi-tenancy ni datos reales de cliente, pero un ingeniero o un consultor puede interactuar con él vía API o vía web, desplegar cambios con confianza, y empezar a medir la calidad del agente sistemáticamente.
+Al final de esta iteración, llull es un **servicio desplegable con API REST, persistencia en PostgreSQL, búsqueda vectorial sobre pgvector + pgvectorscale (ADR-005), ObjectBus para artefactos analíticos por sesión, specs versionados en base de datos, pipeline CI funcional, los primeros tests del sistema agentic, y una interfaz web visual (Streamlit) que permite hacer demos sin necesidad de terminal**. Todavía no tiene multi-tenancy ni datos reales de cliente, pero un ingeniero o un consultor puede interactuar con él vía API o vía web, desplegar cambios con confianza, y empezar a medir la calidad del agente sistemáticamente.
 
 Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que se empieza a construir el producto.
 
@@ -188,11 +188,11 @@ Es el paso de prototipo/demo a un sistema con base técnica seria sobre la que s
 | Item                              | Estado / Justificación                                                                                                                                                       |
 | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1.1** PostgreSQL                | ✅ Hecho — 5 tablas, Alembic migrations, dual-backend con SQLite fallback.                                                                                                   |
-| **1.2** pgvector                  | ✅ Hecho — `knowledge_documents` table con embedding column; FAISS fallback cuando no hay DB.                                                                                 |
+| **1.2** pgvector + pgvectorscale  | ✅ Hecho — `knowledge_documents` table con embedding column; índice actual `ivfflat`; evolución a `StreamingDiskANN` (pgvectorscale) cuando triggers ADR-005 se activen. FAISS fallback solo en local dev sin Docker. |
 | **1.5** Spec as data              | ✅ Hecho — `specs` + `spec_versions` tables; `spec_repository.py` CRUD; `spec_loader.py` DB-first with YAML fallback.                                                        |
 | **1.6** ObjectBus de tres niveles `[v4]` | ⏳ Pendiente (I1 diferido) — deferred until LlullGen codebase available for reference (ADR-003). Next priority after current audit work. |
 | **8.1** Runs en Postgres          | ✅ Hecho — `agent_runs` table; `PostgresSink` escribe en cada run; JSONL fallback vía `JsonlSink`.                                                                            |
-| **1.3** Ruta a Qdrant documentada | ✅ Hecho — ADR-001 `docs/adr-001-pgvector-over-qdrant.md`.                                                                                                                   |
+| **1.3** Triggers de migración a Qdrant formalizados | ✅ Hecho — cinco triggers objetivos en ADR-005 (`docs/ADR-005-vector-store-strategy.md`): volumen >50M vectores, latencia p95 >50ms/30d, aislamiento contractual, multitenancy estratificado, hybrid search. Evaluación cada 6 meses. ADR-001 marcado como Superseded. |
 
 ### Paquete 1B — API y servicio ✅ COMPLETADO
 
@@ -593,7 +593,8 @@ Estos items son reales y necesarios, pero su timing depende de señales externas
 
 **Sobre los ADRs (nuevos en v4).** Tres decisiones arquitectónicas quedan registradas como ADRs (Architecture Decision Records) en el repositorio de docs del proyecto:
 
-- **ADR-001 — pgvector sobre Qdrant**: ya existente. Documenta por qué pgvector es el vector store inicial y bajo qué condiciones se migraría a Qdrant.
+- **ADR-001 — pgvector sobre Qdrant**: ⚠️ SUPERSEDED por ADR-005 (2026-05-06). Preservado por trazabilidad histórica.
+- **ADR-005 — Vector store strategy for the enterprise multi-agent platform**: nuevo. Reevalúa ADR-001 bajo las premisas enterprise (millones de vectores por tenant, multi-tenancy estricto, sectores regulados). Decisión: pgvector + pgvectorscale (StreamingDiskANN) dentro del mismo Postgres, con cinco triggers formales para migración parcial a Qdrant. Condiciona los items 1.2, 1.3, 1.4, 7.1, 11.1 y el path de evolución del knowledge layer.
 - **ADR-002 — LangGraph como motor de orquestación**: nuevo. Documenta por qué llull mantiene LangGraph (con patrón Supervisor para multi-agente) frente a alternativas como el A2A custom de LlullGen, AutoGen, CrewAI o el A2A protocol de Google ADK. Condiciona cómo se implementan 5.3.a, 5.3.b, 5.4, 5.12.
 - **ADR-003 — Política de reutilización de componentes de LlullGen**: nuevo. Documenta cómo se reutilizan los componentes salvables de LlullGen (LLMFactory, ObjectBus, GroundedTokens, SQL Gateway, prompt capture, LlullLogger) — inspiración conceptual sí, porting de código no — y por qué. Condiciona cómo se implementan 1.6, 2.10, 5.6, 5.9, 8.4, 10.9.
 
