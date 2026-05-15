@@ -76,7 +76,7 @@ def run_query(
         from agents.workflow import build_graph
         from memory import get_checkpointer
 
-        graph = build_graph(checkpointer=get_checkpointer())
+        graph = build_graph(checkpointer=get_checkpointer())  # type: ignore[no-untyped-call]  # memory.get_checkpointer not yet in strict zone
 
     # Bind the real session UUID so RunRecord.session_id matches agent_sessions.id
     observer.set_session_id(thread_id)
@@ -110,7 +110,7 @@ def run_query(
             if active_row:
                 observer.set_spec(
                     str(active_row.id),
-                    active_row.version,  # type: ignore[arg-type]
+                    active_row.version,  # type: ignore[arg-type, unused-ignore]  # SQLAlchemy Column[str] vs str | None
                 )
         except Exception:  # noqa: BLE001
             pass

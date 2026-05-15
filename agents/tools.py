@@ -33,7 +33,7 @@ _system_model = None
 def _get_system_model() -> SystemModel:
     global _system_model
     if _system_model is None:
-        _system_model = SystemModel()
+        _system_model = SystemModel()  # type: ignore[no-untyped-call]  # system/ not yet in strict zone
     return _system_model
 
 
@@ -53,7 +53,7 @@ def optimization_tool(state: Dict[str, Any]) -> Dict[str, Any]:
     profit_std, profit_p10, profit_p90, expected_demand,
     demand_std, downside_risk_pct, n_runs.
     """
-    result: Dict[str, Any] = optimize_price(_get_system_model())
+    result: Dict[str, Any] = optimize_price(_get_system_model())  # type: ignore[no-untyped-call]  # optimization/ not yet in strict zone
     return result
 
 

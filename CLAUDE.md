@@ -292,6 +292,7 @@ pytest                                  # unit tests
 pytest -m integration                   # DB tests (needs Docker)
 pytest --cov=. --cov-report=term-missing  # with coverage
 mypy --ignore-missing-imports --no-strict-optional --warn-return-any --warn-unused-configs --explicit-package-bases agents/ api/ spec/ system/ simulation/ optimization/ config/ db/ memory/ evaluation/
+mypy --config-file=mypy-agents-strict.ini --explicit-package-bases agents/  # strict zone (L1 dim 17)
 pip-audit --strict --desc               # supply-chain scan (run manually or in CI)
 ```
 
@@ -431,6 +432,14 @@ not an invitation to question architectural decisions.
 ### Item 5.11 ✅
 
 - [x] 5.11 MemoryService Protocol: `core/protocols/memory.py` (`MemoryService` Protocol with `@runtime_checkable`, 7 methods); `memory/service.py` (`LocalMemoryService` — concrete implementation with coordinator cache, lazy DB load, fail-open); `memory/__init__.py` updated with `LocalMemoryService` + `get_memory_service()` process-level singleton; `agents/runner.py` + `agents/workflow.py` + `api/routers/sessions.py` refactored to use service (not coordinator directly); `agents/planner.py` reads frozen `active_state` snapshot and injects typed context into prompt; `scripts/check_memory_boundary.py` (boundary lint — blocks direct imports of `memory.coordinator.*` / `memory.state.*` outside `memory/`); `governance/memory_boundary_exceptions.yaml` (allowlist for justified exceptions); boundary lint in CI + pre-commit hook; `propose_state_update` / `commit_state_update` as v1 stubs (see `docs/tech_debt.md`, unblocked by 5.13); 22 new tests (303 total, includes 11 protocol, 4 planner, 5 lint, 2 API v2).
+
+### Hardening: mypy --strict on agents/ ✅
+
+- [x] `mypy-agents-strict.ini` — dedicated mypy config: `[mypy-agents.*] strict = True` + `follow_imports = silent` for all non-agents packages (prevents strict-check leakage into imported modules)
+- [x] All 8 `agents/` files pass `mypy --config-file=mypy-agents-strict.ini --explicit-package-bases agents/` with 0 errors
+- [x] Fixes: `_build_few_shot_examples(spec: Any)`, `_build_system_prompt() -> tuple[str, Optional[str]]`, `planner_node() -> dict[str, Any]`, `judge_node() → Optional[Any]` config, `action: str = state.get("action") or "unknown"` narrowing, `_get_observer/tracker() -> Any`, `build_graph(checkpointer: Any = None) -> Any`, all 4 node functions `-> dict[str, Any]`, 2 `# type: ignore[no-untyped-call]` for cross-zone calls (SystemModel, optimize_price, get_checkpointer)
+- [x] `agents/` uses mypy --strict in CI (L1 dim 17: type safety 4→5) and pre-commit (`mirrors-mypy` hook, `files: ^agents/.*\.py$`)
+- [x] Strict CI step added after existing mypy step in `.github/workflows/ci.yml`
 
 ## Current work: Item 5.11 ✅ — Next: Item 1.6 ObjectBus (or 5.13 state mutations)
 
