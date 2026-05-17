@@ -20,7 +20,7 @@ Before implementing, verify the change aligns with:
 
 - The CEO's "llull Decision Intelligence Architecture" diagram (7 blocks + transversals)
 - The ADRs (001 pgvector ⚠️ superseded, 002 LangGraph orchestration, 003 LlullGen component reuse, 005 pgvector + pgvectorscale strategy)
-- The inventory v4 (116 items) and roadmap v4 — check if later items subsume or extend what you're doing
+- The inventory v4 (117 items) and roadmap v4 — check if later items subsume or extend what you're doing
 - The skills engine concept (item 4.3) — every capability should eventually be exposable as a skill/MCP server
 
 If a change touches something that a later inventory item will extend, implement it with that extension in mind from day one. Don't build a wall that the next iteration has to tear down.
@@ -535,7 +535,7 @@ Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of sc
 
 ## Reference documents
 
-- `docs/llull_inventario_v4.md` — full backlog (116 items)
+- `docs/llull_inventario_v4.md` — full backlog (117 items)
 - `docs/llull_roadmap_v4.md` — iteration plan with progress
 - `docs/adr-001-pgvector-over-qdrant.md` ⚠️ SUPERSEDED by ADR-005
 - `docs/adr-002-langgraph-orchestration.md` (ADR-002)

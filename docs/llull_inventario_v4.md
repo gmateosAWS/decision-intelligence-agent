@@ -492,6 +492,38 @@ _Resuelve:_ una clase de fallo que solo aparece en producción multi-agente: dos
 
 ---
 
+### 5.13 User-driven state corrections `[v4 — feature]`
+
+Mecanismo explícito para que el usuario corrija el `ActiveAnalyticalState` cuando el sistema haya identificado mal el intent, las métricas activas, o cualquier otro slot. Hoy (tras 5.11) las mutaciones son implícitas — el planner y los nodos del workflow actualizan el state vía `MemoryService.record_*`. El item 5.13 abre el ciclo explícito `propose_state_update` → revisión del usuario → `commit_state_update`, donde el operador humano confirma o ajusta lo que el sistema infirió.
+
+Tres capacidades principales:
+
+- **`propose_state_update(session_id, turn_id) → StateProposal`**: el MemoryService observa el turno en curso, identifica los slots que cambiarían si se aplica el resultado del LLM, y devuelve una propuesta tipada con before/after por slot. La propuesta NO se aplica todavía.
+
+- **`commit_state_update(session_id, decision: StateCommitDecision) → StateCommitResult`**: el usuario revisa la propuesta (vía UI o vía API), aprueba/rechaza/edita mutaciones, y el MemoryService aplica las aprobadas a través del MemoryCoordinator. Persiste con audit log completo.
+
+- **Correcciones explícitas vía UI/API**: endpoint `POST /v1/sessions/{id}/state/corrections` que recibe una `StateCommitDecision`. La UI muestra los slots actuales del state, permite editarlos, y envía la decisión al backend.
+
+**Slots inheritance rules**: junto con las correcciones, este item introduce reglas declarativas para qué slots heredan del turno anterior y cuáles se resetean en cada turno. Hoy todos los slots heredan; con 5.13 algunos pueden marcarse como `volatile` (resetean cada turno) o `sticky` (heredan hasta corrección explícita).
+
+_Resuelve:_ sin 5.13, los errores de identificación de intent o de métricas se propagan silenciosamente entre turnos hasta que el usuario abandona la sesión o la reinicia. Con 5.13, el usuario puede decir "no, no estaba preguntando por el margen, estaba preguntando por el beneficio" y el sistema corrige el state tipado, no solo la siguiente respuesta.
+
+**Dependencias:**
+- 5.10 (ActiveAnalyticalState) — necesario, ya completado
+- 5.11 (MemoryService Protocol) — necesario, ya completado. Los métodos `propose_state_update` y `commit_state_update` ya están como placeholders en el Protocol; 5.13 los implementa de verdad.
+- 6.1.b (Session Service en la API) — necesario, ya completado
+
+**Habilita:**
+- 5.3.a (multi-agente mínimo viable) — necesario para que cada agente reciba un state coherente y corregible
+- 7.8 (audit log regulado) — las correcciones del usuario son uno de los eventos auditables clave
+- 5.12 (recursion guard) — usa el patrón de mutación controlada que 5.13 establece
+
+**Granularidad:** `[feature]`. Estimación 1–2 días.
+
+**Cierra deuda técnica:** entrada "5.11 → 5.13: MemoryService propose_state_update / commit_state_update stubs" en `docs/tech_debt.md`.
+
+---
+
 ## 6. Capa de servicio y API
 
 La transición del REPL actual a un servicio expuesto que puedan consumir otras aplicaciones y usuarios múltiples.
@@ -1105,11 +1137,11 @@ _Resuelve:_ sin proceso definido de onboarding, cada cliente nuevo es una reinve
 
 ## Resumen cuantitativo
 
-- **Total de items**: 109 principales + 7 sub-items (servicios 6.1.a–g) = **116 items**
-- **Items nuevos en v4** (etiquetados `[v4]` o `[v4 — ...]`): 19 items, distribuidos en:
+- **Total de items**: 110 principales + 7 sub-items (servicios 6.1.a–g) = **117 items**
+- **Items nuevos en v4** (etiquetados `[v4]` o `[v4 — ...]`): 20 items, distribuidos en:
   - Bloque 1 (Persistencia): +1 (1.6 ObjectBus)
   - Bloque 2 (Datos reales): +1 (2.10 SQL Execution Gateway)
-  - Bloque 5 (Agente): +6 (5.3 descompuesto en 5.3.a/b/c, 5.6 ampliado, 5.9 GroundedTokens, 5.10 Memoria analítica activa, 5.11 MemoryService, 5.12 Recursion guard)
+  - Bloque 5 (Agente): +7 (5.3 descompuesto en 5.3.a/b/c, 5.6 ampliado, 5.9 GroundedTokens, 5.10 Memoria analítica activa, 5.11 MemoryService, 5.12 Recursion guard, 5.13 User-driven state corrections)
   - Bloque 8 (Observabilidad): +5 (8.4 ampliado, 8.7 descompuesto en 8.7.a–f con cinco sub-items nuevos)
   - Bloque 10 (LLMOps): +4 (10.8 Registry pattern, 10.9 Prompt capture, 10.10 LineageRecord, 10.11 Golden eval harness)
 - **Por granularidad**:
@@ -1121,7 +1153,7 @@ _Resuelve:_ sin proceso definido de onboarding, cada cliente nuevo es una reinve
   2. Ingesta y conexión con datos reales: 10 items
   3. Modelo de dominio y spec: 7 items
   4. Capa analítica y predictiva: 6 items
-  5. Arquitectura del agente: 14 items (5.3 descompuesto en 5.3.a/b/c)
+  5. Arquitectura del agente: 15 items (5.3 descompuesto en 5.3.a/b/c)
   6. Capa de servicio y API: 6 items principales + 7 sub-items
   7. Seguridad y multi-tenancy: 10 items
   8. Observabilidad y operación: 12 items (8.7 descompuesto)
