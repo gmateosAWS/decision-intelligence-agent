@@ -127,6 +127,7 @@ def main() -> None:
 
     from ui.components import (
         render_chat_message,
+        render_clarification_message,
         render_result_cards,
         render_technical_details,
         render_welcome_cards,
@@ -189,6 +190,7 @@ def main() -> None:
                     "budget_exceeded": result.budget_exceeded,
                     "budget_exceeded_reason": result.budget_exceeded_reason,
                     "active_state": result.active_state,
+                    "clarification_needed": result.clarification_needed,
                 }
 
                 # Append assistant to session_state
@@ -204,24 +206,28 @@ def main() -> None:
                 )
                 st.session_state.is_new_session = False
 
-                # Render assistant response inline — always safe
-                st.markdown(sanitize_markdown(result.answer))
+                # GroundedTokens clarification (item 5.9): render with info style
+                if result.clarification_needed:
+                    render_clarification_message(result.answer)
+                else:
+                    # Render assistant response inline — always safe
+                    st.markdown(sanitize_markdown(result.answer))
 
-                # Render extras — resilient to component errors
-                try:
-                    action = result.tool_used or ""
-                    total_ms = result.latency_ms
-                    tool_label = TOOL_LABELS.get(
-                        action, f"⚪ {action}" if action else ""
-                    )
-                    if tool_label and total_ms:
-                        st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
-                    elif total_ms:
-                        st.caption(f"{total_ms:,.0f} ms")
-                    render_result_cards(action, result.raw_result or {})
-                    render_technical_details(metadata)
-                except Exception as e:  # noqa: BLE001
-                    st.caption(f"⚠️ Error rendering details: {e}")
+                    # Render extras — resilient to component errors
+                    try:
+                        action = result.tool_used or ""
+                        total_ms = result.latency_ms
+                        tool_label = TOOL_LABELS.get(
+                            action, f"⚪ {action}" if action else ""
+                        )
+                        if tool_label and total_ms:
+                            st.caption(f"{tool_label}  ·  {total_ms:,.0f} ms")
+                        elif total_ms:
+                            st.caption(f"{total_ms:,.0f} ms")
+                        render_result_cards(action, result.raw_result or {})
+                        render_technical_details(metadata)
+                    except Exception as e:  # noqa: BLE001
+                        st.caption(f"⚠️ Error rendering details: {e}")
 
     with tab_dashboard:
         render_dashboard()

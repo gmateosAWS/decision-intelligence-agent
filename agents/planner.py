@@ -238,6 +238,43 @@ def planner_node(
         selection: ToolSelection = output["parsed"]
         params_dict = {p.variable: p.value for p in selection.params}
 
+        # GroundedTokens blocking check (item 5.9) — validate each extracted
+        # param variable name against the spec vocabulary BEFORE dispatching.
+        # This inner block is intentionally separate from the outer except so
+        # that UngroundedTokenError is never absorbed by the LLMUnavailableError
+        # / broad Exception handler below.
+        try:
+            from system.grounded_tokens import (  # noqa: PLC0415
+                UngroundedTokenError,
+                get_vocabulary,
+                validate_strict,
+            )
+
+            vocab = get_vocabulary(get_spec())
+            for param in selection.params:
+                validate_strict(param.variable, vocab)
+        except UngroundedTokenError as grounding_exc:
+            return {
+                "action": None,
+                "reasoning": selection.reasoning,
+                "params": {},
+                "language": selection.language,
+                "requires_confirmation": False,
+                "requires_approval": False,
+                "confirmation_message": None,
+                "clarification_needed": True,
+                "ungrounded_token": grounding_exc.token,
+                "clarification_message": (
+                    f"I could not recognise '{grounding_exc.token}' as a variable "
+                    "in this domain's model. "
+                    f"Valid variables are: "
+                    + ", ".join(sorted(grounding_exc.vocab.tokens))
+                    + ". Please rephrase your question using one of those names."
+                ),
+                "planner_prompt_version": prompt_version,
+                "planner_variant_label": variant_label,
+            }
+
         # Consult autonomy policy for the selected tool
         from spec.autonomy import AutonomyLevel
 
@@ -251,6 +288,9 @@ def planner_node(
             "requires_confirmation": False,
             "requires_approval": False,
             "confirmation_message": None,
+            "clarification_needed": False,
+            "ungrounded_token": None,
+            "clarification_message": None,
             "planner_prompt_version": prompt_version,
             "planner_variant_label": variant_label,
         }
@@ -281,6 +321,9 @@ def planner_node(
             "requires_confirmation": False,
             "requires_approval": False,
             "confirmation_message": None,
+            "clarification_needed": False,
+            "ungrounded_token": None,
+            "clarification_message": None,
             "planner_prompt_version": prompt_version,
             "planner_variant_label": variant_label,
         }

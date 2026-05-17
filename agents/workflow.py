@@ -285,15 +285,38 @@ def judge_node(
 
 
 def _route_after_planner(state: AgentState) -> str:
-    """Skip tool execution when autonomy policy requires human intervention."""
+    """Route after planner: clarification > autonomy policy > tool."""
+    if state.get("clarification_needed"):
+        return "clarification"
     if state.get("requires_confirmation") or state.get("requires_approval"):
         return "synthesizer"
     return "tool"
 
 
+def clarification_node(
+    state: AgentState,
+    config: Optional[RunnableConfig] = None,
+) -> dict[str, Any]:
+    """
+    Return the clarification message as the final answer (item 5.9).
+
+    Reached when planner catches an UngroundedTokenError.  No tool is run;
+    the agent asks the user to rephrase using valid vocabulary.
+    """
+    query = state.get("query", "")
+    message = state.get("clarification_message") or (
+        "I could not identify the variable you mentioned. "
+        "Please use a variable name from the domain model."
+    )
+    return {
+        "answer": message,
+        "history": [{"query": query, "answer": message}],
+    }
+
+
 def build_graph(checkpointer: Any = None) -> Any:
     """
-    Build and compile the 4-node LangGraph workflow.
+    Build and compile the 5-node LangGraph workflow.
 
     Parameters
     ----------
@@ -301,8 +324,9 @@ def build_graph(checkpointer: Any = None) -> Any:
         If provided, the graph persists state across invocations.
         Pass a thread_id in the config to resume a conversation.
 
-    Flow (auto):    planner_node → tool_node → synthesizer_node → judge_node → END
-    Flow (policy):  planner_node → synthesizer_node → judge_node → END
+    Flow (auto):          planner → tool → synthesizer → judge → END
+    Flow (policy):        planner → synthesizer → judge → END
+    Flow (clarification): planner → clarification → END  (item 5.9)
     """
     builder = StateGraph(AgentState)
 
@@ -310,16 +334,22 @@ def build_graph(checkpointer: Any = None) -> Any:
     builder.add_node("tool", tool_node)
     builder.add_node("synthesizer", synthesizer_node)
     builder.add_node("judge", judge_node)
+    builder.add_node("clarification", clarification_node)
 
     builder.set_entry_point("planner")
     builder.add_conditional_edges(
         "planner",
         _route_after_planner,
-        {"tool": "tool", "synthesizer": "synthesizer"},
+        {
+            "tool": "tool",
+            "synthesizer": "synthesizer",
+            "clarification": "clarification",
+        },
     )
     builder.add_edge("tool", "synthesizer")
     builder.add_edge("synthesizer", "judge")
     builder.add_edge("judge", END)
+    builder.add_edge("clarification", END)
 
     if checkpointer is not None:
         return builder.compile(checkpointer=checkpointer)

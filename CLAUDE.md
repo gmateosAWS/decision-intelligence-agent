@@ -62,13 +62,23 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │
         ├── spec/
         │    ├── spec_repository.py   CRUD: create/activate/update/seed specs in DB
-        │    ├── spec_loader.py       get_spec() — DB-first, YAML fallback
+        │    ├── spec_loader.py       get_spec() — DB-first, YAML fallback;
+        │    │                        DecisionVariable + TargetVariable now have aliases: list[str];
+        │    │                        DerivedMetric dataclass (id, name, description, unit, aliases);
+        │    │                        OrganizationalModelSpec.derived_metrics: List[DerivedMetric] (item 5.9)
         │    ├── versioning.py        SpecVersion, BumpType, validate_version, detect_bump_type
         │    └── autonomy.py          AutonomyPolicy, AutonomyLevel, ToolAutonomyPolicy
         │                             Foundation for items 7.3 + 5.3.b (per-agent policies)
         │
         ├── system/system_graph.py     DAG built from spec's causal_relationships
         ├── system/system_model.py     topological evaluation engine (formula registry)
+        ├── system/grounded_tokens.py  Spec-driven vocabulary guardrail (item 5.9):
+        │                              Vocabulary (frozenset of canonical + alias tokens);
+        │                              validate_strict(token, vocab) — blocking (planner);
+        │                              check_observational(tokens, vocab) — non-blocking (judge);
+        │                              build_vocabulary(spec) cached by spec.version;
+        │                              invalidate_vocabulary_cache() for tests/hot-reload.
+        │                              Lives in system/ NOT agents/ (Directive 4 — skills-ready)
         ├── simulation/montecarlo.py   Monte Carlo with noise from spec (temporal + non-linear)
         ├── optimization/optimizer.py  grid search over decision variable bounds
         ├── knowledge/retriever.py     pgvector search (FAISS fallback — local dev only, per ADR-005)
@@ -88,9 +98,12 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         ├── agents/
         │    ├── state.py              AgentState TypedDict (language, requires_confirmation,
         │    │                         requires_approval, confirmation_message,
-        │    │                         planner/synthesizer/judge_prompt_version)
+        │    │                         planner/synthesizer/judge_prompt_version,
+        │    │                         clarification_needed, ungrounded_token,
+        │    │                         clarification_message — item 5.9)
         │    ├── planner.py            LLM → ToolSelection; consults AutonomyPolicy per tool;
-        │    │                         reads planner prompt from registry (fallback to inline)
+        │    │                         reads planner prompt from registry (fallback to inline);
+        │    │                         validate_strict() inner check on params (item 5.9 blocking)
         │    ├── llm_factory.py        get_chat_model() + invoke_with_fallback() + _extract_usage()
         │    │                         _extract_usage() handles 3 patterns: (1) direct AIMessage.usage_metadata
         │    │                         (synthesizer/revision), (2) dict["raw"] from with_structured_output(include_raw=True)
@@ -101,6 +114,7 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    ├── tools.py              tool wrappers consuming spec defaults
         │    ├── workflow.py           LangGraph: planner →[auto]→ tool → synthesizer → judge → END
         │    │                                            [policy]→ synthesizer (proposal) → judge
+        │    │                                            [clarification]→ clarification → END (item 5.9)
         │    │                         synthesizer reads prompt from registry (fallback to inline)
         │    ├── judge.py             online quality gate + single-pass revision;
         │    │                         judge + judge.revision prompts from registry (fallback to inline)
@@ -452,10 +466,31 @@ not an invitation to question architectural decisions.
 
 - [x] 10.2 Prompt A/B Testing: `prompts/models.py` (`PromptVariantStatus` + `PromptVariant` Pydantic model); `prompts/routing.py` (deterministic `select_variant()` via sha256 bucket, `_load_active_variants` with `@lru_cache(maxsize=8)`, `invalidate_variant_cache()` called on every mutation); `prompts/registry.py` (`start_rollout`, `adjust_rollout`, `promote_to_champion`, `deprecate_variant` CRUD + `list_variants` + `get_variant`; `get_prompt_template()` promoted to 3-tuple `(content, version, variant_label)`; `_get_cached_prompt_content` `@lru_cache(maxsize=256)` for immutable prompt content; `seed_prompts_from_code()` auto-creates CHAMPION variants at startup); migration 008 (`prompt_variants` table with CHECK constraints and FK to `prompts`); migration 009 (3 `*_variant_label` Text columns on `agent_runs`); `db/models.py` `PromptVariantRow` ORM + 3 `AgentRun` columns; `agents/state.py` 3 new `*_variant_label` fields; `agents/planner.py` module-level cache removed (spec caching in `spec_loader`), `session_id` param added to `_build_system_prompt()` + `planner_node()`; all 4 `get_prompt_template` call sites (planner, synthesizer, judge, judge.revision) updated to 3-tuple unpack; `evaluation/observer.py` `RunRecord` + `record_planner/synthesizer/judge()` extended with `variant_label`; `evaluation/sinks/postgres_sink.py` 3 new kwargs; 6 new API endpoints (`GET /v1/prompts/variants`, `GET/POST/PUT /v1/prompts/variants/{stage}/{label}`, `PUT .../adjust`, `PUT .../promote`, `PUT .../deprecate`); read-only variant table in `ui/dashboard.py`; 27 new tests (routing, registry 3-tuple, observer). Tech debt entry: 10.2→10.3 (auto-promotion deferred).
 
-## Current work: Item 10.2 ✅ — Next: Item 10.3 (eval-gated auto-promotion) or 5.13 (state mutations)
+### Item 5.9 ✅
 
-**Branch**: `feature/10.2-prompt-ab-testing`
+- [x] 5.9 GroundedTokens guardrail: `system/grounded_tokens.py` (`Vocabulary`, `UngroundedTokenError`,
+  `UngroundedMention`, `build_vocabulary(spec)` / `get_vocabulary(spec)` cached by `spec.version`,
+  `validate_strict()` blocking check, `check_observational()` non-blocking scan,
+  `invalidate_vocabulary_cache()`); `spec/spec_loader.py` extended with `aliases: list[str]` on
+  `DecisionVariable` + `TargetVariable`, new `DerivedMetric` dataclass, `derived_metrics` on
+  `OrganizationalModelSpec`; `agents/planner.py` inner try/except catches `UngroundedTokenError`
+  and returns `clarification_needed=True` state dict; `agents/workflow.py` adds `clarification_node`
+  + `_route_after_planner` returns "clarification" as priority branch; `agents/judge.py`
+  `check_observational()` scan on `raw_result.keys()`, prefixes `judge_feedback` with
+  `[ungrounded: ...]`; `agents/state.py` 3 new fields
+  (`clarification_needed`, `ungrounded_token`, `clarification_message`);
+  `agents/runner.py` `RunResult.clarification_needed/message` + early return on clarification;
+  `api/schemas/query.py` + `api/routers/query.py` return HTTP 200 with clarification fields;
+  `ui/components.py` `render_clarification_message()` with `st.info()` style;
+  `tests/fixtures/healthcare_demo_spec.yaml` healthcare domain (not retail) proves no hardcoding;
+  34 new tests (21 grounded_tokens, 3 planner, 2 judge, 7 workflow+clarification, 1 API);
+  tech debt entry "5.9 → futuro: Near-match suggestion" in `docs/tech_debt.md`. 370 tests total.
 
+## Current work: Item 5.9 ✅ — Next: Item 10.3 (eval-gated auto-promotion) or 5.13 (state mutations)
+
+**Branch**: `feature/5.9-grounded-tokens`
+
+5.9 Completed 2026-05-17.
 10.2 Completed 2026-05-17.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner

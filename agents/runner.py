@@ -49,6 +49,9 @@ class RunResult:
     budget_exceeded_reason: Optional[str] = None
     # Analytical state snapshot after the run (item 5.11)
     active_state: Optional[Dict[str, Any]] = None
+    # GroundedTokens clarification (item 5.9)
+    clarification_needed: bool = False
+    clarification_message: Optional[str] = None
 
 
 def run_query(
@@ -148,6 +151,32 @@ def run_query(
             total_cost_usd=tracker.total_cost_usd,
             llm_calls_count=tracker.llm_calls,
         )
+
+        # GroundedTokens clarification (item 5.9) — not a failure; return 200
+        # with clarification fields populated and success=False so the UI/API
+        # can distinguish clarification from a real error.
+        if result.get("clarification_needed"):
+            record = observer.end_run(success=False) or {}
+            clarification_msg = result.get("clarification_message") or result.get(
+                "answer", ""
+            )
+            return RunResult(
+                answer=clarification_msg,
+                session_id=thread_id,
+                run_id=run_id,
+                success=False,
+                latency_ms=latency_ms,
+                error=None,
+                error_type=None,
+                latencies={},
+                total_input_tokens=tracker.total_input_tokens,
+                total_output_tokens=tracker.total_output_tokens,
+                total_cost_usd=tracker.total_cost_usd,
+                llm_calls_count=tracker.llm_calls,
+                active_state=active_state_dict,
+                clarification_needed=True,
+                clarification_message=clarification_msg,
+            )
 
         record = observer.end_run(success=True) or {}
 
