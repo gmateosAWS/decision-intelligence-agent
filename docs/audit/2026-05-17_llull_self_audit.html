@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llull · Self-Audit · 2026-05-17</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface2: #f1f5f9;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text2: #475569;
+    --text3: #94a3b8;
+    --accent: #6366f1;
+    --accent-soft: #eef2ff;
+
+    --s0: #fecaca; --s0t: #991b1b;
+    --s1: #fed7aa; --s1t: #9a3412;
+    --s2: #fef9c3; --s2t: #854d0e;
+    --s3: #dcfce7; --s3t: #166534;
+    --s4: #bbf7d0; --s4t: #15803d;
+    --s5: #4ade80; --s5t: #14532d;
+
+    --l1: #dbeafe; --l1b: #3b82f6;
+    --l2: #d1fae5; --l2b: #10b981;
+    --l3: #fce7f3; --l3b: #ec4899;
+    --l4: #fef3c7; --l4b: #f59e0b;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #293548;
+      --border: #334155;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --text3: #475569;
+      --accent: #818cf8;
+      --accent-soft: #1e1b4b;
+
+      --s0: #7f1d1d; --s0t: #fca5a5;
+      --s1: #7c2d12; --s1t: #fdba74;
+      --s2: #713f12; --s2t: #fde047;
+      --s3: #14532d; --s3t: #86efac;
+      --s4: #166534; --s4t: #4ade80;
+      --s5: #15803d; --s5t: #bbf7d0;
+
+      --l1: #1e3a5f; --l1b: #60a5fa;
+      --l2: #064e3b; --l2b: #34d399;
+      --l3: #4a044e; --l3b: #f472b6;
+      --l4: #451a03; --l4b: #fbbf24;
+    }
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 14px;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; color: var(--accent); }
+  .logo span { color: var(--text2); font-weight: 400; }
+
+  .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+  .meta-item { display: flex; flex-direction: column; }
+  .meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); font-weight: 600; }
+  .meta-value { font-size: 13px; font-weight: 500; color: var(--text2); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 32px 24px; display: flex; flex-direction: column; gap: 40px; }
+
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 { font-size: 16px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 14px; font-weight: 600; color: var(--text); }
+
+  .badge {
+    display: inline-block; border-radius: 4px; font-size: 11px; font-weight: 700;
+    padding: 1px 6px; letter-spacing: 0.03em;
+  }
+  .s0 { background: var(--s0); color: var(--s0t); }
+  .s1 { background: var(--s1); color: var(--s1t); }
+  .s2 { background: var(--s2); color: var(--s2t); }
+  .s3 { background: var(--s3); color: var(--s3t); }
+  .s4 { background: var(--s4); color: var(--s4t); }
+  .s5 { background: var(--s5); color: var(--s5t); }
+
+  /* Gauge */
+  .gauge-section { display: flex; align-items: center; gap: 40px; flex-wrap: wrap; }
+  .gauge-wrap { position: relative; width: 180px; height: 100px; flex-shrink: 0; }
+  .gauge-arc { position: absolute; top: 0; left: 0; }
+  .gauge-text { position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); text-align: center; }
+  .gauge-score { font-size: 36px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .gauge-max { font-size: 14px; color: var(--text3); }
+  .gauge-label { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+  .exec-prose { flex: 1; min-width: 280px; color: var(--text2); font-size: 13px; line-height: 1.7; }
+  .exec-prose p { margin-bottom: 10px; }
+  .exec-prose p:last-child { margin-bottom: 0; }
+
+  /* Layer cards */
+  .layer-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+
+  .layer-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .layer-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+
+  .lc-l1::before { background: var(--l1b); }
+  .lc-l2::before { background: var(--l2b); }
+  .lc-l3::before { background: var(--l3b); }
+  .lc-l4::before { background: var(--l4b); }
+
+  .lc-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); margin-bottom: 6px; }
+  .lc-score { font-size: 32px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .lc-l1 .lc-score { color: var(--l1b); }
+  .lc-l2 .lc-score { color: var(--l2b); }
+  .lc-l3 .lc-score { color: var(--l3b); }
+  .lc-l4 .lc-score { color: var(--l4b); }
+  .lc-dims { font-size: 11px; color: var(--text3); margin-bottom: 12px; }
+  .lc-bar { height: 5px; background: var(--surface2); border-radius: 9999px; overflow: hidden; }
+  .lc-fill { height: 100%; border-radius: 9999px; }
+  .lc-l1 .lc-fill { background: var(--l1b); }
+  .lc-l2 .lc-fill { background: var(--l2b); }
+  .lc-l3 .lc-fill { background: var(--l3b); }
+  .lc-l4 .lc-fill { background: var(--l4b); }
+  .lc-delta { font-size: 11px; color: var(--text3); margin-top: 8px; }
+  .lc-delta span { font-weight: 600; color: #22c55e; }
+
+  /* Heatmap */
+  .heatmap-group { margin-bottom: 24px; }
+  .heatmap-group-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 10px;
+  }
+  .hg-l1 { background: var(--l1); color: var(--l1b); }
+  .hg-l2 { background: var(--l2); color: var(--l2b); }
+  .hg-l3 { background: var(--l3); color: var(--l3b); }
+  .hg-l4 { background: var(--l4); color: var(--l4b); }
+
+  .heatmap-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+
+  .hm-cell {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    width: 72px; min-height: 52px; border-radius: 6px; padding: 4px 4px 2px;
+    cursor: default; transition: transform 0.1s, box-shadow 0.1s;
+    position: relative;
+  }
+  .hm-cell:hover { transform: scale(1.07); box-shadow: 0 4px 12px rgba(0,0,0,0.12); z-index: 10; }
+
+  .hm-num { font-size: 9px; font-weight: 700; opacity: 0.6; line-height: 1; }
+  .hm-score { font-size: 20px; font-weight: 700; line-height: 1.2; }
+  .hm-name { font-size: 8px; text-align: center; line-height: 1.2; margin-top: 1px; opacity: 0.8; }
+  .hm-arrow { font-size: 8px; position: absolute; top: 3px; right: 4px; }
+
+  /* Findings summary strip */
+  .findings-strip { display: flex; gap: 12px; flex-wrap: wrap; }
+  .find-card {
+    flex: 1; min-width: 160px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px; text-align: center;
+  }
+  .find-icon { font-size: 28px; }
+  .find-count { font-size: 32px; font-weight: 700; line-height: 1; margin: 4px 0; }
+  .find-label { font-size: 11px; color: var(--text3); }
+
+  /* Planned gaps table */
+  .gap-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .gap-table th { text-align: left; padding: 8px 12px; background: var(--surface2); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); }
+  .gap-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .gap-table tr:hover td { background: var(--surface2); }
+  .iter-badge { display: inline-block; border-radius: 3px; padding: 1px 5px; font-size: 10px; font-weight: 700; }
+  .iter-i2a { background: #dbeafe; color: #1d4ed8; }
+  .iter-i2b { background: #fce7f3; color: #be185d; }
+  .iter-i3 { background: #fef3c7; color: #b45309; }
+  .iter-mas { background: #f3e8ff; color: #7c3aed; }
+  @media (prefers-color-scheme: dark) {
+    .iter-i2a { background: #1e3a5f; color: #93c5fd; }
+    .iter-i2b { background: #4a044e; color: #f9a8d4; }
+    .iter-i3 { background: #451a03; color: #fcd34d; }
+    .iter-mas { background: #2e1065; color: #c4b5fd; }
+  }
+
+  /* Strengths */
+  .strength-list { display: flex; flex-direction: column; gap: 8px; }
+  .strength-item {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 16px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .strength-num { font-size: 11px; font-weight: 700; color: var(--accent); min-width: 36px; }
+  .strength-text { font-size: 13px; color: var(--text2); }
+  .strength-new { font-size: 9px; font-weight: 700; background: var(--accent-soft); color: var(--accent); border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: middle; }
+
+  /* Remediation plan */
+  .remed-section { display: flex; flex-direction: column; gap: 12px; }
+  .remed-tier { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .tier-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .tier-p0 .tier-label { color: #15803d; }
+  .tier-p1 .tier-label { color: #b45309; }
+  .tier-p2 .tier-label { color: var(--text3); }
+  .remed-items { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .remed-items li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text2); }
+  .remed-items li::before { content: '→'; color: var(--accent); flex-shrink: 0; }
+
+  /* Comparison table */
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .comp-table th { text-align: left; padding: 8px 12px; background: var(--surface2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); font-weight: 600; }
+  .comp-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .comp-table .improved { color: #16a34a; font-weight: 700; }
+  .comp-table .unchanged { color: var(--text3); }
+  .comp-table .highlight { background: var(--accent-soft); font-weight: 700; }
+
+  /* Footer */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 24px 32px;
+    font-size: 12px;
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .note-box {
+    background: var(--accent-soft);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text2);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">llull <span>· Self-Audit Scorecard</span></div>
+    <div style="font-size:12px; color:var(--text3); margin-top:4px;">
+      Methodology: llull self-audit v1.0 · Audit #4 (delta #3) · Branch: main
+    </div>
+  </div>
+  <div class="meta">
+    <div class="meta-item"><span class="meta-label">Date</span><span class="meta-value">2026-05-17</span></div>
+    <div class="meta-item"><span class="meta-label">Commit</span><span class="meta-value">28c1c48</span></div>
+    <div class="meta-item"><span class="meta-label">Auditor</span><span class="meta-value">Claude Sonnet 4.6</span></div>
+    <div class="meta-item"><span class="meta-label">Codebase</span><span class="meta-value">~18,174 LOC · 160 files</span></div>
+  </div>
+</header>
+
+<main>
+
+<!-- Executive Summary -->
+<section>
+  <h2>Executive Summary</h2>
+  <div class="gauge-section">
+    <div class="gauge-wrap">
+      <svg class="gauge-arc" viewBox="0 0 180 100" width="180" height="100">
+        <!-- Background arc (full semicircle r=70, center=90,90) -->
+        <path d="M 20 90 A 70 70 0 0 1 160 90" stroke="var(--border)" stroke-width="12" fill="none" stroke-linecap="round"/>
+        <!-- Score arc: 2.83/5 = 56.6%; semicircle arc ≈ 220px → dashoffset = 220*(1-0.566) = 95 -->
+        <path d="M 20 90 A 70 70 0 0 1 160 90" stroke="var(--accent)" stroke-width="12" fill="none" stroke-linecap="round"
+              stroke-dasharray="220" stroke-dashoffset="95"/>
+        <text x="12" y="96" font-size="9" fill="var(--text3)" font-family="DM Sans,sans-serif">0</text>
+        <text x="163" y="96" font-size="9" fill="var(--text3)" font-family="DM Sans,sans-serif">5</text>
+      </svg>
+      <div class="gauge-text">
+        <div class="gauge-score">2.83</div>
+        <div class="gauge-max">/ 5.00</div>
+        <div class="gauge-label">overall</div>
+      </div>
+    </div>
+    <div class="exec-prose">
+      <p><strong>18 dimensions improved</strong> since the May 10 audit. No regressions for the fourth consecutive sprint. This is the largest single-window gain across the four audits (+0.36 overall), driven entirely by genuine capability deployment — not definition changes.</p>
+      <p><strong>Five I2A items deployed in this window:</strong> 5.10 (ActiveAnalyticalState typed object + MemoryCoordinator), 5.11 (MemoryService Protocol + boundary lint in CI), 8.7.a+b (cost tracking + hard run ceilings), mypy --strict on <code>agents/</code> with 0 errors, 10.2 (Prompt A/B testing: sha256-bucket routing, PromptVariant lifecycle, migrations 008+009, 6 REST endpoints, 330 tests).</p>
+      <p><strong>Memory layer (L3)</strong> moves from 1.18 to 2.00 — the predicted payoff from items 5.10+5.11 materialises on schedule. <strong>AI/Agent layer (L2)</strong> crosses the 3-point threshold for the first time (2.55 → 3.05).</p>
+      <p>The dominant bottleneck shifts from L2 to L3 and L4 jointly (~2.0). Primary next leverage: item 5.13 (user-correction mutations), which alone would move L3 by ~+0.40. <strong>Zero 🔴 critical findings</strong> for the fourth consecutive audit. Arithmetic: 243 pts / 86 dims = 2.826 → 2.83.</p>
+    </div>
+  </div>
+</section>
+
+<!-- Layer Cards -->
+<section>
+  <h2>Layer Scores</h2>
+  <div class="layer-cards">
+    <div class="layer-card lc-l1">
+      <div class="lc-title">L1 · Codebase &amp; Architecture</div>
+      <div class="lc-score">3.75</div>
+      <div class="lc-dims">28 dimensions · 105 pts</div>
+      <div class="lc-bar"><div class="lc-fill" style="width:75%"></div></div>
+      <div class="lc-delta">vs May 10 clean: <span>+0.11</span></div>
+    </div>
+    <div class="layer-card lc-l2">
+      <div class="lc-title">L2 · AI / Agent Layer</div>
+      <div class="lc-score">3.05</div>
+      <div class="lc-dims">20 dimensions · 61 pts</div>
+      <div class="lc-bar"><div class="lc-fill" style="width:61%"></div></div>
+      <div class="lc-delta">vs May 10 clean: <span>+0.50</span></div>
+    </div>
+    <div class="layer-card lc-l3">
+      <div class="lc-title">L3 · Conversational Memory</div>
+      <div class="lc-score">2.00</div>
+      <div class="lc-dims">22 dimensions · 44 pts</div>
+      <div class="lc-bar"><div class="lc-fill" style="width:40%"></div></div>
+      <div class="lc-delta">vs May 10 clean: <span>+0.82</span></div>
+    </div>
+    <div class="layer-card lc-l4">
+      <div class="lc-title">L4 · Ontology &amp; Semantics</div>
+      <div class="lc-score">2.06</div>
+      <div class="lc-dims">16 dimensions · 33 pts</div>
+      <div class="lc-bar"><div class="lc-fill" style="width:41.2%"></div></div>
+      <div class="lc-delta">vs May 10 clean: <span style="color:var(--text3); font-weight:400">+0.00 (no Ontology work this sprint)</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- Findings Summary -->
+<section>
+  <h2>Findings Summary</h2>
+  <div class="findings-strip">
+    <div class="find-card">
+      <div class="find-icon">🔴</div>
+      <div class="find-count" style="color:#ef4444">0</div>
+      <div class="find-label">Critical gaps (unplanned)</div>
+    </div>
+    <div class="find-card">
+      <div class="find-icon">🟡</div>
+      <div class="find-count" style="color:#eab308">~40</div>
+      <div class="find-label">Planned (in roadmap/inventory)</div>
+    </div>
+    <div class="find-card">
+      <div class="find-icon">🟢</div>
+      <div class="find-count" style="color:#22c55e">18</div>
+      <div class="find-label">Confirmed strengths (8.1–8.18)</div>
+    </div>
+    <div class="find-card">
+      <div class="find-icon">↑</div>
+      <div class="find-count" style="color:var(--accent)">18</div>
+      <div class="find-label">Dims improved this sprint</div>
+    </div>
+  </div>
+  <div class="note-box">
+    Zero 🔴 critical findings for the <strong>fourth consecutive audit</strong>. 6 baseline findings (May 6)
+    were closed by May 8. No new unplanned gaps in this sprint. The inventory and roadmap cover every architectural
+    gap found by this rubric. 330 unit tests pass, 3 skipped (integration-only).
+  </div>
+</section>
+
+<!-- Heatmap -->
+<section>
+  <h2>86-Dimension Heatmap</h2>
+  <p style="font-size:12px; color:var(--text3); margin-bottom:8px;">Hover for dimension name. ↑ = improved this sprint vs May 10 clean baseline.</p>
+
+  <!-- Layer 1 -->
+  <div class="heatmap-group">
+    <div class="heatmap-group-title hg-l1">L1 · Codebase &amp; Architecture (28) — mean 3.75</div>
+    <div class="heatmap-grid">
+      <!-- Scores: 4,4,4,3,3,4,4,4,4,3,4,3,4,4,3,4,5,3,4,5,4,3,4,4,5,3,4,2 -->
+      <!-- Improved: L1·5 (2→3), L1·6 (3→4), L1·17 (4→5) -->
+      <div class="hm-cell s4" title="Local code clarity · 4 · Unchanged. All files <500 LOC. Largest: ui/components.py ~280 LOC."><div class="hm-num">L1·1</div><div class="hm-score">4</div><div class="hm-name">Local clarity</div></div>
+      <div class="hm-cell s4" title="Naming quality · 4 · Domain-aligned: PromptVariant, BudgetTracker, FrozenActiveAnalyticalState."><div class="hm-num">L1·2</div><div class="hm-score">4</div><div class="hm-name">Naming quality</div></div>
+      <div class="hm-cell s4" title="Function/class size · 4 · No new god-classes. prompts/routing.py and evaluation/budget.py well-bounded."><div class="hm-num">L1·3</div><div class="hm-score">4</div><div class="hm-name">Size/cohesion</div></div>
+      <div class="hm-cell s3" title="Modularity · 3 · Behavioural cohesion improved. Layer-deps lint missing beyond memory boundary (item 11.1)."><div class="hm-num">L1·4</div><div class="hm-score">3</div><div class="hm-name">Modularity</div></div>
+      <div class="hm-cell s3" title="Boundary integrity · 3 · ↑ from 2. Memory boundary lint in CI + pre-commit. RunSink + MemoryService Protocols. Item 11.1 still pending."><div class="hm-num">L1·5</div><div class="hm-score">3</div><div class="hm-name">Boundary integrity</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s4" title="Composability · 4 · ↑ from 3. RunSink, MemoryService, runner.run_query(), get_prompt_template() — 4 typed seams compose cleanly."><div class="hm-num">L1·6</div><div class="hm-score">4</div><div class="hm-name">Composability</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s4" title="Architectural integrity · 4 · Single architecture. 10.2, 5.10, 5.11, 8.7 all slot cleanly."><div class="hm-num">L1·7</div><div class="hm-score">4</div><div class="hm-name">Arch integrity</div></div>
+      <div class="hm-cell s4" title="Dependency hygiene · 4 · requirements.lock + dev.lock with hashes. Dockerfile + CI use lock files."><div class="hm-num">L1·8</div><div class="hm-score">4</div><div class="hm-name">Dep hygiene</div></div>
+      <div class="hm-cell s4" title="Separation of concerns · 4 · No business logic in routers or UI. MemoryCoordinator is sole writer."><div class="hm-num">L1·9</div><div class="hm-score">4</div><div class="hm-name">Sep of concerns</div></div>
+      <div class="hm-cell s3" title="Correctness · 3 · 330 tests confirm production paths. Fix discipline in git log."><div class="hm-num">L1·10</div><div class="hm-score">3</div><div class="hm-name">Correctness</div></div>
+      <div class="hm-cell s4" title="Robustness · 4 · Lazy imports, fail-open sinks, LocalMemoryService fail-open, .streamlit/config.toml."><div class="hm-num">L1·11</div><div class="hm-score">4</div><div class="hm-name">Robustness</div></div>
+      <div class="hm-cell s3" title="Error handling · 3 · # noqa: BLE001 discipline maintained. No new broad-except."><div class="hm-num">L1·12</div><div class="hm-score">3</div><div class="hm-name">Error handling</div></div>
+      <div class="hm-cell s4" title="Test quality · 4 · 330 tests targeting behavior. Routing: determinism, cache invalidation, bucket correctness."><div class="hm-num">L1·13</div><div class="hm-score">4</div><div class="hm-name">Test quality</div></div>
+      <div class="hm-cell s4" title="Test strategy · 4 · Two-job CI: unit+lint+strict and integration with real Postgres."><div class="hm-num">L1·14</div><div class="hm-score">4</div><div class="hm-name">Test strategy</div></div>
+      <div class="hm-cell s3" title="Security · 3 · CORS allowlist, FAISS threat model documented (ADR-005). Auth absent (7.1/7.5 in I2B)."><div class="hm-num">L1·15</div><div class="hm-score">3</div><div class="hm-name">Security</div></div>
+      <div class="hm-cell s4" title="Supply-chain · 4 · requirements.lock + requirements-dev.lock with --generate-hashes. pip-audit in CI."><div class="hm-num">L1·16</div><div class="hm-score">4</div><div class="hm-name">Supply-chain</div></div>
+      <div class="hm-cell s5" title="Typing/contracts · 5 · ↑ from 4. mypy --strict on agents/ (8 files, 0 errors). mypy-agents-strict.ini + CI step + pre-commit hook."><div class="hm-num">L1·17</div><div class="hm-score">5</div><div class="hm-name">Typing/contracts</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s3" title="Invariant enforcement · 3 · DAG cycle assertion (item 3.3) at 3 integration points. Spec semver monotonicity."><div class="hm-num">L1·18</div><div class="hm-score">3</div><div class="hm-name">Invariants</div></div>
+      <div class="hm-cell s4" title="Duplication control · 4 · agents/runner.py DRYs UI/API. agents/i18n.py DRYs language directives."><div class="hm-num">L1·19</div><div class="hm-score">4</div><div class="hm-name">Duplication ctrl</div></div>
+      <div class="hm-cell s5" title="Dead-code hygiene · 5 · 160 Python files, dark-code ~0.0%. No zombie imports."><div class="hm-num">L1·20</div><div class="hm-score">5</div><div class="hm-name">Dead-code</div></div>
+      <div class="hm-cell s4" title="Observability · 4 · *_variant_label + cost_usd + cost_eur persisted per run. Full lineage in agent_runs."><div class="hm-num">L1·21</div><div class="hm-score">4</div><div class="hm-name">Observability</div></div>
+      <div class="hm-cell s3" title="Performance · 3 · lru_cache(256) on prompt content (0 DB queries), lru_cache(8) on variant loading."><div class="hm-num">L1·22</div><div class="hm-score">3</div><div class="hm-name">Performance</div></div>
+      <div class="hm-cell s4" title="Documentation · 4 · CLAUDE.md + README + roadmap + audit docs updated on every PR."><div class="hm-num">L1·23</div><div class="hm-score">4</div><div class="hm-name">Documentation</div></div>
+      <div class="hm-cell s4" title="Change governance · 4 · CI: black→ruff→mypy→mypy-strict→boundary→pytest→pip-audit on every push."><div class="hm-num">L1·24</div><div class="hm-score">4</div><div class="hm-name">Change gov.</div></div>
+      <div class="hm-cell s5" title="Dark-code risk · 5 · No dead code. streamlit_app.py is 22 lines of active glue."><div class="hm-num">L1·25</div><div class="hm-score">5</div><div class="hm-name">Dark-code risk</div></div>
+      <div class="hm-cell s3" title="AI code governance · 3 · No AI-narrative artifacts. # noqa: BLE001 discipline maintained."><div class="hm-num">L1·26</div><div class="hm-score">3</div><div class="hm-name">AI code gov.</div></div>
+      <div class="hm-cell s4" title="Overall maintainability · 4 · ui/, memory/, prompts/ each independently modifiable. 330 tests as routing oracle."><div class="hm-num">L1·27</div><div class="hm-score">4</div><div class="hm-name">Maintainability</div></div>
+      <div class="hm-cell s2" title="Production-readiness · 2 · Cost ceilings + fail-open sinks. Auth, RLS, multi-tenancy absent (7.x in I2B)."><div class="hm-num">L1·28</div><div class="hm-score">2</div><div class="hm-name">Prod-readiness</div></div>
+    </div>
+  </div>
+
+  <!-- Layer 2 -->
+  <div class="heatmap-group">
+    <div class="heatmap-group-title hg-l2">L2 · AI / Agent Layer (20) — mean 3.05</div>
+    <div class="heatmap-grid">
+      <!-- Scores: 3,3,2,4,2,2,3,5,4,4,2,4,3,2,4,3,4,3,1,3 -->
+      <!-- Improved: L2·8 (4→5), L2·10 (1→4), L2·14 (1→2), L2·17 (0→4), L2·18 (2→3) -->
+      <div class="hm-cell s3" title="Clarity of agentic role · 3 · Four named nodes, clear single responsibilities."><div class="hm-num">L2·1</div><div class="hm-score">3</div><div class="hm-name">Agentic role</div></div>
+      <div class="hm-cell s3" title="Agentic boundary · 3 · LLM orchestrates via ToolSelection; tools compute deterministically."><div class="hm-num">L2·2</div><div class="hm-score">3</div><div class="hm-name">Agentic boundary</div></div>
+      <div class="hm-cell s2" title="Agent separation · 2 · Single agent; multi-agent prerequisites not yet implemented."><div class="hm-num">L2·3</div><div class="hm-score">2</div><div class="hm-name">Agent separation</div></div>
+      <div class="hm-cell s4" title="Planning/orchestration · 4 · ToolSelection structured output; typed LangGraph DAG with conditional routing."><div class="hm-num">L2·4</div><div class="hm-score">4</div><div class="hm-name">Planning/orch.</div></div>
+      <div class="hm-cell s2" title="Tooling discipline · 2 · Typed params but no ToolSpec with explicit schemas (item 4.3)."><div class="hm-num">L2·5</div><div class="hm-score">2</div><div class="hm-name">Tooling discip.</div></div>
+      <div class="hm-cell s2" title="Tool safety · 2 · No SQL Execution Gateway. Simulation inputs validated by Python types only."><div class="hm-num">L2·6</div><div class="hm-score">2</div><div class="hm-name">Tool safety</div></div>
+      <div class="hm-cell s3" title="Model abstraction · 3 · llm_factory.py with fallback chain. No Bedrock/Vertex yet."><div class="hm-num">L2·7</div><div class="hm-score">3</div><div class="hm-name">Model abstraction</div></div>
+      <div class="hm-cell s5" title="Prompt governance · 5 · ↑ from 4. 10.2: sha256-bucket routing, PromptVariant lifecycle, 3-tuple, migrations 008+009, 6 REST endpoints, zero DB queries on hot path. Shadow eval (10.3) pending."><div class="hm-num">L2·8</div><div class="hm-score">5</div><div class="hm-name">Prompt gov.</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s4" title="State management · 4 · AgentState TypedDict now has *_variant_label + prompt_version + autonomy fields. All typed."><div class="hm-num">L2·9</div><div class="hm-score">4</div><div class="hm-name">State mgmt</div></div>
+      <div class="hm-cell s4" title="Memory abstraction · 4 · ↑↑ from 1. 5.11: MemoryService Protocol (@runtime_checkable) + LocalMemoryService + boundary lint + frozen state injection in planner."><div class="hm-num">L2·10</div><div class="hm-score">4</div><div class="hm-name">Memory abstraction</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s2" title="Retrieval/grounding · 2 · RAG configured; no GroundedTokens guardrail (item 5.9 in I2A)."><div class="hm-num">L2·11</div><div class="hm-score">2</div><div class="hm-name">Retrieval/grounding</div></div>
+      <div class="hm-cell s4" title="Output validation · 4 · Structured outputs at every LLM seam. RunResult dataclass typed contract."><div class="hm-num">L2·12</div><div class="hm-score">4</div><div class="hm-name">Output validation</div></div>
+      <div class="hm-cell s3" title="Error/retry · 3 · Exponential backoff, rate-limit detection, judge fails-open. BudgetExceededError adds clean abort."><div class="hm-num">L2·13</div><div class="hm-score">3</div><div class="hm-name">Error/retry</div></div>
+      <div class="hm-cell s2" title="Loop control · 2 · ↑ from 1. 8.7.b: BudgetTracker with wallclock + call caps before every invoke_with_fallback. Recursion guard (5.12) pending."><div class="hm-num">L2·14</div><div class="hm-score">2</div><div class="hm-name">Loop control</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s4" title="Observability of agent runs · 4 · *_variant_label + cost fields added. Full lineage: tool, model, prompt_version, variant_label, cost, judge_score."><div class="hm-num">L2·15</div><div class="hm-score">4</div><div class="hm-name">Run observability</div></div>
+      <div class="hm-cell s3" title="Testing/evaluation · 3 · 15 golden queries in CI. No real-LLM golden eval harness (10.11 in I2A/I3)."><div class="hm-num">L2·16</div><div class="hm-score">3</div><div class="hm-name">Testing/eval</div></div>
+      <div class="hm-cell s4" title="LLM cost control · 4 · ↑↑↑↑ from 0. 8.7.a+b: pricing YAML, BudgetTracker wired into every LLM call, cost in RunResult/agent_runs, budget API endpoints, dashboard KPIs. Tenant quotas (8.7.c/d) pending."><div class="hm-num">L2·17</div><div class="hm-score">4</div><div class="hm-name">LLM cost ctrl</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s3" title="Multi-turn continuity · 3 · ↑ from 2. 5.10+5.11: ActiveAnalyticalState + MemoryService + typed context injection in planner. history_window still raw transcript."><div class="hm-num">L2·18</div><div class="hm-score">3</div><div class="hm-name">Multi-turn cont.</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s1" title="Multi-agent coordination · 1 · No multi-agent, no prerequisites (5.3.a/b in I3)."><div class="hm-num">L2·19</div><div class="hm-score">1</div><div class="hm-name">Multi-agent</div></div>
+      <div class="hm-cell s3" title="Agent autonomy policy · 3 · Item 3.5: AutonomyPolicy + _route_after_planner + REST endpoints. JUDGE_THRESHOLD hardcoded (7.3, 5.3.b in I3)."><div class="hm-num">L2·20</div><div class="hm-score">3</div><div class="hm-name">Autonomy policy</div></div>
+    </div>
+  </div>
+
+  <!-- Layer 3 -->
+  <div class="heatmap-group">
+    <div class="heatmap-group-title hg-l3">L3 · Conversational &amp; Analytical Memory (22) — mean 2.00</div>
+    <div class="heatmap-grid">
+      <!-- Scores: 4,3,3,2,3,3,3,1,0,0,2,0,2,1,2,1,2,2,1,3,3,3 -->
+      <!-- Improved: L3·1,2,3,4,5,6,19,20,21,22 -->
+      <div class="hm-cell s4" title="Memory system existence · 4 · ↑↑ from 2. 5.11: MemoryService Protocol + LocalMemoryService + get_memory_service() singleton + boundary lint."><div class="hm-num">L3·1</div><div class="hm-score">4</div><div class="hm-name">System existence</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s3" title="System boundary clarity · 3 · ↑↑ from 1. 5.11: single seam core/protocols/memory.py. Boundary lint blocks direct access outside memory/."><div class="hm-num">L3·2</div><div class="hm-score">3</div><div class="hm-name">Boundary clarity</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s3" title="Structured active state · 3 · ↑↑↑ from 0. 5.10: ActiveAnalyticalState (mutable) + FrozenActiveAnalyticalState (immutable snapshot)."><div class="hm-num">L3·3</div><div class="hm-score">3</div><div class="hm-name">Structured state</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s2" title="State centrality · 2 · ↑↑ from 0. 5.10: MemoryCoordinator is single writer. Raw transcript still used for long-range context."><div class="hm-num">L3·4</div><div class="hm-score">2</div><div class="hm-name">State centrality</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s3" title="State traceability · 3 · ↑↑ from 1. 5.10: SlotProvenance (introduced_at_turn, evidence, confidence) + append-only StateTransition audit log."><div class="hm-num">L3·5</div><div class="hm-score">3</div><div class="hm-name">State traceability</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s3" title="State lifecycle · 3 · ↑↑ from 1. 5.10: TransitionOp enum + append-only log. Single-writer enforced by 5.11 boundary lint."><div class="hm-num">L3·6</div><div class="hm-score">3</div><div class="hm-name">State lifecycle</div><div class="hm-arrow">↑↑</div></div>
+      <div class="hm-cell s3" title="Short-range memory · 3 · 3-turn sliding window (HISTORY_WINDOW env var). No compaction."><div class="hm-num">L3·7</div><div class="hm-score">3</div><div class="hm-name">Short-range mem.</div></div>
+      <div class="hm-cell s1" title="Explicit rule quality · 1 · Multi-turn rules live in system prompt strings, not code."><div class="hm-num">L3·8</div><div class="hm-score">1</div><div class="hm-name">Explicit rules</div></div>
+      <div class="hm-cell s0" title="Inheritance governance · 0 · No slot inheritance logic between turns. Item 5.13 in I2A."><div class="hm-num">L3·9</div><div class="hm-score">0</div><div class="hm-name">Inheritance gov.</div></div>
+      <div class="hm-cell s0" title="Reset/invalidation · 0 · No explicit invalidation rules per slot type. Item 5.13 in I2A."><div class="hm-num">L3·10</div><div class="hm-score">0</div><div class="hm-name">Reset/inval.</div></div>
+      <div class="hm-cell s2" title="Clarification governance · 2 · requires_confirmation/approval in AgentState; _route_after_planner enforces. No user-facing clarification UI."><div class="hm-num">L3·11</div><div class="hm-score">2</div><div class="hm-name">Clarification gov.</div></div>
+      <div class="hm-cell s0" title="Conflict resolution · 0 · No declarative conflict rules when new turn contradicts state. Item 5.13 in I2A."><div class="hm-num">L3·12</div><div class="hm-score">0</div><div class="hm-name">Conflict resol.</div></div>
+      <div class="hm-cell s2" title="Contextual retrieval · 2 · Retrieval keyed on raw query; no active-state enrichment. Item 5.9 in I2A."><div class="hm-num">L3·13</div><div class="hm-score">2</div><div class="hm-name">Contextual retrieval</div></div>
+      <div class="hm-cell s1" title="Retrieval subordination · 1 · Results passed verbatim; no active-state filter. Item 5.9 in I2A."><div class="hm-num">L3·14</div><div class="hm-score">1</div><div class="hm-name">Retrieval subord.</div></div>
+      <div class="hm-cell s2" title="Multi-turn behavior · 2 · Works in practice; correctness is prompt-level, not code-level. Item 5.13 in I2A."><div class="hm-num">L3·15</div><div class="hm-score">2</div><div class="hm-name">Multi-turn behav.</div></div>
+      <div class="hm-cell s1" title="Memory vs prompting balance · 1 · Most multi-turn logic in prompts. ActiveAnalyticalState injects structured context but does not replace prompt rules."><div class="hm-num">L3·16</div><div class="hm-score">1</div><div class="hm-name">Mem vs prompting</div></div>
+      <div class="hm-cell s2" title="Complementary techniques · 2 · Sliding window only; no compaction, no summarization. Item 5.9 in I2A."><div class="hm-num">L3·17</div><div class="hm-score">2</div><div class="hm-name">Compl. techniques</div></div>
+      <div class="hm-cell s2" title="Single-turn vs multi-turn · 2 · Uniform code path; no explicit first-turn vs. continuation separation."><div class="hm-num">L3·18</div><div class="hm-score">2</div><div class="hm-name">Turn separation</div></div>
+      <div class="hm-cell s1" title="User interaction · 1 · ↑ from 0. GET /v1/sessions/{id}/state + /state/audit read-only. Mutations deferred to item 5.13."><div class="hm-num">L3·19</div><div class="hm-score">1</div><div class="hm-name">User interaction</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s3" title="Downstream integration · 3 · ↑ from 2. 5.11: planner receives FrozenActiveAnalyticalState via MemoryService; typed context injection."><div class="hm-num">L3·20</div><div class="hm-score">3</div><div class="hm-name">Downstream integ.</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s3" title="Coordination role · 3 · ↑ from 2. 5.10: MemoryCoordinator single-writer pattern with persist_to_db/load_from_db fail-open."><div class="hm-num">L3·21</div><div class="hm-score">3</div><div class="hm-name">Coord. role</div><div class="hm-arrow">↑</div></div>
+      <div class="hm-cell s3" title="Coordination integrity · 3 · ↑↑ from 1. 5.10+5.11: single-coordinator gate enforced by boundary lint in CI + pre-commit."><div class="hm-num">L3·22</div><div class="hm-score">3</div><div class="hm-name">Coord. integrity</div><div class="hm-arrow">↑↑</div></div>
+    </div>
+  </div>
+
+  <!-- Layer 4 -->
+  <div class="heatmap-group">
+    <div class="heatmap-group-title hg-l4">L4 · Ontology &amp; Semantic Knowledge (16) — mean 2.06</div>
+    <div class="heatmap-grid">
+      <!-- Scores: 3,1,1,3,1,0,0,1,2,1,4,4,1,4,4,3 — all unchanged from May 10 -->
+      <div class="hm-cell s3" title="Conceptual semantic layer · 3 · OrganizationalModelSpec typed tree consumed by all layers."><div class="hm-num">L4·1</div><div class="hm-score">3</div><div class="hm-name">Semantic layer</div></div>
+      <div class="hm-cell s1" title="Formal ontology · 1 · No OWL/RDF; item 2.7 in Más allá."><div class="hm-num">L4·2</div><div class="hm-score">1</div><div class="hm-name">Formal ontology</div></div>
+      <div class="hm-cell s1" title="Entity registry · 1 · Typed dataclasses, not a Registry pattern; item 10.8 in I3."><div class="hm-num">L4·3</div><div class="hm-score">1</div><div class="hm-name">Entity registry</div></div>
+      <div class="hm-cell s3" title="Relationship modelling · 3 · CausalRelationship typed; DAG built from spec; DAG cycle asserted (item 3.3)."><div class="hm-num">L4·4</div><div class="hm-score">3</div><div class="hm-name">Relationship model</div></div>
+      <div class="hm-cell s1" title="Metric registry · 1 · TargetVariable dataclass; not versioned; item 10.8 in I3."><div class="hm-num">L4·5</div><div class="hm-score">1</div><div class="hm-name">Metric registry</div></div>
+      <div class="hm-cell s0" title="Dimension/vocabulary registry · 0 · No VocabularyRegistry; items 5.9, 10.8."><div class="hm-num">L4·6</div><div class="hm-score">0</div><div class="hm-name">Vocab registry</div></div>
+      <div class="hm-cell s0" title="Alias/synonym handling · 0 · No synonyms in spec; item 5.9."><div class="hm-num">L4·7</div><div class="hm-score">0</div><div class="hm-name">Alias/synonym</div></div>
+      <div class="hm-cell s1" title="Ambiguity handling · 1 · Judge revision catches some; no IntentClassifier."><div class="hm-num">L4·8</div><div class="hm-score">1</div><div class="hm-name">Ambiguity handling</div></div>
+      <div class="hm-cell s2" title="Business-to-system mapping · 2 · Single-step LLM-driven; no MappingLayer; item 2.2 in I2A."><div class="hm-num">L4·9</div><div class="hm-score">2</div><div class="hm-name">Biz-to-sys map</div></div>
+      <div class="hm-cell s1" title="Physical data introspection · 1 · No real external data sources; items 2.1, 2.2 in I2A."><div class="hm-num">L4·10</div><div class="hm-score">1</div><div class="hm-name">Data introspect.</div></div>
+      <div class="hm-cell s4" title="Query interpretation · 4 · ToolSelection is the typed IR; strongest area of the semantic layer."><div class="hm-num">L4·11</div><div class="hm-score">4</div><div class="hm-name">Query interp.</div></div>
+      <div class="hm-cell s4" title="Runtime consumption · 4 · Spec consumed by every layer that should consume it."><div class="hm-num">L4·12</div><div class="hm-score">4</div><div class="hm-name">Runtime consump.</div></div>
+      <div class="hm-cell s1" title="Test coverage of semantic layer · 1 · Spec loader tests exist; no semantic goldens. Item 10.11 in I2A."><div class="hm-num">L4·13</div><div class="hm-score">1</div><div class="hm-name">Semantic tests</div></div>
+      <div class="hm-cell s4" title="Governance/versioning · 4 · Items 3.6 (spec semver) + 10.1 (prompt lifecycle) + 10.2 (variant promotion). Three artifact types with enforced lifecycle."><div class="hm-num">L4·14</div><div class="hm-score">4</div><div class="hm-name">Governance/version.</div></div>
+      <div class="hm-cell s4" title="Scalability across domains · 4 · Domain switching is config-level; prompt built dynamically from spec."><div class="hm-num">L4·15</div><div class="hm-score">4</div><div class="hm-name">Domain scalability</div></div>
+      <div class="hm-cell s3" title="Internal consistency · 3 · Spec is single source of truth; demand model formula is documentary, not asserted."><div class="hm-num">L4·16</div><div class="hm-score">3</div><div class="hm-name">Internal consist.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- Comparison Table -->
+<section>
+  <h2>Comparison with Previous Self-Audits</h2>
+  <p style="font-size:12px; color:var(--text3); margin-bottom:8px;">Four-point evolution. "May 10 (clean)" = scores before inline post-audit updates for 5.10, 5.11, 8.7.a+b. "May 8 (corrected)" = recomputed from actual dimension-score sums (May 8 stated means did not reconcile with their own tables).</p>
+  <table class="comp-table">
+    <thead>
+      <tr>
+        <th>Layer</th>
+        <th>May 6 (baseline)</th>
+        <th>May 8 (corrected)</th>
+        <th>May 10 (clean)</th>
+        <th>May 17 (this audit)</th>
+        <th>Δ May 10→17</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>L1 Codebase (28 dims)</strong></td>
+        <td class="unchanged">2.96</td>
+        <td class="unchanged">3.39</td>
+        <td class="unchanged">3.64</td>
+        <td class="highlight improved">3.75</td>
+        <td class="improved">+0.11 (3 dims ↑)</td>
+      </tr>
+      <tr>
+        <td><strong>L2 AI/Agent (20 dims)</strong></td>
+        <td class="unchanged">2.40</td>
+        <td class="unchanged">2.50</td>
+        <td class="unchanged">2.55</td>
+        <td class="highlight improved">3.05</td>
+        <td class="improved">+0.50 (5 dims ↑)</td>
+      </tr>
+      <tr>
+        <td><strong>L3 Memory (22 dims)</strong></td>
+        <td class="unchanged">1.55</td>
+        <td class="unchanged">1.14</td>
+        <td class="unchanged">1.18</td>
+        <td class="highlight improved">2.00</td>
+        <td class="improved">+0.82 (10 dims ↑)</td>
+      </tr>
+      <tr>
+        <td><strong>L4 Ontology (16 dims)</strong></td>
+        <td class="unchanged">2.31</td>
+        <td class="unchanged">2.00</td>
+        <td class="unchanged">2.06</td>
+        <td class="highlight unchanged">2.06</td>
+        <td class="unchanged">+0.00 (0 dims ↑)</td>
+      </tr>
+      <tr style="border-top: 2px solid var(--border);">
+        <td><strong>Overall (86 dims)</strong></td>
+        <td class="unchanged">2.55</td>
+        <td class="unchanged">2.35</td>
+        <td class="unchanged">2.47</td>
+        <td class="highlight improved">2.83</td>
+        <td class="improved">+0.36 (18 dims ↑)</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note-box" style="margin-top:12px;">
+    No dimension regressed across any of the four audits. The May 6→May 8 apparent L3 regression (1.55→1.14)
+    and L4 regression (2.31→2.00) are arithmetic corrections, not code regressions. The "May 6 (stated)"
+    means did not reconcile with that audit's own dimension-score tables. All four subsequent audits use
+    verified arithmetic: layer mean = sum of dim scores ÷ dim count.
+  </div>
+</section>
+
+<!-- Planned Gaps -->
+<section>
+  <h2>Planned Gaps 🟡</h2>
+  <p style="font-size:12px; color:var(--text3); margin-bottom:8px;">Capabilities absent from code but explicitly listed in inventory, roadmap, or ADRs. Sorted by iteration and leverage.</p>
+  <table class="gap-table">
+    <thead>
+      <tr>
+        <th>Layer · Dimension</th>
+        <th>Capability</th>
+        <th>Item</th>
+        <th>Iter.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Memory · dims 9, 10, 12, 19</td>
+        <td>User-correction mutations; slot inheritance; conflict resolution; user-facing state API</td>
+        <td>5.13</td>
+        <td><span class="iter-badge iter-i2a">I2A</span></td>
+      </tr>
+      <tr>
+        <td>AI · #11, #14 Retrieval + compaction</td>
+        <td>GroundedTokens guardrail; active-state enrichment; token-budget compaction</td>
+        <td>5.9</td>
+        <td><span class="iter-badge iter-i2a">I2A</span></td>
+      </tr>
+      <tr>
+        <td>AI · #8 Prompt gov. (shadow eval)</td>
+        <td>Eval-gated auto-promotion of prompt variants</td>
+        <td>10.3</td>
+        <td><span class="iter-badge iter-i2a">I2A</span></td>
+      </tr>
+      <tr>
+        <td>AI · #17 Cost control (partial)</td>
+        <td>Budget reservation; fallback-chain-by-budget; tenant quotas</td>
+        <td>8.7.c/d/e</td>
+        <td><span class="iter-badge iter-i2a">I2A</span></td>
+      </tr>
+      <tr>
+        <td>AI · #16 Testing / eval</td>
+        <td>Real-LLM golden eval harness with CI gate</td>
+        <td>10.11</td>
+        <td><span class="iter-badge iter-i2a">I2A</span> / <span class="iter-badge iter-i3">I3</span></td>
+      </tr>
+      <tr>
+        <td>Codebase · #4 Layer-deps lint</td>
+        <td>Comprehensive layer boundary enforcement (beyond memory)</td>
+        <td>11.1</td>
+        <td><span class="iter-badge iter-i2a">I2A</span></td>
+      </tr>
+      <tr>
+        <td>Codebase · #15, #28 Security + prod</td>
+        <td>Auth (JWT/API-key), RLS, rate limiting, encryption, audit log</td>
+        <td>7.1, 7.5–7.9</td>
+        <td><span class="iter-badge iter-i2b">I2B</span></td>
+      </tr>
+      <tr>
+        <td>AI · #14 Loop control</td>
+        <td>Recursion guard (LangGraph cycle detection)</td>
+        <td>5.12</td>
+        <td><span class="iter-badge iter-i3">I3</span></td>
+      </tr>
+      <tr>
+        <td>AI · #3, #19 Multi-agent</td>
+        <td>Capability Graph, per-peer budgets, handoff semantics</td>
+        <td>5.3.a/b, 8.7.e</td>
+        <td><span class="iter-badge iter-i3">I3</span></td>
+      </tr>
+      <tr>
+        <td>Ontology · #6, #7 Vocabulary</td>
+        <td>VocabularyRegistry + synonym fields</td>
+        <td>10.8, 5.9</td>
+        <td><span class="iter-badge iter-i2a">I2A</span> / <span class="iter-badge iter-i3">I3</span></td>
+      </tr>
+      <tr>
+        <td>Ontology · #2 Formal ontology</td>
+        <td>OWL/RDF ontology declaration</td>
+        <td>2.7</td>
+        <td><span class="iter-badge iter-mas">Más allá</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- Genuine Strengths -->
+<section>
+  <h2>Genuine Strengths 🟢</h2>
+  <div class="strength-list">
+    <div class="strength-item"><span class="strength-num">8.1</span><span class="strength-text">Single coherent architecture, end-to-end — no competing paradigms across 160 files</span></div>
+    <div class="strength-item"><span class="strength-num">8.2</span><span class="strength-text">Spec-driven design that is actually spec-driven (OrganizationalModelSpec consumed by every layer)</span></div>
+    <div class="strength-item"><span class="strength-num">8.3</span><span class="strength-text">Type discipline above the size class (TypedDict + Pydantic + Protocol + mypy --strict on agents/)</span></div>
+    <div class="strength-item"><span class="strength-num">8.4</span><span class="strength-text">Dual-backend pattern consistent across modules (Postgres primary, SQLite/FAISS fallback)</span></div>
+    <div class="strength-item"><span class="strength-num">8.5</span><span class="strength-text">Observability built in: per-run lineage covers tool, model, prompt_version, variant_label, cost_usd, judge_score</span></div>
+    <div class="strength-item"><span class="strength-num">8.6</span><span class="strength-text">Error handling discipline with explicit <code># noqa: BLE001</code> — no silent swallowing</span></div>
+    <div class="strength-item"><span class="strength-num">8.7</span><span class="strength-text">Active fix discipline visible in commit history — reverts committed, not force-pushed</span></div>
+    <div class="strength-item"><span class="strength-num">8.8</span><span class="strength-text">Documentation that matches the code (CLAUDE.md, README, roadmap, audit docs updated on every PR)</span></div>
+    <div class="strength-item"><span class="strength-num">8.9</span><span class="strength-text">Tests that test behavior, not mocks — goldens, integration, routing determinism, budget ceiling</span></div>
+    <div class="strength-item"><span class="strength-num">8.10</span><span class="strength-text">CI pipeline that earns trust: two-job (unit+lint+strict+boundary, integration with real Postgres)</span></div>
+    <div class="strength-item"><span class="strength-num">8.11</span><span class="strength-text">Dead-code at 0.0% across 160 Python files — streamlit_app.py is 22 lines of active glue</span></div>
+    <div class="strength-item"><span class="strength-num">8.12</span><span class="strength-text">ui/ package: pure render functions (no session_state in components.py), state in session.py, orchestration in app.py</span></div>
+    <div class="strength-item"><span class="strength-num">8.13</span><span class="strength-text">RunSink Protocol as ObjectBus-ready typed seam — when item 1.6 lands, sinks become bus subscribers with no interface change</span></div>
+    <div class="strength-item"><span class="strength-num">8.14</span><span class="strength-text">agents/runner.py: Directive-3 callable — single run_query() used by Streamlit, FastAPI, and future MCP</span></div>
+    <div class="strength-item">
+      <span class="strength-num">8.15<span class="strength-new">NEW</span></span>
+      <span class="strength-text">MemoryService Protocol + single-writer + boundary lint — correct seam design for a memory layer that can grow to distributed without callers noticing</span>
+    </div>
+    <div class="strength-item">
+      <span class="strength-num">8.16<span class="strength-new">NEW</span></span>
+      <span class="strength-text">Plan review discipline in CLAUDE.md — first application on PR #24 caught 4 concrete codebase-specific risks before any code was written, all of which materialised during implementation</span>
+    </div>
+    <div class="strength-item">
+      <span class="strength-num">8.17<span class="strength-new">NEW</span></span>
+      <span class="strength-text">Prompt A/B testing full stack: sha256-bucket routing → zero DB queries on hot path (lru_cache) → AgentState → RunRecord → agent_runs → dashboard visibility</span>
+    </div>
+    <div class="strength-item">
+      <span class="strength-num">8.18<span class="strength-new">NEW</span></span>
+      <span class="strength-text">mypy --strict on agents/ with 0 errors (8 files) — CI strict step + pre-commit hook; strict zone isolated via mypy-agents-strict.ini</span>
+    </div>
+  </div>
+</section>
+
+<!-- Remediation Plan -->
+<section>
+  <h2>Prioritized Remediation Plan</h2>
+  <div class="remed-section">
+    <div class="remed-tier tier-p0">
+      <div class="tier-label">P0 — No open items ✅</div>
+      <p style="font-size:13px; color:var(--text2);">Zero critical findings for the fourth consecutive sprint. No P0 work required.</p>
+    </div>
+    <div class="remed-tier tier-p1">
+      <div class="tier-label">P1 — Highest leverage (I2A)</div>
+      <ul class="remed-items">
+        <li><strong>⏱ 2–3 days · Item 5.13 (user-correction mutations).</strong> Implements propose_state_update/commit_state_update beyond v1 stubs. Adds confirm/correct/freeze APIs on POST /v1/sessions/{id}/state/apply. Lifts L3 dims 4, 9, 10, 12, 19 — +7 pts, highest single-item leverage in the backlog.</li>
+        <li><strong>⏱ 2 days · Item 5.9 (GroundedTokens + compaction).</strong> Retrieval-result validation against ActiveAnalyticalState; token-budget compaction before synthesizer. Lifts L2 dim 11 (2→3), L3 dims 7 (3→4) and 17 (2→3), L4 dims 6+7 (0→1 each).</li>
+        <li><strong>⏱ 1 day · Item 10.3 (eval-gated auto-promotion).</strong> Shadow evaluation harness: records judge scores per variant per session; gates champion promotion on configured threshold. Closes the last planned gap in L2 dim 8.</li>
+        <li><strong>⏱ 1 day · Items 8.7.c/d (budget reservation + fallback-chain).</strong> Per-tenant quota reservation; automatic model downgrade at budget threshold. Lifts L2 dim 17 toward 5.</li>
+      </ul>
+    </div>
+    <div class="remed-tier tier-p2">
+      <div class="tier-label">P2 — Tactical hygiene (compound interest)</div>
+      <ul class="remed-items">
+        <li><strong>Security baseline (items 7.5, 7.6).</strong> JWT/API-key auth + rate-limiting middleware on FastAPI. Lifts L1 dim 15 (3→4). Prerequisite for I2B hardening.</li>
+        <li><strong>OTel traces (items 8.2, 8.3).</strong> opentelemetry-sdk + instrument invoke_with_fallback + node entry/exit. Lifts L1 dim 21 (4→5). Requires run_id in contextvars first.</li>
+        <li><strong>Layer-deps lint expansion (item 11.1).</strong> Extend check_memory_boundary.py to all layer boundaries (agents→db direct, api→memory direct). Lifts L1 dim 5 (3→4).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div>
+    <strong>llull · Self-Audit · 2026-05-17</strong> · Commit <code>28c1c48</code> · Auditor: Claude Sonnet 4.6 (Anthropic)<br>
+    Methodology: llull self-audit v1.0 · 86 dimensions, 4 layers, 0-5 scale (no decimals per dim)<br>
+    Previous: <a href="2026-05-06_llull_self_audit.html">May 6 (baseline)</a> ·
+    <a href="2026-05-08_llull_self_audit.html">May 8 (delta #1)</a> ·
+    <a href="2026-05-10_llull_self_audit.html">May 10 (delta #2)</a>
+  </div>
+  <div style="text-align:right;">
+    To re-run: pass <code>docs/audit/llull_audit_prompt.md</code> to Claude Opus or equivalent,<br>
+    with repo path + governance docs. Next re-audit recommended after item 5.13 or 10.3 lands.<br>
+    Expected overall after I2A close-out: <strong>~3.00 / 5</strong>
+  </div>
+</footer>
+
+</body>
+</html>
