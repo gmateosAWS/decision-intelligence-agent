@@ -590,11 +590,11 @@
         <td>5.13</td>
         <td><span class="iter-badge iter-i2a">I2A</span></td>
       </tr>
-      <tr>
+      <tr style="opacity:0.55; text-decoration:line-through;">
         <td>AI · #11, #14 Retrieval + compaction</td>
-        <td>GroundedTokens guardrail; active-state enrichment; token-budget compaction</td>
+        <td>GroundedTokens guardrail; active-state enrichment; token-budget compaction &nbsp;✅ <em style="text-decoration:none; font-style:normal; font-size:11px; color:#22c55e;">(shipped 2026-05-17 — guardrail + aliases; compaction deferred)</em></td>
         <td>5.9</td>
-        <td><span class="iter-badge iter-i2a">I2A</span></td>
+        <td><span class="iter-badge iter-i2a" style="text-decoration:none;">I2A</span></td>
       </tr>
       <tr>
         <td>AI · #8 Prompt gov. (shadow eval)</td>
@@ -640,9 +640,9 @@
       </tr>
       <tr>
         <td>Ontology · #6, #7 Vocabulary</td>
-        <td>VocabularyRegistry + synonym fields</td>
-        <td>10.8, 5.9</td>
-        <td><span class="iter-badge iter-i2a">I2A</span> / <span class="iter-badge iter-i3">I3</span></td>
+        <td>VocabularyRegistry + synonym fields &nbsp;<span style="font-size:11px; color:#22c55e;">(5.9 ✅ aliases + guardrail shipped; full VocabularyRegistry admin API still pending 10.8)</span></td>
+        <td>10.8</td>
+        <td><span class="iter-badge iter-i3">I3</span></td>
       </tr>
       <tr>
         <td>Ontology · #2 Formal ontology</td>
@@ -703,7 +703,7 @@
       <div class="tier-label">P1 — Highest leverage (I2A)</div>
       <ul class="remed-items">
         <li><strong>⏱ 2–3 days · Item 5.13 (user-correction mutations).</strong> Implements propose_state_update/commit_state_update beyond v1 stubs. Adds confirm/correct/freeze APIs on POST /v1/sessions/{id}/state/apply. Lifts L3 dims 4, 9, 10, 12, 19 — +7 pts, highest single-item leverage in the backlog.</li>
-        <li><strong>⏱ 2 days · Item 5.9 (GroundedTokens + compaction).</strong> Retrieval-result validation against ActiveAnalyticalState; token-budget compaction before synthesizer. Lifts L2 dim 11 (2→3), L3 dims 7 (3→4) and 17 (2→3), L4 dims 6+7 (0→1 each).</li>
+        <li style="opacity:0.55; text-decoration:line-through;"><strong>⏱ 2 days · Item 5.9 (GroundedTokens + compaction).</strong> Retrieval-result validation against ActiveAnalyticalState; token-budget compaction before synthesizer. Lifts L2 dim 11 (2→3), L3 dims 7 (3→4) and 17 (2→3), L4 dims 6+7 (0→1 each). <span style="text-decoration:none;">✅ Shipped 2026-05-17 (PR #25). Guardrail ✓; compaction deferred to tech debt.</span></li>
         <li><strong>⏱ 1 day · Item 10.3 (eval-gated auto-promotion).</strong> Shadow evaluation harness: records judge scores per variant per session; gates champion promotion on configured threshold. Closes the last planned gap in L2 dim 8.</li>
         <li><strong>⏱ 1 day · Items 8.7.c/d (budget reservation + fallback-chain).</strong> Per-tenant quota reservation; automatic model downgrade at budget threshold. Lifts L2 dim 17 toward 5.</li>
       </ul>
