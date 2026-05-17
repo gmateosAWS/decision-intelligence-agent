@@ -125,13 +125,19 @@ def _build_few_shot_examples(spec: Any) -> str:
     )
 
 
-def _build_system_prompt() -> tuple[str, Optional[str]]:
+def _build_system_prompt(
+    session_id: Optional[str] = None,
+) -> tuple[str, Optional[str], Optional[str]]:
     """
     Build the rendered planner system prompt from the active spec.
 
-    Reads the template from the Prompt Registry (certified "planner" prompt)
-    and falls back to PLANNER_SYSTEM_TEMPLATE when the registry is unavailable.
-    Returns (rendered_prompt_str, version_or_None).
+    Reads the template from the Prompt Registry (certified "planner" prompt),
+    routing deterministically to a variant when A/B variants are active.
+    Falls back to PLANNER_SYSTEM_TEMPLATE when the registry is unavailable.
+    Returns (rendered_prompt_str, version_or_None, variant_label_or_None).
+
+    Template content and variant routing are cached in the registry layer;
+    the spec render is fast because get_spec() caches internally.
     """
     spec = get_spec()
     vars_desc = "\n".join(
@@ -140,31 +146,22 @@ def _build_system_prompt() -> tuple[str, Optional[str]]:
         for v in spec.decision_variables
     )
     examples = _build_few_shot_examples(spec)
-    template, version = get_prompt_template("planner", PLANNER_SYSTEM_TEMPLATE)
+    template, version, variant_label = get_prompt_template(
+        "planner", PLANNER_SYSTEM_TEMPLATE, session_id=session_id
+    )
     rendered = template.format(
         domain_name=spec.domain_name,
         vars_description=vars_desc,
         examples=examples,
     )
-    return rendered, version
-
-
-_SYSTEM_PROMPT: Optional[str] = None
-_SYSTEM_PROMPT_VERSION: Optional[str] = None
-
-
-def _get_system_prompt() -> tuple[str, Optional[str]]:
-    """Return (rendered_prompt, version) — cached after first call."""
-    global _SYSTEM_PROMPT, _SYSTEM_PROMPT_VERSION
-    if _SYSTEM_PROMPT is None:
-        _SYSTEM_PROMPT, _SYSTEM_PROMPT_VERSION = _build_system_prompt()
-    return _SYSTEM_PROMPT, _SYSTEM_PROMPT_VERSION
+    return rendered, version, variant_label
 
 
 def planner_node(
     state: AgentState,
     tracker: Optional["BudgetTracker"] = None,
     active_state: Optional[Any] = None,
+    session_id: Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Selects the best tool for the current query and extracts any
@@ -174,13 +171,16 @@ def planner_node(
     (typed as Any to avoid importing memory internals here — the boundary lint
     enforces that planner.py stays on the facade side).
 
-    Returns: {action, reasoning, params, planner_prompt_version, ...}
+    session_id: UUID string used for deterministic A/B variant routing (item 10.2).
+
+    Returns: {action, reasoning, params, planner_prompt_version,
+    planner_variant_label, ...}
     """
     _init_planner_llms()
     query = state["query"]
     history: List[Dict[str, str]] = state.get("history") or []
 
-    system_prompt, prompt_version = _get_system_prompt()
+    system_prompt, prompt_version, variant_label = _build_system_prompt(session_id)
     messages = [{"role": "system", "content": system_prompt}]
 
     # Inject typed analytical state context when available (item 5.11).
@@ -252,6 +252,7 @@ def planner_node(
             "requires_approval": False,
             "confirmation_message": None,
             "planner_prompt_version": prompt_version,
+            "planner_variant_label": variant_label,
         }
 
         if policy_level == AutonomyLevel.HUMAN_CONFIRMS:
@@ -281,4 +282,5 @@ def planner_node(
             "requires_approval": False,
             "confirmation_message": None,
             "planner_prompt_version": prompt_version,
+            "planner_variant_label": variant_label,
         }

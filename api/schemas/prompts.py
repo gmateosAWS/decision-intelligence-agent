@@ -49,3 +49,43 @@ class PromptDeprecateRequest(BaseModel):
     replacement_id: Optional[str] = Field(
         None, description="ID of the prompt that replaces this one"
     )
+
+
+# ---------------------------------------------------------------------------
+# Variant schemas (item 10.2)
+# ---------------------------------------------------------------------------
+
+
+class PromptVariantResponse(BaseModel):
+    id: str
+    stage: str
+    prompt_id: str
+    version: str
+    variant_label: str
+    status: str
+    rollout_percentage: int
+    created_at: datetime
+    changed_at: datetime
+    owner: str = ""
+    notes: str = ""
+
+
+class PromptVariantListResponse(BaseModel):
+    total: int
+    variants: List[PromptVariantResponse]
+
+
+class StartRolloutRequest(BaseModel):
+    stage: str = Field(
+        ..., description="Agent stage: 'planner', 'synthesizer', 'judge'"
+    )
+    prompt_id: str = Field(..., description="Prompt registry id (e.g. 'planner')")
+    version: str = Field(..., description="Semver of the CERTIFIED prompt to test")
+    variant_label: str = Field(..., description="Human-readable label: 'v2-concise'")
+    rollout_percentage: int = Field(..., ge=1, le=99, description="% of traffic [1–99]")
+    owner: str = ""
+    notes: str = ""
+
+
+class AdjustRolloutRequest(BaseModel):
+    rollout_percentage: int = Field(..., ge=0, le=99, description="New % [0–99]")

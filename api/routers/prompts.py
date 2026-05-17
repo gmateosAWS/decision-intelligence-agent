@@ -19,10 +19,14 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from api.schemas.prompts import (
+    AdjustRolloutRequest,
     PromptCreateRequest,
     PromptDeprecateRequest,
     PromptListResponse,
     PromptResponse,
+    PromptVariantListResponse,
+    PromptVariantResponse,
+    StartRolloutRequest,
 )
 
 router = APIRouter(tags=["prompts"])
@@ -153,3 +157,138 @@ def deprecate_prompt(
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     return _to_response(record)
+
+
+# ---------------------------------------------------------------------------
+# Variant endpoints (item 10.2)
+# ---------------------------------------------------------------------------
+
+
+def _to_variant_response(variant) -> PromptVariantResponse:
+    return PromptVariantResponse(
+        id=variant.id,
+        stage=variant.stage,
+        prompt_id=variant.prompt_id,
+        version=variant.version,
+        variant_label=variant.variant_label,
+        status=(
+            variant.status.value if hasattr(variant.status, "value") else variant.status
+        ),
+        rollout_percentage=variant.rollout_percentage,
+        created_at=variant.created_at,
+        changed_at=variant.changed_at,
+        owner=variant.owner,
+        notes=variant.notes,
+    )
+
+
+@router.get(
+    "/prompts/variants",
+    response_model=PromptVariantListResponse,
+    summary="List all prompt variants",
+)
+def list_variants(stage: Optional[str] = None):
+    from prompts.registry import list_variants as _list
+
+    variants = _list(stage=stage)
+    return PromptVariantListResponse(
+        total=len(variants), variants=[_to_variant_response(v) for v in variants]
+    )
+
+
+@router.get(
+    "/prompts/variants/{stage}/{variant_label}",
+    response_model=PromptVariantResponse,
+    summary="Get a specific variant",
+)
+def get_variant(stage: str, variant_label: str):
+    from prompts.registry import get_variant as _get
+
+    variant = _get(variant_label=variant_label, stage=stage)
+    if variant is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Variant '{variant_label}' not found for stage '{stage}'.",
+        )
+    return _to_variant_response(variant)
+
+
+@router.post(
+    "/prompts/variants",
+    response_model=PromptVariantResponse,
+    status_code=201,
+    summary="Start an A/B rollout for a prompt variant",
+)
+def start_rollout(body: StartRolloutRequest):
+    from prompts.registry import start_rollout as _start
+
+    try:
+        variant = _start(
+            stage=body.stage,
+            prompt_id=body.prompt_id,
+            version=body.version,
+            variant_label=body.variant_label,
+            rollout_percentage=body.rollout_percentage,
+            owner=body.owner,
+            notes=body.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return _to_variant_response(variant)
+
+
+@router.put(
+    "/prompts/variants/{stage}/{variant_label}/adjust",
+    response_model=PromptVariantResponse,
+    summary="Adjust rollout percentage for an existing CANDIDATE variant",
+)
+def adjust_rollout(stage: str, variant_label: str, body: AdjustRolloutRequest):
+    from prompts.registry import adjust_rollout as _adjust
+
+    try:
+        variant = _adjust(
+            stage=stage,
+            variant_label=variant_label,
+            rollout_percentage=body.rollout_percentage,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return _to_variant_response(variant)
+
+
+@router.put(
+    "/prompts/variants/{stage}/{variant_label}/promote",
+    response_model=PromptVariantResponse,
+    summary="Promote a CANDIDATE variant to CHAMPION",
+)
+def promote_to_champion(stage: str, variant_label: str):
+    from prompts.registry import promote_to_champion as _promote
+
+    try:
+        variant = _promote(stage=stage, variant_label=variant_label)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return _to_variant_response(variant)
+
+
+@router.put(
+    "/prompts/variants/{stage}/{variant_label}/deprecate",
+    response_model=PromptVariantResponse,
+    summary="Deprecate a CANDIDATE or CHAMPION variant",
+)
+def deprecate_variant(stage: str, variant_label: str):
+    from prompts.registry import deprecate_variant as _deprecate_v
+
+    try:
+        variant = _deprecate_v(stage=stage, variant_label=variant_label)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return _to_variant_response(variant)

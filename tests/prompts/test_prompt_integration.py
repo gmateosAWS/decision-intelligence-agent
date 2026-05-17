@@ -32,11 +32,9 @@ def _make_certified(stage: str, content: str, version: str = "2.0.0") -> PromptR
 
 
 def _reset_planner_cache():
-    """Reset module-level prompt cache so tests don't bleed into each other."""
+    """Reset module-level LLM cache so tests don't bleed into each other."""
     import agents.planner as planner_mod
 
-    planner_mod._SYSTEM_PROMPT = None
-    planner_mod._SYSTEM_PROMPT_VERSION = None
     planner_mod._llm = None
     planner_mod._llm_structured = None
     planner_mod._fallback_llm_structured = None
@@ -90,9 +88,9 @@ def test_planner_uses_registry_prompt_when_available(monkeypatch):
         spec.autonomy_policy.get_level.return_value = MagicMock(value="auto")
         mock_spec.return_value = spec
 
-        from agents.planner import _get_system_prompt
+        from agents.planner import _build_system_prompt
 
-        prompt, version = _get_system_prompt()
+        prompt, version, variant_label = _build_system_prompt()
 
     assert "REGISTRY PLANNER PROMPT" in prompt
     assert "TestDomain" in prompt
@@ -118,9 +116,9 @@ def test_planner_falls_back_to_inline_when_registry_empty(monkeypatch):
         ]
         mock_spec.return_value = spec
 
-        from agents.planner import _get_system_prompt
+        from agents.planner import _build_system_prompt
 
-        prompt, version = _get_system_prompt()
+        prompt, version, variant_label = _build_system_prompt()
 
     assert "RetailDomain" in prompt
     assert "OPTIMIZATION" in prompt

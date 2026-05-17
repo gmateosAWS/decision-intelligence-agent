@@ -142,6 +142,11 @@ class AgentRun(Base):
     synthesizer_prompt_version = Column(Text)
     judge_prompt_version = Column(Text)
 
+    # A/B variant labels (item 10.2) — which variant was served for each stage
+    planner_variant_label = Column(Text)
+    synthesizer_variant_label = Column(Text)
+    judge_variant_label = Column(Text)
+
     # Cost tracking (item 8.7.a+b)
     total_input_tokens = Column(Integer, nullable=False, default=0)
     total_output_tokens = Column(Integer, nullable=False, default=0)
@@ -237,6 +242,40 @@ class Prompt(Base):
 
     def __repr__(self) -> str:
         return f"<Prompt {self.id}@{self.version} status={self.status}>"
+
+
+class PromptVariantRow(Base):
+    """One row per A/B variant entry for a prompt stage (item 10.2)."""
+
+    __tablename__ = "prompt_variants"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    stage = Column(Text, nullable=False)
+    prompt_id = Column(Text, nullable=False)
+    version = Column(Text, nullable=False)
+    variant_label = Column(Text, nullable=False)
+    status = Column(
+        Text, nullable=False, default="draft"
+    )  # draft/candidate/champion/deprecated
+    rollout_percentage = Column(Integer, nullable=False, default=0)
+    created_at = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    changed_at = Column(TIMESTAMPTZ, nullable=False, server_default=func.now())
+    owner = Column(Text, nullable=False, default="")
+    notes = Column(Text, nullable=False, default="")
+
+    __table_args__ = (
+        __import__("sqlalchemy").UniqueConstraint("stage", "variant_label"),
+        __import__("sqlalchemy").Index("idx_prompt_variants_stage", "stage"),
+        __import__("sqlalchemy").Index(
+            "idx_prompt_variants_stage_status", "stage", "status"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<PromptVariantRow stage={self.stage} label={self.variant_label}"
+            f" status={self.status} rollout={self.rollout_percentage}%>"
+        )
 
 
 def _build_knowledge_document_class() -> type:

@@ -16,10 +16,17 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import List, Optional, Tuple, TypedDict
 
-from prompts.models import PromptRecord, PromptStatus
+from prompts.models import (
+    PromptRecord,
+    PromptStatus,
+    PromptVariant,
+    PromptVariantStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +70,31 @@ def _get_session_and_model():
     from db.models import Prompt
 
     return get_session, Prompt
+
+
+def _get_variant_model():
+    """Return (get_session, PromptVariantRow) or raise when DB unavailable."""
+    from db.engine import get_session
+    from db.models import PromptVariantRow
+
+    return get_session, PromptVariantRow
+
+
+def _row_to_variant(row) -> PromptVariant:
+    """Convert a PromptVariantRow ORM row to a PromptVariant Pydantic model."""
+    return PromptVariant(
+        id=str(row.id),
+        stage=str(row.stage),
+        prompt_id=str(row.prompt_id),
+        version=str(row.version),
+        variant_label=str(row.variant_label),
+        status=PromptVariantStatus(str(row.status)),
+        rollout_percentage=int(row.rollout_percentage),
+        created_at=row.created_at,
+        changed_at=row.changed_at,
+        owner=str(row.owner or ""),
+        notes=str(row.notes or ""),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +266,271 @@ def deprecate_prompt(
 
 
 # ---------------------------------------------------------------------------
+# Variant CRUD (item 10.2)
+# ---------------------------------------------------------------------------
+
+
+def list_variants(stage: Optional[str] = None) -> List[PromptVariant]:
+    """List all variant rows, optionally filtered by stage. Returns [] on error."""
+    if not os.getenv("DATABASE_URL", ""):
+        return []
+    try:
+        get_session, PromptVariantRow = _get_variant_model()
+        with get_session() as session:
+            q = session.query(PromptVariantRow)
+            if stage is not None:
+                q = q.filter_by(stage=stage)
+            rows = q.order_by(PromptVariantRow.created_at.asc()).all()
+            return [_row_to_variant(r) for r in rows]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("list_variants failed: %s", exc)
+        return []
+
+
+def get_variant(variant_label: str, stage: str) -> Optional[PromptVariant]:
+    """Return a specific variant by (stage, variant_label), or None."""
+    if not os.getenv("DATABASE_URL", ""):
+        return None
+    try:
+        get_session, PromptVariantRow = _get_variant_model()
+        with get_session() as session:
+            row = (
+                session.query(PromptVariantRow)
+                .filter_by(stage=stage, variant_label=variant_label)
+                .first()
+            )
+            return _row_to_variant(row) if row else None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("get_variant failed (%s/%s): %s", stage, variant_label, exc)
+        return None
+
+
+def start_rollout(
+    stage: str,
+    prompt_id: str,
+    version: str,
+    variant_label: str,
+    rollout_percentage: int,
+    owner: str = "",
+    notes: str = "",
+) -> PromptVariant:
+    """
+    Register a new CANDIDATE variant in traffic.
+
+    Raises ValueError when:
+      - (stage, variant_label) already exists
+      - rollout_percentage is out of [1, 99]
+      - the referenced (prompt_id, version) is not CERTIFIED
+      - adding this candidate would exceed 100% total candidate traffic
+    """
+    if not 1 <= rollout_percentage <= 99:
+        raise ValueError(
+            f"rollout_percentage must be 1–99 for a CANDIDATE;"
+            f" got {rollout_percentage}."
+        )
+    prompt_record = get_prompt(prompt_id, version)
+    if prompt_record is None:
+        raise ValueError(f"Prompt '{prompt_id}@{version}' not found.")
+    if prompt_record.status != PromptStatus.CERTIFIED:
+        raise ValueError(
+            f"Only CERTIFIED prompts can be registered as variants;"
+            f" '{prompt_id}@{version}' is {prompt_record.status.value}."
+        )
+
+    get_session, PromptVariantRow = _get_variant_model()
+    now = _now()
+    with get_session() as session:
+        existing = (
+            session.query(PromptVariantRow)
+            .filter_by(stage=stage, variant_label=variant_label)
+            .first()
+        )
+        if existing is not None:
+            raise ValueError(
+                f"Variant '{variant_label}' already exists for stage '{stage}'."
+            )
+
+        # Validate total candidate traffic doesn't exceed 100%
+        current_candidates = (
+            session.query(PromptVariantRow)
+            .filter_by(stage=stage, status=PromptVariantStatus.CANDIDATE.value)
+            .all()
+        )
+        total_pct = sum(int(r.rollout_percentage) for r in current_candidates)
+        if total_pct + rollout_percentage > 100:
+            raise ValueError(
+                f"Total candidate rollout for stage '{stage}' would exceed 100%:"
+                f" current={total_pct}%, new={rollout_percentage}%."
+            )
+
+        row = PromptVariantRow(
+            id=uuid.uuid4(),
+            stage=stage,
+            prompt_id=prompt_id,
+            version=version,
+            variant_label=variant_label,
+            status=PromptVariantStatus.CANDIDATE.value,
+            rollout_percentage=rollout_percentage,
+            created_at=now,
+            changed_at=now,
+            owner=owner,
+            notes=notes,
+        )
+        session.add(row)
+
+    from prompts.routing import invalidate_variant_cache
+
+    invalidate_variant_cache()
+    result = get_variant(variant_label, stage)
+    if result is None:
+        raise RuntimeError("start_rollout: failed to retrieve newly created variant.")
+    return result
+
+
+def adjust_rollout(
+    stage: str, variant_label: str, rollout_percentage: int
+) -> PromptVariant:
+    """
+    Adjust the traffic percentage of an existing CANDIDATE variant.
+
+    Raises ValueError when:
+      - variant not found or not in CANDIDATE status
+      - new total candidate traffic would exceed 100%
+    """
+    if not 0 <= rollout_percentage <= 99:
+        raise ValueError(
+            f"rollout_percentage must be 0–99 for a CANDIDATE;"
+            f" got {rollout_percentage}."
+        )
+    get_session, PromptVariantRow = _get_variant_model()
+    with get_session() as session:
+        row = (
+            session.query(PromptVariantRow)
+            .filter_by(stage=stage, variant_label=variant_label)
+            .first()
+        )
+        if row is None:
+            raise ValueError(
+                f"Variant '{variant_label}' not found for stage '{stage}'."
+            )
+        if str(row.status) != PromptVariantStatus.CANDIDATE.value:
+            raise ValueError(
+                f"Can only adjust CANDIDATE variants;"
+                f" '{variant_label}' is {row.status}."
+            )
+
+        other_candidates = (
+            session.query(PromptVariantRow)
+            .filter(
+                PromptVariantRow.stage == stage,
+                PromptVariantRow.status == PromptVariantStatus.CANDIDATE.value,
+                PromptVariantRow.variant_label != variant_label,
+            )
+            .all()
+        )
+        total_other = sum(int(r.rollout_percentage) for r in other_candidates)
+        if total_other + rollout_percentage > 100:
+            raise ValueError(
+                f"Adjusting '{variant_label}' to {rollout_percentage}% would exceed"
+                f" 100% total candidate traffic (others={total_other}%)."
+            )
+
+        row.rollout_percentage = rollout_percentage
+        row.changed_at = _now()
+
+    from prompts.routing import invalidate_variant_cache
+
+    invalidate_variant_cache()
+    result = get_variant(variant_label, stage)
+    if result is None:
+        raise RuntimeError("adjust_rollout: failed to retrieve updated variant.")
+    return result
+
+
+def promote_to_champion(stage: str, variant_label: str) -> PromptVariant:
+    """
+    Promote a CANDIDATE to CHAMPION.
+
+    The previous CHAMPION is DEPRECATED. The promoted variant is set to
+    rollout_percentage=100. All other CANDIDATE variants are left unchanged
+    (operators should deprecate them separately if the test is over).
+
+    Raises ValueError when variant not found or not in CANDIDATE status.
+    """
+    get_session, PromptVariantRow = _get_variant_model()
+    with get_session() as session:
+        target = (
+            session.query(PromptVariantRow)
+            .filter_by(stage=stage, variant_label=variant_label)
+            .first()
+        )
+        if target is None:
+            raise ValueError(
+                f"Variant '{variant_label}' not found for stage '{stage}'."
+            )
+        if str(target.status) != PromptVariantStatus.CANDIDATE.value:
+            raise ValueError(
+                f"Only CANDIDATE variants can be promoted to CHAMPION;"
+                f" '{variant_label}' is {target.status}."
+            )
+
+        # Deprecate existing champion
+        old_champion = (
+            session.query(PromptVariantRow)
+            .filter_by(stage=stage, status=PromptVariantStatus.CHAMPION.value)
+            .first()
+        )
+        if old_champion is not None:
+            old_champion.status = PromptVariantStatus.DEPRECATED.value
+            old_champion.changed_at = _now()
+
+        target.status = PromptVariantStatus.CHAMPION.value
+        target.rollout_percentage = 100
+        target.changed_at = _now()
+
+    from prompts.routing import invalidate_variant_cache
+
+    invalidate_variant_cache()
+    result = get_variant(variant_label, stage)
+    if result is None:
+        raise RuntimeError("promote_to_champion: failed to retrieve updated variant.")
+    return result
+
+
+def deprecate_variant(stage: str, variant_label: str) -> PromptVariant:
+    """
+    Deprecate a CANDIDATE or CHAMPION variant (sets rollout to 0).
+
+    If the deprecated variant was the CHAMPION, callers should create a new
+    CHAMPION immediately or all traffic will fall back to the certified prompt.
+
+    Raises ValueError when variant not found.
+    """
+    get_session, PromptVariantRow = _get_variant_model()
+    with get_session() as session:
+        row = (
+            session.query(PromptVariantRow)
+            .filter_by(stage=stage, variant_label=variant_label)
+            .first()
+        )
+        if row is None:
+            raise ValueError(
+                f"Variant '{variant_label}' not found for stage '{stage}'."
+            )
+        row.status = PromptVariantStatus.DEPRECATED.value
+        row.rollout_percentage = 0
+        row.changed_at = _now()
+
+    from prompts.routing import invalidate_variant_cache
+
+    invalidate_variant_cache()
+    result = get_variant(variant_label, stage)
+    if result is None:
+        raise RuntimeError("deprecate_variant: failed to retrieve updated variant.")
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Seed from code
 # ---------------------------------------------------------------------------
 
@@ -300,6 +597,18 @@ JUDGE_REVISION_TEMPLATE = (
 )
 
 
+# ---------------------------------------------------------------------------
+# Prompt content cache (immutable by (prompt_id, version) — never invalidated)
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=256)
+def _get_cached_prompt_content(prompt_id: str, version: str) -> Optional[str]:
+    """Return prompt content for (prompt_id, version). Content is immutable."""
+    record = get_prompt(prompt_id, version)
+    return record.content if record else None
+
+
 class _SeedEntry(TypedDict):
     prompt_id: str
     stage: str
@@ -347,7 +656,8 @@ def seed_prompts_from_code() -> List[PromptRecord]:
     Seed the four inline prompts as v1.0.0 certified. Idempotent.
 
     If a certified prompt for a stage already exists, it is left unchanged.
-    Returns the list of PromptRecords that are now certified (seeded or pre-existing).
+    Also ensures a CHAMPION variant exists for every certified prompt
+    (creates one if absent). Returns the list of certified PromptRecords.
     """
     if not os.getenv("DATABASE_URL", ""):
         return []
@@ -359,26 +669,67 @@ def seed_prompts_from_code() -> List[PromptRecord]:
 
         existing = get_certified_prompt(stage)
         if existing is not None:
-            result.append(existing)
-            continue
+            certified = existing
+        else:
+            try:
+                create_prompt(
+                    prompt_id=pid,
+                    stage=stage,
+                    content=spec["content"],
+                    version="1.0.0",
+                    variables=spec["variables"],
+                    description=spec["description"],
+                    owner="system",
+                )
+                certified = certify_prompt(pid, "1.0.0")
+                logger.info("Prompt seeded and certified: %s@1.0.0", pid)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Failed to seed prompt '%s': %s", pid, exc)
+                continue
 
-        try:
-            create_prompt(
-                prompt_id=pid,
-                stage=stage,
-                content=spec["content"],
-                version="1.0.0",
-                variables=spec["variables"],
-                description=spec["description"],
-                owner="system",
-            )
-            certified = certify_prompt(pid, "1.0.0")
-            result.append(certified)
-            logger.info("Prompt seeded and certified: %s@1.0.0", pid)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Failed to seed prompt '%s': %s", pid, exc)
+        result.append(certified)
+        _ensure_champion_variant(certified)
 
     return result
+
+
+def _ensure_champion_variant(record: PromptRecord) -> None:
+    """Create a CHAMPION variant for *record* if none exists yet. Idempotent."""
+    try:
+        get_session, PromptVariantRow = _get_variant_model()
+        with get_session() as session:
+            champion = (
+                session.query(PromptVariantRow)
+                .filter_by(
+                    stage=record.stage, status=PromptVariantStatus.CHAMPION.value
+                )
+                .first()
+            )
+            if champion is not None:
+                return  # already has a champion
+            label = f"{record.id}-v{record.version.replace('.', '')}-champion"
+            row = PromptVariantRow(
+                id=uuid.uuid4(),
+                stage=record.stage,
+                prompt_id=record.id,
+                version=record.version,
+                variant_label=label,
+                status=PromptVariantStatus.CHAMPION.value,
+                rollout_percentage=100,
+                created_at=_now(),
+                changed_at=_now(),
+                owner="system",
+                notes="Auto-created by seed_prompts_from_code()",
+            )
+            session.add(row)
+        from prompts.routing import invalidate_variant_cache
+
+        invalidate_variant_cache()
+        logger.info("Champion variant seeded for stage '%s': %s", record.stage, label)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "Failed to seed champion variant for '%s': %s", record.stage, exc
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -386,17 +737,38 @@ def seed_prompts_from_code() -> List[PromptRecord]:
 # ---------------------------------------------------------------------------
 
 
-def get_prompt_template(stage: str, fallback: str) -> Tuple[str, Optional[str]]:
+def get_prompt_template(
+    stage: str,
+    fallback: str,
+    session_id: Optional[str] = None,
+) -> Tuple[str, Optional[str], Optional[str]]:
     """
-    Return ``(template_string, version)`` for *stage*.
+    Return ``(template_string, version, variant_label)`` for *stage*.
 
-    Tries the registry first (certified prompt for the stage).
-    Falls back to *fallback* when the registry is unavailable, empty,
-    or raises an exception. In fallback mode version is None.
+    Resolution order:
+    1. If variant routing is active (prompt_variants table has entries for stage),
+       select a variant deterministically from session_id and return its content.
+       Both the routing decision and the prompt content are cached; the routing
+       cache is cleared by variant mutations (start_rollout, adjust_rollout, etc.)
+       so that operator changes take effect on the next request.
+    2. If no variants exist, fall back to the latest CERTIFIED prompt.
+    3. If the registry is unavailable or empty, return (fallback, None, None).
 
-    This is the primary entry point for agent modules.
+    Caching guarantees zero DB queries per call after the first for a given
+    (stage, session_id) combination until a routing mutation clears the cache.
     """
+    from prompts.routing import select_variant
+
+    variant = select_variant(stage, session_id)
+    if variant is not None:
+        content = _get_cached_prompt_content(variant.prompt_id, variant.version)
+        if content is not None:
+            return content, variant.version, variant.variant_label
+        # Content fetch failed — fall through to certified-prompt path
+
     record = get_certified_prompt(stage)
     if record is not None:
-        return record.content, record.version
-    return fallback, None
+        # Cache content so repeated calls don't re-query
+        _get_cached_prompt_content(record.id, record.version)
+        return record.content, record.version, None
+    return fallback, None, None

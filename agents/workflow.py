@@ -101,9 +101,15 @@ def planner_node(
         except Exception:  # noqa: BLE001
             pass
 
+    session_id_str = _session_id_as_str(config)
     t0 = time.perf_counter()
     result: dict[str, Any] = _sanitize_for_state(
-        _planner_node_impl(state, tracker=tracker, active_state=active_state)
+        _planner_node_impl(
+            state,
+            tracker=tracker,
+            active_state=active_state,
+            session_id=session_id_str,
+        )
     )
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
@@ -113,6 +119,7 @@ def planner_node(
             latency_ms=elapsed_ms,
             model=_PLANNER_MODEL,
             prompt_version=result.get("planner_prompt_version"),
+            variant_label=result.get("planner_variant_label"),
         )
     # Record tool selection in analytical state — fail-open (item 5.11).
     if memory is not None and session_id is not None:
@@ -202,9 +209,10 @@ def synthesizer_node(
     language = state.get("language", "en")
     raw = _sanitize_for_state(state.get("raw_result") or {})
 
+    session_id_str = _session_id_as_str(config)
     raw_text = "\n".join(f"  {k}: {v}" for k, v in raw.items())
-    synth_template, synth_version = get_prompt_template(
-        "synthesizer", SYNTHESIZER_SYSTEM_TEMPLATE
+    synth_template, synth_version, synth_variant_label = get_prompt_template(
+        "synthesizer", SYNTHESIZER_SYSTEM_TEMPLATE, session_id=session_id_str
     )
     messages = [
         {
@@ -250,9 +258,14 @@ def synthesizer_node(
             latency_ms=elapsed_ms,
             model=_SYNTHESIZER_MODEL,
             prompt_version=synth_version,
+            variant_label=synth_variant_label,
         )
 
-    raw = {"answer": answer, "synthesizer_prompt_version": synth_version}
+    raw = {
+        "answer": answer,
+        "synthesizer_prompt_version": synth_version,
+        "synthesizer_variant_label": synth_variant_label,
+    }
     sanitized: dict[str, Any] = _sanitize_for_state(raw)
     return sanitized
 
@@ -378,3 +391,11 @@ def _get_session_id(config: Optional[RunnableConfig]) -> Any:
         return _uuid.UUID(raw)
     except (ValueError, AttributeError):
         return None
+
+
+def _session_id_as_str(config: Optional[RunnableConfig]) -> Optional[str]:
+    """Return the session thread_id as a plain string for variant routing."""
+    if config is None:
+        return None
+    raw = config.get("configurable", {}).get("thread_id")
+    return str(raw) if raw else None

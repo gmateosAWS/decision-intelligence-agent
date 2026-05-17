@@ -117,6 +117,11 @@ class RunRecord:
     synthesizer_prompt_version: Optional[str] = None
     judge_prompt_version: Optional[str] = None
 
+    # A/B variant labels (item 10.2) — None when no variants are active
+    planner_variant_label: Optional[str] = None
+    synthesizer_variant_label: Optional[str] = None
+    judge_variant_label: Optional[str] = None
+
     # Cost tracking (item 8.7.a+b)
     total_input_tokens: int = 0
     total_output_tokens: int = 0
@@ -211,6 +216,7 @@ class AgentObserver:
         latency_ms: float,
         model: Optional[str] = None,
         prompt_version: Optional[str] = None,
+        variant_label: Optional[str] = None,
     ) -> None:
         """Record the planner's tool selection."""
         if self._run:
@@ -219,6 +225,7 @@ class AgentObserver:
             self._run.planner_latency_ms = latency_ms
             self._run.planner_model = model
             self._run.planner_prompt_version = prompt_version
+            self._run.planner_variant_label = variant_label
         self._logger.info(
             "  PLANNER     action=%-14s  latency=%6.0f ms  reason=%s",
             action,
@@ -268,6 +275,7 @@ class AgentObserver:
         latency_ms: float,
         model: Optional[str] = None,
         prompt_version: Optional[str] = None,
+        variant_label: Optional[str] = None,
     ) -> None:
         """Record the synthesizer's output."""
         if self._run:
@@ -275,6 +283,7 @@ class AgentObserver:
             self._run.answer_length = len(answer)
             self._run.synthesizer_model = model
             self._run.synthesizer_prompt_version = prompt_version
+            self._run.synthesizer_variant_label = variant_label
         self._logger.info(
             "  SYNTHESIZER                       latency=%6.0f ms  answer_chars=%d",
             latency_ms,
@@ -292,6 +301,7 @@ class AgentObserver:
         error: Optional[str] = None,
         model: Optional[str] = None,
         prompt_version: Optional[str] = None,
+        variant_label: Optional[str] = None,
     ) -> None:
         """Record online-judge evaluation and optional revision."""
         if self._run:
@@ -302,6 +312,7 @@ class AgentObserver:
             self._run.judge_feedback = feedback
             self._run.judge_model = model
             self._run.judge_prompt_version = prompt_version
+            self._run.judge_variant_label = variant_label
             if final_answer is not None:
                 self._run.answer_length = len(final_answer)
             if error and self._run.error is None:

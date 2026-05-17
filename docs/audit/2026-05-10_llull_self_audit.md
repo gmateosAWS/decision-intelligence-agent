@@ -27,7 +27,7 @@
 
 ## 1. Executive Summary
 
-**Overall maturity score (dimension-weighted across 86 dimensions)**: **2.52 / 5** *(updated 2026-05-12 with items 8.7.a+b)*
+**Overall maturity score (dimension-weighted across 86 dimensions)**: **2.52 / 5** *(updated 2026-05-12 with items 8.7.a+b; item 10.2 A/B testing completed 2026-05-17 — L2 dim 8 partial advance)*
 
 **Methodology note on arithmetic correction**: This audit computes layer means directly from the sum
 of each layer's dimension scores divided by the count. Previous audits' stated layer means did not match
@@ -139,7 +139,7 @@ Dimensions improved: 3, 5, 6, 11, 16, 18, 21 (seven of twenty-eight). No dimensi
 | 5 | Tooling discipline | 2 | **2** | Unchanged. Tools have typed params but no `ToolSpec` with explicit input/output schemas per item 4.3. | `agents/tools.py` | 🟡 (items 4.3, 10.8) |
 | 6 | Tool safety | 2 | **2** | Unchanged. No SQL Execution Gateway; simulation inputs are validated by Python types only. | `agents/tools.py:84-94` | 🟡 (item 2.10 in I2A) |
 | 7 | Model abstraction | 3 | **3** | Unchanged. `llm_factory.py` with fallback chain. No Bedrock/Vertex yet. | `agents/llm_factory.py:50-98` | 🟡 (item 5.6 in I2A) |
-| 8 | Prompt governance | 3 | **4** | **IMPROVED.** Item 10.1 is fully deployed: `prompts/registry.py` with idempotent `seed_prompts_from_code()` at API startup; `get_prompt_template(stage, fallback)` consumed by all three agent nodes; five REST endpoints (`GET/POST /v1/prompts`, `GET /v1/prompts/{id}/{version}`, `PUT .../certify`, `PUT .../deprecate`); `prompt_version` propagated through `AgentState:62-64 → RunRecord → PostgresSink → agent_runs` table via migration 005. Inline fallback ensures no degradation when DB unavailable. A/B testing (10.2) and shadow evaluation (10.3) remain pending. | `prompts/registry.py`; `prompts/models.py`; `agents/state.py:62-64`; `api/routers/prompts.py`; migration 005 | 🟡 (A/B testing 10.2, shadow eval 10.3 in I2A) |
+| 8 | Prompt governance | 3 | **4→5** | **FURTHER IMPROVED (10.2 · 2026-05-17).** A/B routing deployed: `prompts/routing.py` sha256-bucket routing (same session always same variant), `PromptVariant` + `PromptVariantStatus` lifecycle, `get_prompt_template()` → 3-tuple, all three agent nodes A/B-aware, `*_variant_label` persisted in `agent_runs` per run, 6 API endpoints, migrations 008+009. Shadow evaluation (10.3) remains pending. | `prompts/routing.py`; `prompts/registry.py`; `api/routers/prompts.py`; migrations 008+009 | 🟡 (shadow eval 10.3 in I2A) |
 | 9 | State management | 4 | **4** | Unchanged. `AgentState` TypedDict now has three additional typed fields for autonomy (`requires_confirmation`, `requires_approval`, `confirmation_message`) and three for prompt traceability (`planner/synthesizer/judge_prompt_version`). All new fields typed. | `agents/state.py:58-66` | 🟢 |
 | 10 | Memory abstraction | 1 | **3** | **IMPROVED (5.10+5.11).** `MemoryService` Protocol (`core/protocols/memory.py`, `@runtime_checkable`) + `LocalMemoryService` implementation. Planner now receives `active_state: FrozenActiveAnalyticalState` via config and injects typed context (intent, active runs, metrics) as a system message — no raw `state["history"]` slicing. Boundary lint in CI blocks direct memory internals access outside `memory/`. | `core/protocols/memory.py`; `memory/service.py`; `agents/planner.py:186-219`; `scripts/check_memory_boundary.py` | 🟡 (item 5.9 GroundedTokens; multi-agent 5.3.a/b) |
 | 11 | Retrieval / grounding | 2 | **2** | Unchanged. RAG configured; no `GroundedTokens` guardrail. | `knowledge/retriever.py:54-68` | 🟡 (item 5.9 in I2A) |
@@ -258,7 +258,8 @@ High-impact items only (full list available via inventory grep):
 | AI · #14 Loop control | Recursion guard (wallclock+call caps now in place via 8.7.b) | 5.12 | I3 | Partial ↑ |
 | AI · #11 Retrieval / grounding | `GroundedTokens` guardrail | 5.9 | I2A | Pending |
 | ~~AI · #10 Memory abstraction~~ | ~~`MemoryService` Protocol~~ | ~~5.11~~ | ~~I2A~~ | ✅ done 2026-05-14 |
-| AI · #8 Prompt governance (partial) | A/B testing, shadow evaluation | 10.2, 10.3 | I2A | Pending |
+| ~~AI · #8 Prompt governance (A/B testing)~~ | ~~A/B testing of prompt variants~~ | ~~10.2~~ | ~~I2A~~ | ✅ done 2026-05-17: `prompts/routing.py` + variant CRUD + 3-tuple `get_prompt_template` + migrations 008+009 + 6 API endpoints + 330 tests |
+| AI · #8 Prompt governance (shadow eval) | Eval-gated auto-promotion | 10.3 | I2A | Pending |
 | AI · #16 Testing / eval | Real-LLM golden eval harness | 10.11 | I2A / I3 | Pending |
 | ~~Codebase · #5 Boundary integrity~~ | ~~Layer-deps lint; MemoryService seam~~ | ~~5.11 + 11.1~~ | ~~I2A~~ | ✅ done 2026-05-14: boundary lint + pre-commit hook |
 | Codebase · #15 Security posture | Auth, RLS, encryption, audit log | 7.1, 7.5, 7.6–7.9 | I2B | Pending |
@@ -431,9 +432,7 @@ Zero critical findings for the second consecutive sprint.
 
 6. ~~**`mypy --strict` migration on `agents/`.** Apply strict mode package-by-package. Lifts L1 dim 17 from 4 to 5.~~ ✅ Done 2026-05-15: `mypy-agents-strict.ini` activates `strict = True` for `agents.*`; all 8 agents/ files pass with 0 errors; CI strict step + pre-commit hook added; L1 dim 17 lifted to 5.
 
-7. **Item 10.2 (A/B testing for prompts).** The registry is deployed — A/B testing is the obvious next
-   step. Adds a `variant` field to `PromptRecord`, a routing function in `prompts/registry.py`, and
-   a `variant_id` column in `agent_runs`. Lifts L2 dim 8 toward 5.
+7. ~~**Item 10.2 (A/B testing for prompts).** The registry is deployed — A/B testing is the obvious next step. Adds a `variant` field to `PromptRecord`, a routing function in `prompts/registry.py`, and a `variant_id` column in `agent_runs`. Lifts L2 dim 8 toward 5.~~ ✅ Done 2026-05-17: `prompts/routing.py` sha256-bucket routing; `PromptVariant` + `PromptVariantStatus`; `get_prompt_template()` → 3-tuple; variant CRUD + `seed_prompts_from_code()` auto-seeds CHAMPION; migrations 008+009; 6 API endpoints; `*_variant_label` in `AgentState` → `RunRecord` → `agent_runs`; 330 tests.
 
 8. ~~**DAG cycle assertion (item 3.3).** One line: `if not nx.is_directed_acyclic_graph(G): raise ValueError(...)`. Lifts L1 dim 18 from 2 to 3.~~ ✅ Done 2026-05-11: three integration points + 7 tests; L1 dim 18 lifted to 3.
 

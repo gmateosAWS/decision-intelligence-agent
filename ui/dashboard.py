@@ -114,6 +114,36 @@ def render_dashboard() -> None:
 
     st.divider()
 
+    # A/B variant table (item 10.2) — read-only
+    try:
+        from prompts.registry import list_variants
+
+        variants = list_variants()
+        if variants:
+            st.markdown("**Prompt A/B variants activos**")
+            vrows = []
+            for v in variants:
+                status_val = v.status.value if hasattr(v.status, "value") else v.status
+                if status_val in ("deprecated", "draft"):
+                    continue
+                vrows.append(
+                    {
+                        "Stage": v.stage,
+                        "Label": v.variant_label,
+                        "Status": status_val,
+                        "Traffic %": v.rollout_percentage,
+                        "Prompt": f"{v.prompt_id}@{v.version}",
+                    }
+                )
+            if vrows:
+                st.dataframe(vrows, width="stretch", hide_index=True)
+            else:
+                st.caption("No hay variantes activas (candidate/champion).")
+    except Exception:  # noqa: BLE001
+        pass
+
+    st.divider()
+
     recent = metrics.get("recent_runs", [])
     if recent:
         st.markdown("**Últimas ejecuciones**")

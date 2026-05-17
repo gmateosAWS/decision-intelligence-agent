@@ -24,13 +24,20 @@ from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PromptStatus(str, Enum):
     DRAFT = "draft"
     CERTIFIED = "certified"  # active, evaluated, approved for production
     DEPRECATED = "deprecated"
+
+
+class PromptVariantStatus(str, Enum):
+    DRAFT = "draft"  # being prepared, not yet in traffic
+    CANDIDATE = "candidate"  # in A/B test, receiving rollout_percentage% of traffic
+    CHAMPION = "champion"  # baseline, receives remaining traffic after candidates
+    DEPRECATED = "deprecated"  # retired, receives 0% traffic
 
 
 class PromptRecord(BaseModel):
@@ -64,3 +71,29 @@ class PromptRecord(BaseModel):
     content: str  # prompt template text with {placeholders}
     variables: List[str] = []  # placeholder names used in content
     description: str = ""
+
+
+class PromptVariant(BaseModel):
+    """
+    A traffic-routing entry for A/B testing a specific (prompt_id, version).
+
+    Exactly one CHAMPION per stage (baseline, absorbs remaining traffic).
+    CANDIDATEs share a slice of traffic; sum of their rollout_percentages must ≤ 100.
+
+    Deterministic routing: sha256(f"{session_id}|{stage}") → bucket [0,100).
+    Same session always receives the same variant, enabling quality measurement.
+    """
+
+    id: str  # UUID string
+    stage: str  # "planner", "synthesizer", "judge", "judge.revision"
+    prompt_id: str  # FK → prompts.id
+    version: str  # FK → prompts.version
+    variant_label: str = Field(
+        ..., description="Human-readable: 'v1-control', 'v2-concise'"
+    )
+    status: PromptVariantStatus = PromptVariantStatus.DRAFT
+    rollout_percentage: int = Field(0, ge=0, le=100)  # % of traffic; 100 for CHAMPION
+    created_at: datetime
+    changed_at: datetime
+    owner: str = ""
+    notes: str = ""

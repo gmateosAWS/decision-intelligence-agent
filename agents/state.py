@@ -28,6 +28,10 @@ Fields
   planner_prompt_version    (str | None) -- registry version of planner template
   synthesizer_prompt_version (str | None) -- registry version of synthesizer template
   judge_prompt_version      (str | None) -- registry version of judge template
+  planner_variant_label     (str | None) -- A/B variant label for planner (item 10.2)
+  synthesizer_variant_label (str | None) -- A/B variant label for synthesizer
+                                             (item 10.2)
+  judge_variant_label       (str | None) -- A/B variant label for judge (item 10.2)
   history      (List[Dict[str,str]]) -- accumulated (query, answer) turn pairs;
                                         merged via operator.add so LangGraph
                                         appends rather than replacing the list
@@ -62,5 +66,9 @@ class AgentState(TypedDict, total=False):
     planner_prompt_version: Optional[str]
     synthesizer_prompt_version: Optional[str]
     judge_prompt_version: Optional[str]
+    # A/B variant labels (item 10.2) — None when no variants are active
+    planner_variant_label: Optional[str]
+    synthesizer_variant_label: Optional[str]
+    judge_variant_label: Optional[str]
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]
