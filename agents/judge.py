@@ -108,8 +108,13 @@ def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any
     raw_text = _format_raw_result(raw_result)
     t0 = time.perf_counter()
 
-    judge_template, judge_prompt_version = get_prompt_template(
-        "judge", JUDGE_SYSTEM_TEMPLATE
+    session_id_str: Optional[str] = None
+    if config is not None:
+        raw_tid = config.get("configurable", {}).get("thread_id")
+        session_id_str = str(raw_tid) if raw_tid else None
+
+    judge_template, judge_prompt_version, judge_variant_label = get_prompt_template(
+        "judge", JUDGE_SYSTEM_TEMPLATE, session_id=session_id_str
     )
     judge_messages = [
         {
@@ -161,6 +166,7 @@ def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any
             "judge_feedback": feedback,
             "judge_revised": False,
             "judge_prompt_version": judge_prompt_version,
+            "judge_variant_label": judge_variant_label,
             "history": [{"query": query, "answer": answer}],
         }
 
@@ -193,6 +199,7 @@ def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any
             final_answer=final_answer,
             model=_JUDGE_MODEL,
             prompt_version=judge_prompt_version,
+            variant_label=judge_variant_label,
         )
 
     return {
@@ -202,6 +209,7 @@ def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any
         "judge_feedback": verdict.feedback,
         "judge_revised": revised,
         "judge_prompt_version": judge_prompt_version,
+        "judge_variant_label": judge_variant_label,
         "history": [{"query": query, "answer": final_answer}],
     }
 
@@ -219,7 +227,7 @@ def _revise_answer(
     """Generate one grounded revision using the judge feedback."""
     _init_llms()
     instructions = get_revise_instructions(language)
-    revision_template, _ = get_prompt_template(
+    revision_template, _, _variant = get_prompt_template(
         "judge.revision", JUDGE_REVISION_TEMPLATE
     )
     revision_messages = [

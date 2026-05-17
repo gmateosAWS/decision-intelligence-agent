@@ -299,6 +299,7 @@ Es el paso de sistema con base técnica seria a sistema que demuestra valor con 
 | ~~**3.6** Versionado semántico del spec~~ ✅ 2026-05-09   | `spec/versioning.py`: SpecVersion, BumpType, detect_bump_type. semver validation in create/update/seed. `POST /v1/specs/{id}/bump`. Migration 003 CHECK constraint. 145 tests pass. |
 | **10.4** Versionado del spec como artefacto de despliegue | PR, review, validación automática, promoción entre entornos. Aplica la disciplina de I1 al spec. |
 | ~~**10.1** Prompt registry~~ ✅ 2026-05-10               | `prompts/` package; `PromptRecord` + `PromptStatus`; `get_prompt_template(stage, fallback)` con fallback inline; `seed_prompts_from_code()` idempotente; migration 004 (tabla prompts), 005 (3 prompt_version cols en agent_runs); 5 endpoints REST `/v1/prompts`; versiones propagadas por AgentState → RunRecord → PostgresSink; 220 tests pasan. |
+| ~~**10.2** Prompt A/B testing~~ ✅ 2026-05-17            | `prompts/routing.py` (sha256-bucket deterministic routing, `@lru_cache` per stage, `invalidate_variant_cache()`); `PromptVariant` + `PromptVariantStatus` en `prompts/models.py`; `get_prompt_template()` → 3-tuple `(content, version, variant_label)`; variant CRUD en `prompts/registry.py`; migrations 008 (`prompt_variants`) + 009 (`*_variant_label` cols on `agent_runs`); 6 endpoints REST; `ui/dashboard.py` variant table; 27 new tests (330 total). Tech debt: auto-promotion deferred to 10.3. |
 
 ### Por qué I2A va antes de I2B
 

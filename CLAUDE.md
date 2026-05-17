@@ -75,8 +75,15 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │
         ├── prompts/
         │    ├── models.py             PromptRecord, PromptStatus (GovernableArtifact pattern, item 10.8)
-        │    └── registry.py           CRUD + lifecycle (draft→certified→deprecated); get_prompt_template()
-        │                              with inline-template fallback; seed_prompts_from_code() idempotent seed
+        │    │                         PromptVariant, PromptVariantStatus (item 10.2)
+        │    ├── routing.py            select_variant(stage, session_id) → PromptVariant | None
+        │    │                         Deterministic sha256-bucket routing; lru_cache per stage;
+        │    │                         invalidate_variant_cache() called by all mutation functions
+        │    └── registry.py           CRUD + lifecycle (draft→certified→deprecated); variant CRUD
+        │                              (start_rollout, adjust_rollout, promote_to_champion, deprecate_variant);
+        │                              get_prompt_template(stage, fallback, session_id) → (content, version, label);
+        │                              _get_cached_prompt_content lru_cache (immutable by (id, version));
+        │                              seed_prompts_from_code() seeds prompts + CHAMPION variants idempotently
         │
         ├── agents/
         │    ├── state.py              AgentState TypedDict (language, requires_confirmation,
@@ -441,11 +448,15 @@ not an invitation to question architectural decisions.
 - [x] `agents/` uses mypy --strict in CI (L1 dim 17: type safety 4→5) and pre-commit (`mirrors-mypy` hook, `files: ^agents/.*\.py$`)
 - [x] Strict CI step added after existing mypy step in `.github/workflows/ci.yml`
 
-## Current work: Item 5.11 ✅ — Next: Item 1.6 ObjectBus (or 5.13 state mutations)
+### Item 10.2 ✅
 
-**Branch**: `feature/11.1-ci-pipeline`
+- [x] 10.2 Prompt A/B Testing: `prompts/models.py` (`PromptVariantStatus` + `PromptVariant` Pydantic model); `prompts/routing.py` (deterministic `select_variant()` via sha256 bucket, `_load_active_variants` with `@lru_cache(maxsize=8)`, `invalidate_variant_cache()` called on every mutation); `prompts/registry.py` (`start_rollout`, `adjust_rollout`, `promote_to_champion`, `deprecate_variant` CRUD + `list_variants` + `get_variant`; `get_prompt_template()` promoted to 3-tuple `(content, version, variant_label)`; `_get_cached_prompt_content` `@lru_cache(maxsize=256)` for immutable prompt content; `seed_prompts_from_code()` auto-creates CHAMPION variants at startup); migration 008 (`prompt_variants` table with CHECK constraints and FK to `prompts`); migration 009 (3 `*_variant_label` Text columns on `agent_runs`); `db/models.py` `PromptVariantRow` ORM + 3 `AgentRun` columns; `agents/state.py` 3 new `*_variant_label` fields; `agents/planner.py` module-level cache removed (spec caching in `spec_loader`), `session_id` param added to `_build_system_prompt()` + `planner_node()`; all 4 `get_prompt_template` call sites (planner, synthesizer, judge, judge.revision) updated to 3-tuple unpack; `evaluation/observer.py` `RunRecord` + `record_planner/synthesizer/judge()` extended with `variant_label`; `evaluation/sinks/postgres_sink.py` 3 new kwargs; 6 new API endpoints (`GET /v1/prompts/variants`, `GET/POST/PUT /v1/prompts/variants/{stage}/{label}`, `PUT .../adjust`, `PUT .../promote`, `PUT .../deprecate`); read-only variant table in `ui/dashboard.py`; 27 new tests (routing, registry 3-tuple, observer). Tech debt entry: 10.2→10.3 (auto-promotion deferred).
 
-5.11 Completed 2026-05-14.
+## Current work: Item 10.2 ✅ — Next: Item 10.3 (eval-gated auto-promotion) or 5.13 (state mutations)
+
+**Branch**: `feature/10.2-prompt-ab-testing`
+
+10.2 Completed 2026-05-17.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 

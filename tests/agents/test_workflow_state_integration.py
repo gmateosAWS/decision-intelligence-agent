@@ -65,7 +65,9 @@ def test_workflow_records_intent_after_planner() -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
+        patch(
+            "agents.planner._build_system_prompt", return_value=("prompt", None, None)
+        ),
         patch(
             "agents.planner.invoke_with_fallback",
             return_value={"parsed": sel, "raw": MagicMock()},
@@ -135,7 +137,9 @@ def test_workflow_works_without_coordinator() -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
+        patch(
+            "agents.planner._build_system_prompt", return_value=("prompt", None, None)
+        ),
         patch(
             "agents.planner.invoke_with_fallback",
             return_value={"parsed": sel, "raw": MagicMock()},

@@ -52,6 +52,50 @@ objects without performing any actual state mutation.
 
 ---
 
+## 10.2 → 10.3: Variant selection is traffic-based, not eval-gated
+
+**Status:** Open. Created 2026-05-17.
+**Blocker:** Item 10.3 (automated prompt evaluation framework — win-rate comparisons).
+**Affected:** `prompts/routing.py`, `prompts/registry.py`, `api/routers/prompts.py`
+
+### Current state (v1)
+
+Variant promotion from CANDIDATE → CHAMPION is a manual operator action via
+`PUT /v1/prompts/variants/{stage}/{label}/promote`. Routing assigns traffic
+deterministically based on `rollout_percentage`; it does not consider measured
+quality or win-rate against the champion.
+
+```python
+# TODO(10.3/routing): promote_to_champion() is a manual op now.
+# When 10.3 lands: gating logic reads from the eval store (judge scores per variant)
+# and auto-promotes when win-rate exceeds configurable threshold over N turns.
+```
+
+### Target state (when 10.3 lands)
+
+A background evaluator (or periodic job) reads `agent_runs.judge_score` grouped by
+`planner_variant_label` / `synthesizer_variant_label` / `judge_variant_label`,
+computes win-rate vs. the CHAMPION, and auto-promotes or auto-deprecates based on
+configurable thresholds. Operators receive a notification rather than having to
+manually initiate promotion.
+
+### Migration path
+
+1. Item 10.3 lands with the automated evaluation framework
+2. Add `win_rate`, `n_evaluated`, `champion_win_rate` columns to `prompt_variants`
+   (via migration 010 or as part of 10.3's own migration)
+3. Implement `auto_promote_if_winning(stage, threshold, min_n)` in `prompts/routing.py`
+4. Wire auto-promotion to a background task in `api/main.py` lifespan
+5. Expose auto-promotion config via `PUT /v1/prompts/variants/{stage}/policy`
+
+### Risk if not migrated
+
+- Without eval-gating, operators must manually monitor `agent_runs` and decide when to
+  promote — error-prone and not scalable as the number of prompt stages grows
+- A regressing candidate may stay in traffic indefinitely if no one watches the metrics
+
+---
+
 ## 5.10 → 1.6: ObjectId fields in ActiveAnalyticalState
 
 **Status:** Open. Created 2026-05-13.

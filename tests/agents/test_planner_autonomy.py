@@ -50,7 +50,9 @@ def test_planner_auto_no_flag() -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
+        patch(
+            "agents.planner._build_system_prompt", return_value=("prompt", None, None)
+        ),
         patch(
             "agents.planner.invoke_with_fallback",
             return_value={"parsed": selection, "raw": MagicMock()},
@@ -74,7 +76,9 @@ def test_planner_human_confirms_flag() -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
+        patch(
+            "agents.planner._build_system_prompt", return_value=("prompt", None, None)
+        ),
         patch(
             "agents.planner.invoke_with_fallback",
             return_value={"parsed": selection, "raw": MagicMock()},
@@ -99,7 +103,9 @@ def test_planner_human_approves_flag() -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
+        patch(
+            "agents.planner._build_system_prompt", return_value=("prompt", None, None)
+        ),
         patch(
             "agents.planner.invoke_with_fallback",
             return_value={"parsed": selection, "raw": MagicMock()},
@@ -124,7 +130,9 @@ def test_planner_unknown_tool_uses_default_policy() -> None:
 
     with (
         patch("agents.planner._init_planner_llms"),
-        patch("agents.planner._get_system_prompt", return_value=("prompt", None)),
+        patch(
+            "agents.planner._build_system_prompt", return_value=("prompt", None, None)
+        ),
         patch(
             "agents.planner.invoke_with_fallback",
             return_value={"parsed": selection, "raw": MagicMock()},

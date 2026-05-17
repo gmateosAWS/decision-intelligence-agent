@@ -78,6 +78,11 @@ class PostgresSink:
                             "synthesizer_prompt_version"
                         ),
                         judge_prompt_version=record.get("judge_prompt_version"),
+                        planner_variant_label=record.get("planner_variant_label"),
+                        synthesizer_variant_label=record.get(
+                            "synthesizer_variant_label"
+                        ),
+                        judge_variant_label=record.get("judge_variant_label"),
                         total_input_tokens=record.get("total_input_tokens", 0),
                         total_output_tokens=record.get("total_output_tokens", 0),
                         total_cost_usd=record.get("total_cost_usd", 0.0),

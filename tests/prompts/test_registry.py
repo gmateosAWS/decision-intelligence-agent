@@ -86,26 +86,29 @@ def test_prompt_record_defaults():
 
 def test_get_prompt_template_returns_fallback_when_no_db(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    content, version = get_prompt_template("planner", "FALLBACK")
+    content, version, variant_label = get_prompt_template("planner", "FALLBACK")
     assert content == "FALLBACK"
     assert version is None
+    assert variant_label is None
 
 
 def test_get_prompt_template_returns_registry_content(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://test")
     record = _make_record(content="REGISTRY CONTENT", version="2.0.0")
     with patch("prompts.registry.get_certified_prompt", return_value=record):
-        content, version = get_prompt_template("planner", "FALLBACK")
+        content, version, variant_label = get_prompt_template("planner", "FALLBACK")
     assert content == "REGISTRY CONTENT"
     assert version == "2.0.0"
+    assert variant_label is None
 
 
 def test_get_prompt_template_returns_fallback_on_registry_none(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://test")
     with patch("prompts.registry.get_certified_prompt", return_value=None):
-        content, version = get_prompt_template("planner", "FALLBACK")
+        content, version, variant_label = get_prompt_template("planner", "FALLBACK")
     assert content == "FALLBACK"
     assert version is None
+    assert variant_label is None
 
 
 # ---------------------------------------------------------------------------

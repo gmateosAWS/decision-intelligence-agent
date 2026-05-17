@@ -178,6 +178,13 @@ decision support, system explainability, and controlled LLM interaction:
   template when no database is configured; each run records `planner_prompt_version`,
   `synthesizer_prompt_version`, and `judge_prompt_version` for full LLMOps traceability.
   Managed via `GET/POST /v1/prompts` and `PUT /v1/prompts/{id}/{version}/certify|deprecate`.
+- **Prompt A/B Testing** -- operators register candidate prompt variants and route a
+  percentage of traffic to them deterministically (`sha256(session_id|stage) % 100`); the
+  same session always receives the same variant; the champion absorbs remaining traffic
+  (item 10.2). Each run records `planner_variant_label`, `synthesizer_variant_label`, and
+  `judge_variant_label` in `agent_runs`. Managed via
+  `POST /v1/prompts/variants/start-rollout`, `PUT /v1/prompts/variants/{id}/adjust`,
+  `PUT /v1/prompts/variants/{id}/promote`, and `PUT /v1/prompts/variants/{id}/deprecate`.
 
 ---
 
@@ -443,7 +450,7 @@ decision-intelligence-agent/
 +-- db/
 |   +-- engine.py                   # SQLAlchemy engine, get_session() context manager
 |   +-- models.py                   # ORM: AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion,
-|   |                               #      Prompt, SessionStateTransition
+|   |                               #      Prompt, PromptVariantRow, SessionStateTransition
 |   +-- migrations/
 |       +-- env.py                  # Alembic env (psycopg2 URL normalisation)
 |       +-- versions/
@@ -454,6 +461,8 @@ decision-intelligence-agent/
 |           +-- 005_add_prompt_versions_to_runs.py # planner/synthesizer/judge_prompt_version on agent_runs
 |           +-- 006_add_cost_tracking_to_agent_runs.py  # 6 cost cols on agent_runs (items 8.7.a+b)
 |           +-- 007_add_analytical_state_to_sessions.py # analytical_state JSONB + session_state_transitions (item 5.10)
+|           +-- 008_add_prompt_variants.py              # prompt_variants table for A/B testing (item 10.2)
+|           +-- 009_add_variant_labels_to_runs.py       # *_variant_label cols on agent_runs (item 10.2)
 +-- data/
 |   +-- generate_data.py            # Synthetic dataset -- all params read from spec
 +-- models/
@@ -469,10 +478,19 @@ decision-intelligence-agent/
 +-- knowledge/
 |   +-- build_index.py              # pgvector index builder (20 docs, 6 categories; FAISS fallback)
 |   +-- retriever.py                # Similarity search: pgvector primary, FAISS fallback
++-- prompts/
+|   +-- models.py                   # PromptRecord, PromptStatus, PromptVariant, PromptVariantStatus
+|   +-- registry.py                 # CRUD + lifecycle (draft→certified→deprecated); variant CRUD;
+|   |                               #   get_prompt_template(stage, fallback, session_id) → 3-tuple;
+|   |                               #   lru_cache on prompt content; seed_prompts_from_code()
+|   +-- routing.py                  # A/B routing: _bucket_for, select_variant, invalidate_variant_cache
+|   |                               #   lru_cache on active variants per stage (item 10.2)
 +-- agents/
 |   +-- state.py                    # AgentState TypedDict
 |   +-- tools.py                    # Tool wrappers (spec-driven defaults + generic params)
 |   +-- llm_factory.py              # get_chat_model() + invoke_with_fallback() + LLMUnavailableError
+|   +-- i18n.py                     # LANGUAGE_NAMES, get_synth/revise/directive helpers
+|   +-- runner.py                   # run_query() + RunResult (shared by UI + API — Directive 3)
 |   +-- planner.py                  # LLM planner: dynamic prompt + structured output + fallback policy
 |   +-- judge.py                    # Online answer-quality judge and single-pass reviser
 |   +-- workflow.py                 # LangGraph: planner -> tool -> synthesizer -> judge
@@ -714,6 +732,12 @@ Interactive docs available at [http://localhost:8000/docs](http://localhost:8000
 | `POST` | `/v1/prompts` | Create a draft prompt |
 | `PUT` | `/v1/prompts/{id}/{version}/certify` | Promote draft to certified |
 | `PUT` | `/v1/prompts/{id}/{version}/deprecate` | Deprecate a prompt |
+| `GET` | `/v1/prompts/variants` | List active variants for a stage |
+| `POST` | `/v1/prompts/variants/start-rollout` | Register a candidate variant and begin rollout |
+| `PUT` | `/v1/prompts/variants/{id}/adjust` | Adjust rollout percentage |
+| `PUT` | `/v1/prompts/variants/{id}/promote` | Promote candidate to champion |
+| `PUT` | `/v1/prompts/variants/{id}/deprecate` | Deprecate a variant |
+| `GET` | `/v1/prompts/variants/{id}` | Variant detail |
 | `GET` | `/healthz` | Liveness probe (always 200) |
 | `GET` | `/readyz` | Readiness probe (checks DB + spec) |
 | `GET` | `/v1/debug/config` | Active LLM config (no secrets) |
