@@ -186,6 +186,16 @@ decision support, system explainability, and controlled LLM interaction:
   `POST /v1/prompts/variants/start-rollout`, `PUT /v1/prompts/variants/{id}/adjust`,
   `PUT /v1/prompts/variants/{id}/promote`, and `PUT /v1/prompts/variants/{id}/deprecate`.
 
+- **Spec-driven vocabulary guard** (item 5.9) -- `system/grounded_tokens.py` builds a
+  `Vocabulary` from the active spec at runtime (decision variables + target variables +
+  derived metrics + all aliases). Before forwarding extracted params to a tool, the planner
+  validates each variable name with `validate_strict()` — if a name is not in the vocabulary,
+  execution is blocked and the agent asks the user to rephrase (HTTP 200 with
+  `clarification_needed: true`). The judge also runs a non-blocking `check_observational()`
+  scan on raw result keys. No vocabulary names are hardcoded — the guard is domain-agnostic
+  and vocabulary is rebuilt whenever the spec changes. Spec variables support `aliases` for
+  case-insensitive synonym matching.
+
 ---
 
 ## Agent Execution Flow
@@ -403,7 +413,7 @@ The vector store is loaded **lazily** (on first query, not at import time). If t
 
 ### Agent Layer (`agents/`)
 
-The agent is implemented as a **4-node LangGraph graph**:
+The agent is implemented as a **5-node LangGraph graph** (planner, tool, synthesizer, judge, clarification):
 
 **`planner_node`** -- Selects the appropriate tool using structured output (provider and model configurable via `PLANNER_PROVIDER` / `PLANNER_MODEL` env vars; defaults to OpenAI `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. The prompt also enforces a **Chain-of-Thought sequence** in the `reasoning` field: the LLM must articulate (1) what the user is asking, (2) whether concrete variable values are mentioned, (3) whether the intent is exploratory/optimization or conceptual, and (4) which tool fits best and why -- before committing to a tool choice. Output is a typed `ToolSelection(tool, reasoning, params, language)` object -- no string parsing. The `language` field carries the ISO 639-1 code of the query's language (detected by the planner itself), which flows through `AgentState` to the synthesizer and judge so both respond in the user's language without any separate detection call. After tool selection, the planner consults the active spec's **autonomy policy** (`spec.autonomy_policy.get_level(tool)`) and sets `requires_confirmation` or `requires_approval` flags in state accordingly. If the LLM call fails after retries, the planner falls back to the `knowledge` tool with `language="en"` rather than crashing the graph.
 
@@ -411,7 +421,9 @@ The agent is implemented as a **4-node LangGraph graph**:
 
 **`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer (model configurable via `SYNTHESIZER_MODEL` env var, defaults to `gpt-4o-mini`): what do the numbers mean, what should the decision-maker do, and what risks or caveats matter. If `requires_confirmation` or `requires_approval` is set in state (autonomy policy gate), the synthesizer short-circuits: it returns the `confirmation_message` directly without an LLM call, skipping tool execution entirely.
 
-**`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version.
+**`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version. The judge also runs a non-blocking `check_observational()` scan on the raw result keys against the spec vocabulary; any ungrounded key names are prefixed in `judge_feedback` as `[ungrounded: ...]`.
+
+**`clarification_node`** (item 5.9) -- Reached when the planner's GroundedTokens guardrail catches a param variable that is not in the spec vocabulary (decision variables + target variables + derived metrics + all aliases). Returns a clarification message to the user instead of executing a tool. The response is returned as HTTP 200 with `clarification_needed: true` in `QueryResponse` — not an error. The user can rephrase using a valid variable name and the agent continues normally.
 
 **`AgentState`** TypedDict fields:
 
@@ -470,6 +482,9 @@ decision-intelligence-agent/
 +-- system/
 |   +-- system_graph.py             # Causal DAG -- edges loaded from spec
 |   +-- system_model.py             # Graph-traversal evaluation engine
+|   +-- grounded_tokens.py          # Spec-driven vocabulary guardrail (item 5.9):
+|   |                               #   build_vocabulary(), validate_strict() (blocking),
+|   |                               #   check_observational() (non-blocking), UngroundedTokenError
 +-- simulation/
 |   +-- montecarlo.py               # Monte Carlo engine (N runs, noise model)
 |   +-- scenario_runner.py          # Scenario wrapper

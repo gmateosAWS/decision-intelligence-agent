@@ -32,6 +32,15 @@ Fields
   synthesizer_variant_label (str | None) -- A/B variant label for synthesizer
                                              (item 10.2)
   judge_variant_label       (str | None) -- A/B variant label for judge (item 10.2)
+  clarification_needed (bool)          -- True when planner caught an ungrounded
+                                          token (item 5.9); routes to clarification
+                                          node instead of tool
+  ungrounded_token     (str | None)    -- the raw token that failed vocabulary
+                                          validation (stored as str, not exception,
+                                          because the checkpointer cannot serialise
+                                          exception objects)
+  clarification_message (str | None)  -- message shown to the user when
+                                          clarification is needed
   history      (List[Dict[str,str]]) -- accumulated (query, answer) turn pairs;
                                         merged via operator.add so LangGraph
                                         appends rather than replacing the list
@@ -70,5 +79,12 @@ class AgentState(TypedDict, total=False):
     planner_variant_label: Optional[str]
     synthesizer_variant_label: Optional[str]
     judge_variant_label: Optional[str]
+    # GroundedTokens clarification (item 5.9) — set when planner catches
+    # an ungrounded token; routes to clarification node instead of tool.
+    # Exceptions cannot be stored in AgentState (not serialisable by the
+    # checkpointer), so we store the raw token string instead.
+    clarification_needed: bool
+    ungrounded_token: Optional[str]  # the token that failed validation
+    clarification_message: Optional[str]  # message displayed to the user
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]

@@ -411,7 +411,7 @@ Más allá de la memoria conversacional por sesión, el agente debe aprender pat
 
 _Resuelve:_ el sistema mejora con el uso, no solo con cambios de código. Es una forma suave de personalización por cliente sin fine-tuning.
 
-### 5.9 GroundedTokens — guardrail determinista anti-alucinación de entidades `[feature] [v4]`
+### ~~5.9 GroundedTokens — guardrail determinista anti-alucinación de entidades~~ ✅ MVP v1 (2026-05-17) `[feature] [v4]`
 
 Cuando una conversación se hace larga, el planner LLM puede emitir routing decisions o follow-up resolutions que mencionan entidades, geografías o métricas que el usuario nunca usó. Es una clase de fallo silencioso difícil de detectar.
 

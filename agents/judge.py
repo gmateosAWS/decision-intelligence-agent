@@ -188,6 +188,27 @@ def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any
             tracker=tracker,
         )
 
+    # GroundedTokens observational scan (item 5.9) — non-blocking.
+    # Scan raw_result keys for tokens not in the spec vocabulary and annotate
+    # judge_feedback; does not alter the answer or block execution.
+    grounding_prefix = ""
+    try:
+        from spec.spec_loader import get_spec  # noqa: PLC0415
+        from system.grounded_tokens import (  # noqa: PLC0415
+            check_observational,
+            get_vocabulary,
+        )
+
+        vocab = get_vocabulary(get_spec())
+        mentions = check_observational(
+            list(raw_result.keys()), vocab, context="raw_result"
+        )
+        if mentions:
+            tokens_str = ", ".join(f"'{m.token}'" for m in mentions)
+            grounding_prefix = f"[ungrounded: {tokens_str}] "
+    except Exception:  # noqa: BLE001
+        pass  # vocabulary check is best-effort; never block the judge
+
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
         obs.record_judge(
@@ -206,7 +227,7 @@ def judge_node(state: AgentState, config: Optional[Any] = None) -> Dict[str, Any
         "answer": final_answer,
         "judge_score": verdict.overall_score,
         "judge_passed": approved,
-        "judge_feedback": verdict.feedback,
+        "judge_feedback": grounding_prefix + verdict.feedback,
         "judge_revised": revised,
         "judge_prompt_version": judge_prompt_version,
         "judge_variant_label": judge_variant_label,

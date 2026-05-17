@@ -1,0 +1,98 @@
+# Healthcare demo spec — used exclusively by test_grounded_tokens.py (item 5.9).
+# Domain deliberately different from retail_pricing to prove no hardcoded names.
+
+domain:
+  name: 'healthcare_demo'
+  description: >
+    Minimal healthcare capacity model for testing the GroundedTokens vocabulary
+    guardrail (item 5.9).  Variables are deliberately different from the
+    production retail_pricing spec to verify that no names are hardcoded.
+  version: '0.1.0'
+
+variables:
+  decisions:
+    - name: bed_capacity
+      description: 'Number of inpatient beds available per ward'
+      unit: 'beds'
+      aliases:
+        - beds
+        - capacity
+      bounds:
+        min: 10
+        max: 200
+        steps: 20
+      default: 80
+
+    - name: staffing_ratio
+      description: 'Nurses per occupied bed (shift ratio)'
+      unit: 'ratio'
+      aliases:
+        - nurse_ratio
+      bounds:
+        min: 0.1
+        max: 1.0
+        steps: 10
+      default: 0.5
+
+  intermediate: []
+
+  targets:
+    - name: patient_throughput
+      description: 'Patients treated per month'
+      unit: 'patients/month'
+      formula: 'bed_capacity * occupancy_rate'
+      optimize: 'maximize'
+      aliases:
+        - throughput
+        - patients_treated
+
+derived_metrics:
+  - id: cost_per_patient
+    name: Cost per Patient
+    description: 'Total operational cost divided by patients treated'
+    unit: 'EUR/patient'
+    aliases:
+      - cpp
+      - unit_cost
+
+causal_relationships:
+  - from: bed_capacity
+    to: patient_throughput
+    type: positive
+    description: 'More beds → more patients treated'
+  - from: staffing_ratio
+    to: patient_throughput
+    type: positive
+    description: 'Higher staffing → better throughput'
+
+constraints: []
+
+business_parameters:
+  occupancy_rate: 0.85
+
+simulation:
+  monte_carlo_runs: 100
+  noise_std: 0.05
+
+demand_model:
+  base_demand: 500
+  price_elasticity: 0.0
+  price_quadratic: 0.0
+  marketing_effect: 0.0
+  noise_sigma: 10.0
+
+data_generation:
+  n_samples: 100
+  random_seed: 42
+  price_min: 10.0
+  price_max: 200.0
+  marketing_min: 0.0
+  marketing_max: 0.0
+
+optimization:
+  target: patient_throughput
+  method: grid_search
+  decision_variables:
+    - bed_capacity
+    - staffing_ratio
+  fixed_variables: {}

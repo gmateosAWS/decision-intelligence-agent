@@ -24,9 +24,22 @@ from ui.styles import TOOL_LABELS, sanitize_markdown
 def render_chat_message(msg: Dict[str, Any]) -> None:
     """Render a single chat message (user or assistant) from the history list."""
     with st.chat_message(msg["role"]):
-        st.markdown(sanitize_markdown(msg["content"]))
-        if msg["role"] == "assistant" and msg.get("metadata"):
-            _render_assistant_extras(msg["metadata"])
+        metadata = msg.get("metadata") or {}
+        if msg["role"] == "assistant" and metadata.get("clarification_needed"):
+            render_clarification_message(msg["content"])
+        else:
+            st.markdown(sanitize_markdown(msg["content"]))
+            if msg["role"] == "assistant" and metadata:
+                _render_assistant_extras(metadata)
+
+
+def render_clarification_message(message: str) -> None:
+    """Render a GroundedTokens clarification prompt (item 5.9).
+
+    Displayed with an info callout so the user knows this is a vocabulary
+    hint, not an error and not a normal analytical answer.
+    """
+    st.info(sanitize_markdown(message), icon="🔤")
 
 
 def _render_assistant_extras(metadata: Dict[str, Any]) -> None:

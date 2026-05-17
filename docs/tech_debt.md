@@ -96,6 +96,48 @@ manually initiate promotion.
 
 ---
 
+## 5.9 → futuro: Near-match suggestion for ungrounded tokens
+
+**Status:** Open. Created 2026-05-17.
+**Blocker:** Future item (not yet in roadmap v4) — fuzzy/semantic matching for vocabulary.
+**Affected:** `system/grounded_tokens.py`
+
+### Current state (v1)
+
+`validate_strict()` and `check_observational()` perform exact case-insensitive
+matching against the token set.  When a token is ungrounded, the clarification
+message lists all valid tokens alphabetically without ranking by similarity.
+
+```python
+# TODO(futuro/GroundedTokens): near-match suggestion not implemented.
+# When the future item lands: before raising UngroundedTokenError, run a
+# Levenshtein / embedding similarity search against vocab.tokens and include
+# the top-3 closest matches in the error message.
+# Example: "Did you mean 'bed_capacity'?" when user typed 'beds_capacity'.
+```
+
+### Target state (when the future item lands)
+
+`validate_strict()` will call a `suggest_nearest(token, vocab, k=3)` helper
+that returns the k closest tokens by edit distance or cosine similarity.
+The clarification message will include "Did you mean X, Y, Z?" to guide the user.
+
+### Migration path
+
+1. Add `suggest_nearest(token, vocab, k)` to `system/grounded_tokens.py`
+2. Update `UngroundedTokenError.__init__` to accept optional `suggestions: list[str]`
+3. Update `planner_node` clarification message to include suggestions
+4. Add tests for suggestion quality (edit distance cases + alias cases)
+5. Remove this debt entry
+
+### Risk if not migrated
+
+- Users who make small typos (e.g., `staffing_rate` instead of `staffing_ratio`)
+  receive an alphabetical list of all tokens with no guidance
+- Degraded UX compared to modern LLM-powered assistants
+
+---
+
 ## 5.10 → 1.6: ObjectId fields in ActiveAnalyticalState
 
 **Status:** Open. Created 2026-05-13.

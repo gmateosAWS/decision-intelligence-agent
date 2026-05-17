@@ -40,11 +40,22 @@ def _reset_planner_cache():
     planner_mod._fallback_llm_structured = None
 
 
+def _reset_prompt_caches():
+    """Clear variant routing + content caches to prevent cross-test contamination."""
+    from prompts.registry import _get_cached_prompt_content
+    from prompts.routing import invalidate_variant_cache
+
+    invalidate_variant_cache()
+    _get_cached_prompt_content.cache_clear()
+
+
 @pytest.fixture(autouse=True)
 def reset_caches():
     _reset_planner_cache()
+    _reset_prompt_caches()
     yield
     _reset_planner_cache()
+    _reset_prompt_caches()
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +80,7 @@ def test_planner_uses_registry_prompt_when_available(monkeypatch):
 
     with (
         patch("prompts.registry.get_certified_prompt", return_value=certified),
+        patch("prompts.routing.select_variant", return_value=None),
         patch("agents.planner._init_planner_llms"),
         patch("agents.planner.invoke_with_fallback", return_value=mock_selection),
         patch("agents.planner.get_spec") as mock_spec,
@@ -147,6 +159,7 @@ def test_planner_node_returns_prompt_version_in_state(monkeypatch):
 
     with (
         patch("prompts.registry.get_certified_prompt", return_value=certified),
+        patch("prompts.routing.select_variant", return_value=None),
         patch("agents.planner._init_planner_llms"),
         patch("agents.planner.invoke_with_fallback", return_value=mock_selection),
         patch("agents.planner.get_spec") as mock_spec,

@@ -35,3 +35,6 @@ class QueryResponse(BaseModel):
     llm_calls_count: int = 0
     budget_exceeded: bool = False
     budget_exceeded_reason: Optional[str] = None
+    # GroundedTokens clarification (item 5.9)
+    clarification_needed: bool = False
+    clarification_message: Optional[str] = None

@@ -50,6 +50,7 @@ class DecisionVariable:
     bounds_max: float
     steps: int
     default: float
+    aliases: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -73,6 +74,18 @@ class TargetVariable:
     unit: str
     formula: str
     optimize: str  # "maximize" | "minimize" | "none"
+    aliases: list[str] = field(default_factory=list)
+
+
+@dataclass
+class DerivedMetric:
+    """A computed KPI or metric derived from the model (item 5.9 vocabulary)."""
+
+    id: str
+    name: str
+    description: str
+    unit: str
+    aliases: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -175,6 +188,9 @@ class OrganizationalModelSpec:
     # Autonomy policy (defaults to all-auto for backward compatibility)
     autonomy_policy: AutonomyPolicy = field(default_factory=AutonomyPolicy)
 
+    # Derived metrics / KPIs — used by GroundedTokens vocabulary (item 5.9)
+    derived_metrics: List[DerivedMetric] = field(default_factory=list)
+
     # ── Convenience helpers ───────────────────────────────────────────────────
 
     def get_decision_var(self, name: str) -> DecisionVariable:
@@ -211,6 +227,7 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
                 bounds_max=float(b["max"]),
                 steps=int(b.get("steps", 50)),
                 default=float(v.get("default", b["min"])),
+                aliases=list(v.get("aliases", [])),
             )
         )
 
@@ -238,6 +255,20 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
                 unit=v.get("unit", ""),
                 formula=v.get("formula", ""),
                 optimize=v.get("optimize", "none"),
+                aliases=list(v.get("aliases", [])),
+            )
+        )
+
+    # Derived metrics (item 5.9 vocabulary — optional, backward-compatible)
+    derived_metrics: List[DerivedMetric] = []
+    for dm in raw.get("derived_metrics", []):
+        derived_metrics.append(
+            DerivedMetric(
+                id=dm["id"],
+                name=dm["name"],
+                description=dm.get("description", ""),
+                unit=dm.get("unit", ""),
+                aliases=list(dm.get("aliases", [])),
             )
         )
 
@@ -326,6 +357,7 @@ def _parse_raw(raw: Dict) -> OrganizationalModelSpec:
             k: float(v) for k, v in opt.get("fixed_variables", {}).items()
         },
         autonomy_policy=autonomy_policy,
+        derived_metrics=derived_metrics,
     )
 
 
