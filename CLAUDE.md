@@ -363,6 +363,20 @@ phase before touching any code:
    - Backward compatibility is non-negotiable unless the prompt explicitly says
      otherwise. The UI and the API must keep working identically.
 
+5. **Automated verification plan**: list the integration-level checks that will be
+   run via API/CLI (not just unit tests) before declaring the PR ready for review.
+   Each check has a one-line description and a verifiable signal (HTTP status,
+   DB row count, JSON field value). For example:
+   - "POST /v1/query with knowledge query → response 200, awaiting_user_confirmation=false"
+   - "SELECT COUNT(*) FROM agent_runs WHERE total_cost_usd > 0 → > 0 after running a query"
+
+   These integration checks are MANDATORY for any BIG change. They run after pytest
+   passes and before opening the PR. Their results are reported in the PR description.
+
+   If a check cannot be reliably triggered end-to-end (e.g. LLM behavior is
+   non-deterministic), document the reason explicitly and cite the unit tests that
+   authoritatively cover the logic.
+
 Only after the Plan review is shown should implementation start. The user reads
 the Plan review and either approves or sends adjustments before any code lands.
 
@@ -380,8 +394,57 @@ architecture is decided upstream and lives in:
 - ADR-002, ADR-003, ADR-005
 - The inventory v4 and roadmap v4
 
-Claude Code's review is a final safety net against subtle integration mistakes,
-not an invitation to question architectural decisions.
+The Plan review is a final safety net against subtle integration mistakes, not an
+invitation to question architectural decisions. The five steps (restatement, risks,
+assumptions, principles, automated verification plan) are ALL mandatory for BIG
+changes — no step is optional.
+
+---
+
+## Documentation maintenance discipline (every significant PR)
+
+Every PR that adds a feature, changes a contract, modifies a migration, adds an env var,
+or touches the architecture MUST update ALL relevant documentation files in the same commit.
+Documentation drift is treated as a bug, not as follow-up work.
+
+### Canonical documentation map
+
+The repository has the following living documentation. For each file, the table below
+states what kinds of changes require an update.
+
+| File | Update when... |
+|---|---|
+| `CLAUDE.md` | Architecture diagram changes, new patterns introduced, new ADRs added, item count changes, new modules added that shape how Claude Code should reason about the codebase |
+| `README.md` | New features, new env vars, new migrations, new files in the source tree (the file tree section MUST stay synchronized), new API endpoints, new commands |
+| `docs/llull_inventario_v4.md` | An inventory item is completed (mark as ✅), a new item is added, an item's scope changes, item count shifts |
+| `docs/llull_roadmap_v4.md` | An inventory item is completed (mark as ✅), package contents change, ADR references change |
+| `docs/llull_roadmap_visual.html` | Same as roadmap MD — keep the visual in sync |
+| `docs/audit/<latest>_llull_self_audit.md` | A completed item moves dimension scores; layer means must be recomputed arithmetically; footer note added with the date and change summary |
+| `docs/audit/<latest>_llull_self_audit.html` | Same as audit MD — keep the heatmap, gauge, and footer synchronized |
+| `docs/tech_debt.md` | New debt is incurred (add entry), debt is paid (mark Status: Closed), design decisions under review are recorded |
+| `.env.example` | A new env var is introduced |
+| The operator's local `.env` | After merging a PR that adds env vars, the operator must replicate them locally before relaunching the app. The PR description must include an "AFTER MERGE" reminder section listing new env vars |
+
+### Finding the latest audit
+
+The "latest audit" is the file in `docs/audit/` with the most recent date in its filename
+(e.g. `2026-05-17_llull_self_audit.md`). When unsure, list `docs/audit/` and pick the newest.
+
+### Checklist mechanics
+
+Before opening a PR, Claude Code must include in the PR description a checklist of which
+documentation files were updated, with a one-line summary per file. Files in the canonical
+map that were NOT updated must be justified (e.g. "README unchanged — no new files in tree,
+no new env vars, no new endpoints").
+
+### Common omissions to watch for
+
+- README file tree section out of sync with `tree -L 2` of the source
+- New Alembic migration not mentioned in README's migration section
+- New env var added to `.env.example` but not to the PR's "AFTER MERGE" reminder
+- Audit doc not updated because the file path was forgotten — always list `docs/audit/` first
+- `tech_debt.md` entry closed in commit but not in PR description
+- Item count in CLAUDE.md and inventory not updated when adding/closing items
 
 ---
 
@@ -571,8 +634,9 @@ Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of sc
 
 - `docs/llull_inventario_v4.md` — full backlog (117 items)
 - `docs/llull_roadmap_v4.md` — iteration plan with progress
+- `docs/tech_debt.md` — active technical debt register; must be consulted before every implementation
 - `docs/adr-001-pgvector-over-qdrant.md` ⚠️ SUPERSEDED by ADR-005
 - `docs/adr-002-langgraph-orchestration.md` (ADR-002)
 - `docs/adr-003-llullgen-component-reuse-policy.md` (ADR-003)
 - `docs/ADR-005-vector-store-strategy.md` (ADR-005) — pgvector + pgvectorscale strategy, supersedes ADR-001
-- `docs/2026-05-06_llull_self_audit.md` — architecture audit with findings
+- `docs/audit/2026-05-17_llull_self_audit.md` — latest architecture audit (overall 3.00/5); HTML version at same path

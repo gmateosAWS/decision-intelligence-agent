@@ -1415,6 +1415,13 @@ No changes to the agent, planner, workflow, or simulation engine are required.
 | Autonomy policy stored in spec (`autonomy_policy`) | Per-tool execution gating (`auto` / `human_confirms` / `human_approves`) is part of the versioned domain model, not hardcoded in agent logic; changing a tool's gate level requires only a spec update via `PUT /v1/specs/{id}/autonomy`, which creates a MINOR-bumped spec version automatically — no code deploy needed |
 | Conditional edge in LangGraph for autonomy bypass | The `_route_after_planner` function lets the graph route around the tool node entirely when human review is required, instead of executing the tool and then asking for confirmation; this ensures the tool's side effects never occur without authorization |
 | Chain-of-Thought enforced in planner `reasoning` field | The prompt requires the LLM to reason through four explicit steps before selecting a tool; reduces misrouting without changing the output schema |
+
+## Contributing
+
+Contributors should read `CLAUDE.md`, especially the **Plan review discipline** and
+**Documentation maintenance discipline** sections, before submitting PRs. Both sections
+define mandatory pre-PR steps (plan review with automated verification plan, documentation
+checklist) that are enforced via pre-commit hooks and CI.
 | `agents/llm_factory.py` — provider-agnostic LLM factory | `get_chat_model(provider, model)` returns a `BaseChatModel` for OpenAI or Anthropic; adding a new provider requires only a new branch in the factory, not changes across all nodes |
 | Automatic provider fallback (`FALLBACK_PROVIDER`) | If the primary LLM fails (any error), `invoke_with_fallback()` transparently retries with a secondary provider; the graph never sees the exception, enabling zero-downtime provider switching |
 | Exponential backoff on rate limits (HTTP 429) | `invoke_with_fallback()` retries up to `LLM_MAX_RETRIES` times with 2^n-second delays before escalating to the fallback provider; prevents cascading failures under API throttling |
