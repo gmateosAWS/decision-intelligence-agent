@@ -96,7 +96,7 @@ def get_or_create_graph() -> Any:
 # ---------------------------------------------------------------------------
 
 
-def run_agent_query(prompt: str, graph: Any) -> Any:
+def run_agent_query(prompt: str, graph: Any, bypass_gate: bool = False) -> Any:
     """
     Run one agent turn and return the result.
 
@@ -121,6 +121,6 @@ def run_agent_query(prompt: str, graph: Any) -> Any:
         pass
 
     # Delegate to shared runner (Directive 3)
-    result = run_query(prompt, session_id, observer, graph)
+    result = run_query(prompt, session_id, observer, graph, bypass_gate=bypass_gate)
 
     return result

@@ -55,3 +55,54 @@ class StateAuditResponse(BaseModel):
     session_id: str
     transitions: List[StateTransitionResponse]
     total: int
+
+
+# ── State proposals & commits (item 5.13) ────────────────────────────────────
+
+
+class SlotProposalSchema(BaseModel):
+    """One proposed mutation on a single state slot."""
+
+    slot: str
+    current_value: Any = None
+    proposed_value: Any = None
+    reason: str = ""
+
+
+class ProposalCreateRequest(BaseModel):
+    """Request body for POST /sessions/{id}/state/proposals."""
+
+    source: str  # "proactive_planner" | "reactive_user"
+    pending_mutations: Optional[List[SlotProposalSchema]] = None
+
+
+class ProposalResponse(BaseModel):
+    """Response body containing the generated StateProposal."""
+
+    session_id: str
+    turn_id: int
+    source: str
+    mutations: List[SlotProposalSchema]
+    triggered_signals: List[str] = []
+    created_at: str
+
+
+class CommitDecisionRequest(BaseModel):
+    """Request body for POST /sessions/{id}/state/commits."""
+
+    proposal_turn_id: int
+    approved_mutations: List[SlotProposalSchema] = []
+    rejected_slots: List[str] = []
+    freeze_slots: List[str] = []
+    unfreeze_slots: List[str] = []
+
+
+class CommitResultResponse(BaseModel):
+    """Response body for a committed state decision."""
+
+    session_id: str
+    version_before: int
+    version_after: int
+    applied_mutations: List[SlotProposalSchema]
+    skipped_slots: List[str]
+    committed_at: str

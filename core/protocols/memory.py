@@ -19,37 +19,73 @@ that boundary is enforced by scripts/check_memory_boundary.py in CI.
 
 from __future__ import annotations
 
-from typing import List, Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Any, List, Protocol, runtime_checkable
 from uuid import UUID
 
 from memory.state.active import ActiveAnalyticalState
 from memory.state.audit import StateTransition
 from memory.state.types import ResolvedMetric
 
+# ── Proposal / commit data model (item 5.13) ─────────────────────────────────
 
+
+class ProposalSource(str, Enum):
+    """Origin of a state proposal."""
+
+    PROACTIVE_PLANNER = "proactive_planner"
+    REACTIVE_USER = "reactive_user"
+
+
+@dataclass
+class SlotProposal:
+    """A single proposed mutation on one slot."""
+
+    slot: str
+    current_value: Any
+    proposed_value: Any
+    reason: str
+
+
+@dataclass
 class StateProposal:
-    """A proposed mutation to ActiveAnalyticalState.
+    """A bundle of proposed mutations awaiting user decision."""
 
-    v1: intentionally minimal placeholder — the full proposal/decision flow
-    lands with item 5.13 (user-driven state corrections).
+    session_id: UUID
+    turn_id: int
+    source: ProposalSource
+    mutations: list[SlotProposal]
+    triggered_signals: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
-    TODO(5.13): expand with proposed_slot, proposed_value, proposed_op,
-    justification, requires_user_confirmation.
-    """
 
-
+@dataclass
 class StateCommitDecision:
-    """A user's decision on a StateProposal.
+    """User's response to a StateProposal."""
 
-    TODO(5.13): expand with accept: bool, alternative_value, justification.
-    """
+    session_id: UUID
+    proposal_turn_id: int
+    approved_mutations: list[SlotProposal] = field(default_factory=list)
+    rejected_slots: list[str] = field(default_factory=list)
+    freeze_slots: list[str] = field(default_factory=list)
+    unfreeze_slots: list[str] = field(default_factory=list)
 
 
+@dataclass
 class StateCommitResult:
-    """The result of applying a StateCommitDecision.
+    """Outcome of applying a StateCommitDecision."""
 
-    TODO(5.13): expand with version_before, version_after, applied: bool.
-    """
+    session_id: UUID
+    version_before: int
+    version_after: int
+    applied_mutations: list[SlotProposal]
+    skipped_slots: list[str]
+    committed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# ── Protocol ──────────────────────────────────────────────────────────────────
 
 
 @runtime_checkable
@@ -126,13 +162,24 @@ class MemoryService(Protocol):
         """
         ...
 
-    # ── Explicit-mutation API (5.13 placeholder) ─────────────────────────────
+    # ── Explicit-mutation API (item 5.13) ─────────────────────────────────────
 
-    def propose_state_update(self, session_id: UUID, turn_id: int) -> StateProposal:
-        """Generate a proposed mutation for user review.
+    def propose_state_update(
+        self,
+        session_id: UUID,
+        turn_id: int,
+        source: ProposalSource,
+        pending_mutations: list[SlotProposal] | None = None,
+    ) -> StateProposal:
+        """Generate a proposal of mutations awaiting user decision.
 
-        v1 returns an empty StateProposal — the full proposal/decision flow
-        lands with item 5.13 (user-driven state corrections).
+        For PROACTIVE_PLANNER: pending_mutations is the planner's intended
+        changes expressed as SlotProposals. The proposal is persisted for audit.
+
+        For REACTIVE_USER: pending_mutations is None; the method returns the
+        current state slots packaged as proposals (current_value == proposed_value)
+        so the user can edit them. Slots covered: intent, metrics,
+        active_simulation_run, active_optimization_run, active_scenarios.
         """
         ...
 
@@ -141,8 +188,13 @@ class MemoryService(Protocol):
         session_id: UUID,
         decision: StateCommitDecision,
     ) -> StateCommitResult:
-        """Apply a user-approved StateProposal.
+        """Apply approved mutations via MemoryCoordinator. Persist with audit.
 
-        v1 is a no-op — the full implementation comes with item 5.13.
+        Raises ValueError when decision.proposal_turn_id does not correspond
+        to an open proposal for this session (API layer converts to HTTP 400).
+
+        Frozen slots in approved_mutations are silently skipped (logged in
+        skipped_slots of the result). freeze_slots / unfreeze_slots in the
+        decision are always applied regardless of the approved_mutations list.
         """
         ...

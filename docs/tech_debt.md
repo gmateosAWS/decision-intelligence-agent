@@ -6,49 +6,46 @@ final form should be, and the migration path.
 
 ---
 
-## 5.11 → 5.13: MemoryService `propose_state_update` / `commit_state_update` stubs
+## ~~5.11 → 5.13: MemoryService `propose_state_update` / `commit_state_update` stubs~~
 
-**Status:** Open. Created 2026-05-14.
-**Blocker:** Item 5.13 (user-correction mutations — explicit slot override flow).
-**Affected:** `core/protocols/memory.py`, `memory/service.py`
+**Status:** ✅ Resolved in item 5.13 (2026-05-18).
+`propose_state_update` and `commit_state_update` are now fully implemented in
+`memory/service.py`. DB audit tables (`state_proposals`, `state_commits`) added
+in migration 010. REST endpoints `POST /proposals` and `POST /commits` available.
+
+---
+
+## 5.13 v2: Frozen-slot inheritance rules and volatile/sticky slot lifecycle
+
+**Status:** Open. Created 2026-05-18.
+**Blocker:** Future design review — no inventory item yet.
+**Affected:** `memory/state/active.py`, `memory/coordinator/coordinator.py`
 
 ### Current state (v1)
 
-`propose_state_update` and `commit_state_update` are v1 placeholder methods in the
-`MemoryService` Protocol. They return empty `StateProposal` and `StateCommitResult`
-objects without performing any actual state mutation.
+`frozen_slots` prevents the system from overwriting user-confirmed values.
+`volatile_slots` and `sticky_slots` are scaffolded fields (typed, present in the
+schema) but not enforced. The rule for when a frozen slot should auto-unfreeze
+(e.g., when the user starts a new topic) is not yet defined.
 
-```python
-# TODO(5.13/MemoryService): propose/commit are stubs — full flow deferred to item 5.13.
-# When 5.13 lands: propose_state_update reads current frozen state + incoming LLM
-# evidence and returns a StateProposal listing which slots would change.
-# commit_state_update applies approved mutations via MemoryCoordinator and persists.
-```
+### Target state
 
-### Target state (when 5.13 lands)
-
-`propose_state_update` will:
-1. Read the current frozen `ActiveAnalyticalState` snapshot
-2. Apply incoming user-correction evidence from `StateProposal.pending_mutations`
-3. Return a `StateProposal` listing slots-to-change with before/after values
-
-`commit_state_update` will:
-1. Validate `StateCommitDecision.approved_mutations` against the proposal
-2. Apply approved mutations via the single-writer `MemoryCoordinator`
-3. Persist to DB and return a `StateCommitResult` with the new version
+- `volatile_slots`: automatically cleared at turn boundary (e.g., `params`)
+- `sticky_slots`: persist across topic changes unless the user explicitly resets
+- Inheritance rule for `frozen_slots` when a new session is created from a template
+- Conflict event when the system tries to mutate a frozen slot (currently silent)
 
 ### Migration path
 
-1. Item 5.13 lands with the user-correction mutation flow
-2. Implement `propose_state_update` on `LocalMemoryService` with full mutation logic
-3. Implement `commit_state_update` applying approved mutations through `MemoryCoordinator`
-4. Extend `POST /v1/sessions/{id}/state/corrections` endpoint (already planned in 5.13)
-5. Remove the TODO comment from both methods
+1. Define the lifecycle rule via a Product decision (not a tech decision)
+2. Add enforcement in `MemoryCoordinator._mutate()` for volatile expiry
+3. Emit a typed `SlotConflictEvent` (not just a log warning) for frozen violations
+4. Update `memory/state/active.py` docstring to remove "not enforced in v1" note
 
 ### Risk if not migrated
 
-- Users cannot explicitly correct misidentified intent or stale slot values
-- State errors propagate silently across turns until the session resets
+- Users who freeze a slot may be confused when the value persists indefinitely
+- No way to distinguish "user confirmed this" from "this value is stale but frozen"
 
 ---
 

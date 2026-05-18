@@ -492,7 +492,7 @@ _Resuelve:_ una clase de fallo que solo aparece en producción multi-agente: dos
 
 ---
 
-### 5.13 User-driven state corrections `[v4 — feature]`
+### 5.13 User-driven state corrections `[v4 — feature]` ✅ Completado 2026-05-18
 
 Mecanismo explícito para que el usuario corrija el `ActiveAnalyticalState` cuando el sistema haya identificado mal el intent, las métricas activas, o cualquier otro slot. Hoy (tras 5.11) las mutaciones son implícitas — el planner y los nodos del workflow actualizan el state vía `MemoryService.record_*`. El item 5.13 abre el ciclo explícito `propose_state_update` → revisión del usuario → `commit_state_update`, donde el operador humano confirma o ajusta lo que el sistema infirió.
 

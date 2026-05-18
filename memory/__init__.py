@@ -20,6 +20,7 @@ Boundary rule (item 5.11):
 from __future__ import annotations
 
 from .checkpointer import get_checkpointer, register_turn
+from .coordinator.intent_mapping import map_tool_to_intent
 from .service import LocalMemoryService
 from .session_manager import SessionManager
 
@@ -29,6 +30,7 @@ __all__ = [
     "SessionManager",
     "LocalMemoryService",
     "get_memory_service",
+    "map_tool_to_intent",
 ]
 
 _memory_service: LocalMemoryService | None = None

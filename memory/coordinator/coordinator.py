@@ -120,6 +120,42 @@ class MemoryCoordinator:
             evidence=evidence,
         )
 
+    def freeze_slot(self, slot: str, turn_id: int, cause: str) -> None:
+        """Add slot to frozen_slots. Frozen slots resist system mutations."""
+        self._state.frozen_slots.add(slot)
+        self._state.version += 1
+        self._audit_log.append(
+            StateTransition(
+                turn_id=turn_id,
+                version_before=self._state.version - 1,
+                version_after=self._state.version,
+                slot=slot,
+                op=TransitionOp.SET,
+                before=False,
+                after=True,
+                cause=cause,
+                evidence=f"frozen_slots.add({slot!r})",
+            )
+        )
+
+    def unfreeze_slot(self, slot: str, turn_id: int, cause: str) -> None:
+        """Remove slot from frozen_slots, allowing system mutations again."""
+        self._state.frozen_slots.discard(slot)
+        self._state.version += 1
+        self._audit_log.append(
+            StateTransition(
+                turn_id=turn_id,
+                version_before=self._state.version - 1,
+                version_after=self._state.version,
+                slot=slot,
+                op=TransitionOp.CLEAR,
+                before=True,
+                after=False,
+                cause=cause,
+                evidence=f"frozen_slots.discard({slot!r})",
+            )
+        )
+
     # ── Persistence API ─────────────────────────────────────────────────────
 
     def persist_to_db(self) -> None:

@@ -3,20 +3,24 @@ agents/workflow.py
 ------------------
 LangGraph workflow for the Decision Intelligence Agent.
 
-Defines the four pipeline nodes and compiles them into a directed graph:
+Defines the pipeline nodes and compiles them into a directed graph:
 
-    planner_node → tool_node → synthesizer_node → judge_node → END
+    planner_node → [proactive_gate] → tool_node → synthesizer_node → judge_node → END
 
 Nodes
 -----
-- ``planner_node``    -- wraps the LLM planner; records timing via observer.
-- ``tool_node``       -- dispatches to the tool selected by the planner
-                         (optimization / simulation / knowledge); errors are
-                         captured and propagated in state rather than raised.
-- ``synthesizer_node``-- converts raw tool output into a business-oriented
-                         draft answer using an LLM (``SYNTHESIZER_MODEL``).
-- ``judge_node``      -- delegates to ``agents/judge.py`` for online quality
-                         evaluation and optional single-pass revision.
+- ``planner_node``              -- wraps the LLM planner; records timing via observer.
+- ``proactive_confirmation_gate``-- pauses flow when structural signals fire for an
+                                    expensive tool (item 5.13). Returns a StateProposal
+                                    to the client instead of executing the tool.
+- ``tool_node``                 -- dispatches to the tool selected by the planner
+                                    (optimization / simulation / knowledge); errors are
+                                    captured and propagated in state rather than raised.
+- ``synthesizer_node``          -- converts raw tool output into a business-oriented
+                                    draft answer using an LLM (``SYNTHESIZER_MODEL``).
+- ``judge_node``                -- delegates to ``agents/judge.py`` for online quality
+                                    evaluation and optional single-pass revision.
+- ``clarification_node``        -- vocabulary clarification message (item 5.9).
 
 ``build_graph(checkpointer=None)`` compiles the graph with optional SQLite
 persistence: when a checkpointer is provided, LangGraph writes partial state
@@ -284,10 +288,123 @@ def judge_node(
 # ---------------------------------------------------------------------------
 
 
+def proactive_confirmation_gate(
+    state: AgentState,
+    config: Optional[RunnableConfig] = None,
+) -> dict[str, Any]:
+    """Proactive-gate node (item 5.13).
+
+    Generates a StateProposal when structural signals fire for an expensive tool,
+    stores it in AgentState as a JSON-serialisable dict, and sets
+    `awaiting_user_confirmation=True` so the runner returns early to the client.
+    The client must POST /proposals → /commits to resume.
+    """
+    from core.protocols.memory import ProposalSource, SlotProposal  # noqa: PLC0415
+    from memory.proactive_confirmation import (  # noqa: PLC0415
+        should_request_confirmation,
+    )
+
+    action: str = state.get("action") or "knowledge"
+    query: str = state.get("query", "")
+    params: dict[str, Any] = state.get("params") or {}
+    history: list[dict[str, str]] = state.get("history") or []
+
+    should_pause, triggered = should_request_confirmation(
+        tool=action, query=query, params=params, history=history
+    )
+    if not should_pause:
+        return {}
+
+    memory = _get_memory_service(config)
+    session_id = _get_session_id(config)
+
+    # Mutations: intent (applied by commit) + params (UI display, no-op in service).
+    from memory import map_tool_to_intent  # noqa: PLC0415
+
+    proposed_intent = map_tool_to_intent(action)
+    pending_mutations: list[SlotProposal] = [
+        SlotProposal(
+            slot="intent",
+            current_value=None,
+            proposed_value=proposed_intent.value,
+            reason=f"Planner selected '{action}' tool. Committing this proposal "
+            "will record the intent in analytical state.",
+        ),
+        SlotProposal(
+            slot="params",
+            current_value=params,
+            proposed_value=params,
+            reason=f"Parameters for '{action}' tool. Inspect before confirming.",
+        ),
+    ]
+
+    proposal_dict: dict[str, Any] = {}
+    if memory is not None and session_id is not None:
+        try:
+            active = memory.get_active_state(session_id)
+            turn_id = active.last_turn_id + 1
+            proposal = memory.propose_state_update(
+                session_id=session_id,
+                turn_id=turn_id,
+                source=ProposalSource.PROACTIVE_PLANNER,
+                pending_mutations=pending_mutations,
+            )
+            import dataclasses  # noqa: PLC0415
+            import json  # noqa: PLC0415
+
+            proposal_dict = json.loads(
+                json.dumps(dataclasses.asdict(proposal), default=str)
+            )
+            proposal_dict["triggered_signals"] = triggered
+        except Exception:  # noqa: BLE001
+            # Fall-back: build a minimal dict without DB persistence
+
+            proposal_dict = {
+                "session_id": str(session_id) if session_id else "",
+                "turn_id": 0,
+                "source": ProposalSource.PROACTIVE_PLANNER.value,
+                "mutations": (
+                    [dataclasses.asdict(m) for m in pending_mutations]
+                    if "dataclasses" in dir()
+                    else []
+                ),
+                "triggered_signals": triggered,
+            }
+    else:
+        proposal_dict = {
+            "session_id": "",
+            "turn_id": 0,
+            "source": ProposalSource.PROACTIVE_PLANNER.value,
+            "mutations": [],
+            "triggered_signals": triggered,
+        }
+
+    return {
+        "awaiting_user_confirmation": True,
+        "proposal": proposal_dict,
+    }
+
+
 def _route_after_planner(state: AgentState) -> str:
-    """Route after planner: clarification > autonomy policy > tool."""
+    """Route after planner: clarification > proactive gate > autonomy policy > tool."""
     if state.get("clarification_needed"):
         return "clarification"
+    # bypass_gate=True: user confirmed via UI/API, skip the proactive check.
+    if not state.get("bypass_gate", False):
+        # Proactive gate: check if expensive tool + signals warrant pausing.
+        from memory.proactive_confirmation import (  # noqa: PLC0415
+            should_request_confirmation,
+        )
+
+        action: str = state.get("action") or "knowledge"
+        query: str = state.get("query", "")
+        params: dict[str, Any] = state.get("params") or {}
+        history: list[dict[str, str]] = state.get("history") or []
+        should_pause, _ = should_request_confirmation(
+            tool=action, query=query, params=params, history=history
+        )
+        if should_pause:
+            return "proactive_confirmation_gate"
     if state.get("requires_confirmation") or state.get("requires_approval"):
         return "synthesizer"
     return "tool"
@@ -316,7 +433,7 @@ def clarification_node(
 
 def build_graph(checkpointer: Any = None) -> Any:
     """
-    Build and compile the 5-node LangGraph workflow.
+    Build and compile the 6-node LangGraph workflow.
 
     Parameters
     ----------
@@ -327,10 +444,12 @@ def build_graph(checkpointer: Any = None) -> Any:
     Flow (auto):          planner → tool → synthesizer → judge → END
     Flow (policy):        planner → synthesizer → judge → END
     Flow (clarification): planner → clarification → END  (item 5.9)
+    Flow (proactive):     planner → proactive_gate → END  (item 5.13)
     """
     builder = StateGraph(AgentState)
 
     builder.add_node("planner", planner_node)
+    builder.add_node("proactive_confirmation_gate", proactive_confirmation_gate)
     builder.add_node("tool", tool_node)
     builder.add_node("synthesizer", synthesizer_node)
     builder.add_node("judge", judge_node)
@@ -344,8 +463,10 @@ def build_graph(checkpointer: Any = None) -> Any:
             "tool": "tool",
             "synthesizer": "synthesizer",
             "clarification": "clarification",
+            "proactive_confirmation_gate": "proactive_confirmation_gate",
         },
     )
+    builder.add_edge("proactive_confirmation_gate", END)
     builder.add_edge("tool", "synthesizer")
     builder.add_edge("synthesizer", "judge")
     builder.add_edge("judge", END)

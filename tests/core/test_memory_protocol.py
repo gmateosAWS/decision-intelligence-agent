@@ -156,19 +156,68 @@ def test_read_audit_returns_transitions() -> None:
     assert len(log_filtered) == 0
 
 
-def test_propose_commit_return_placeholders() -> None:
-    """v1 placeholder methods must return without raising."""
-    from core.protocols.memory import (
-        StateCommitDecision,
-        StateCommitResult,
-        StateProposal,
-    )
+def test_propose_state_update_reactive() -> None:
+    """REACTIVE_USER proposal exposes editable slots as identity mutations."""
+    from core.protocols.memory import ProposalSource, StateProposal
 
     svc = _service()
     sid = uuid.uuid4()
 
-    proposal = svc.propose_state_update(sid, turn_id=1)
+    proposal = svc.propose_state_update(
+        sid, turn_id=1, source=ProposalSource.REACTIVE_USER
+    )
     assert isinstance(proposal, StateProposal)
+    assert proposal.session_id == sid
+    assert proposal.turn_id == 1
+    assert proposal.source == ProposalSource.REACTIVE_USER
+    # Reactive proposals expose the editable slots as identity mutations
+    slots = [m.slot for m in proposal.mutations]
+    assert "intent" in slots
+    assert "metrics" in slots
 
-    result = svc.commit_state_update(sid, decision=StateCommitDecision())
-    assert isinstance(result, StateCommitResult)
+
+def test_propose_and_commit_round_trip() -> None:
+    """propose then commit applies the mutation and removes the open proposal."""
+    from core.protocols.memory import ProposalSource, SlotProposal, StateCommitDecision
+
+    svc = _service()
+    sid = uuid.uuid4()
+
+    proposal = svc.propose_state_update(
+        sid,
+        turn_id=1,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="active_simulation_run",
+                current_value=None,
+                proposed_value="run_123",
+                reason="test",
+            )
+        ],
+    )
+
+    decision = StateCommitDecision(
+        session_id=sid,
+        proposal_turn_id=proposal.turn_id,
+        approved_mutations=list(proposal.mutations),
+    )
+    result = svc.commit_state_update(sid, decision=decision)
+
+    assert result.version_after > result.version_before
+    state = svc.get_active_state(sid)
+    assert state.active_simulation_run == "run_123"
+
+
+def test_commit_missing_proposal_raises_value_error() -> None:
+    """commit_state_update must raise ValueError for an unknown proposal_turn_id."""
+    from core.protocols.memory import StateCommitDecision
+
+    svc = _service()
+    sid = uuid.uuid4()
+
+    with pytest.raises(ValueError, match="No open proposal"):
+        svc.commit_state_update(
+            sid,
+            decision=StateCommitDecision(session_id=sid, proposal_turn_id=999),
+        )
