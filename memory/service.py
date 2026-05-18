@@ -13,14 +13,39 @@ or type-hint against `core.protocols.memory.MemoryService`.
 
 from __future__ import annotations
 
-from typing import Dict, List
+import dataclasses
+import logging
+from typing import TYPE_CHECKING, Any, Dict, List
 from uuid import UUID
 
+# Deferred to break the circular import chain:
+#   core.protocols.memory → memory.state.active → memory.__init__ → memory.service
+# All symbols used only as runtime values are imported inside the methods that need
+# them.
+if TYPE_CHECKING:
+    from core.protocols.memory import (
+        ProposalSource,
+        SlotProposal,
+        StateCommitDecision,
+        StateCommitResult,
+        StateProposal,
+    )
 from memory.coordinator.coordinator import MemoryCoordinator
 from memory.coordinator.intent_mapping import map_tool_to_intent
 from memory.state.active import ActiveAnalyticalState
-from memory.state.audit import StateTransition
+from memory.state.audit import StateTransition, TransitionOp
 from memory.state.types import ResolvedMetric
+
+logger = logging.getLogger(__name__)
+
+# Slots exposed for reactive user correction.
+_REACTIVE_EDITABLE_SLOTS = [
+    "intent",
+    "metrics",
+    "active_simulation_run",
+    "active_optimization_run",
+    "active_scenarios",
+]
 
 
 class LocalMemoryService:
@@ -30,10 +55,17 @@ class LocalMemoryService:
     lifetime of this service instance (typically the process lifetime when
     used via get_memory_service()). Mutations are persisted synchronously
     with fail-open behaviour.
+
+    In-memory proposal store: proposals are kept in a dict keyed by
+    (session_id, turn_id). In v1 this is process-local (no cross-process
+    coordination). A future item (5.13.c) will persist proposals to the
+    state_proposals table for audit; the DB models are ready in migration 010.
     """
 
     def __init__(self) -> None:
         self._coordinators: Dict[UUID, MemoryCoordinator] = {}
+        # In-memory proposal store: (session_id, turn_id) → StateProposal
+        self._proposals: Dict[tuple[UUID, int], StateProposal] = {}
 
     def _get_or_load(self, session_id: UUID) -> MemoryCoordinator:
         if session_id not in self._coordinators:
@@ -103,19 +135,107 @@ class LocalMemoryService:
         # Other tools: no slot defined in v1; ignore gracefully.
         self._persist_safe(coord)
 
-    # ── Explicit-mutation API (5.13 placeholders) ─────────────────────────────
+    # ── Explicit-mutation API (item 5.13) ──────────────────────────────────
 
-    def propose_state_update(self, session_id: UUID, turn_id: int) -> object:
-        # TODO(5.13): generate real StateProposal from turn delta.
-        from core.protocols.memory import StateProposal
+    def propose_state_update(
+        self,
+        session_id: UUID,
+        turn_id: int,
+        source: ProposalSource,
+        pending_mutations: list[SlotProposal] | None = None,
+    ) -> StateProposal:
+        """Generate a proposal of mutations awaiting user decision.
 
-        return StateProposal()
+        PROACTIVE_PLANNER: uses pending_mutations supplied by the workflow gate.
+        REACTIVE_USER: packages current editable slots as identity proposals
+        (current_value == proposed_value) so the user can edit them.
+        """
+        from core.protocols.memory import (  # noqa: PLC0415
+            ProposalSource as _ProposalSource,
+        )
+        from core.protocols.memory import (
+            StateProposal as _StateProposal,
+        )
 
-    def commit_state_update(self, session_id: UUID, decision: object) -> object:
-        # TODO(5.13): apply StateCommitDecision via coordinator with audit trail.
-        from core.protocols.memory import StateCommitResult
+        coord = self._get_or_load(session_id)
+        state = coord.get_state()
 
-        return StateCommitResult()
+        if source == _ProposalSource.PROACTIVE_PLANNER:
+            mutations = list(pending_mutations or [])
+        else:
+            # Reactive: build SlotProposal for each editable slot
+            mutations = self._build_reactive_mutations(state)
+
+        proposal = _StateProposal(
+            session_id=session_id,
+            turn_id=turn_id,
+            source=source,
+            mutations=mutations,
+        )
+        self._proposals[(session_id, turn_id)] = proposal
+        self._persist_proposal_safe(proposal)
+        return proposal
+
+    def commit_state_update(
+        self,
+        session_id: UUID,
+        decision: StateCommitDecision,
+    ) -> StateCommitResult:
+        """Apply approved mutations via MemoryCoordinator. Persist with audit.
+
+        Raises ValueError when proposal_turn_id does not correspond to a
+        known open proposal (API converts to HTTP 400).
+        """
+        proposal = self._proposals.get((session_id, decision.proposal_turn_id))
+        if proposal is None:
+            raise ValueError(
+                f"No open proposal for session {session_id} "
+                f"at turn_id {decision.proposal_turn_id}"
+            )
+
+        coord = self._get_or_load(session_id)
+        state_before = coord.get_state()
+        version_before = state_before.version
+
+        applied: list[SlotProposal] = []
+        skipped: list[str] = []
+        turn_id = decision.proposal_turn_id
+        cause = "user:correction"
+
+        for mutation in decision.approved_mutations:
+            slot = mutation.slot
+            # frozen_slots are silently skipped — the coordinator would also
+            # reject them, but we log them explicitly in skipped_slots.
+            if slot in state_before.frozen_slots:
+                skipped.append(slot)
+                continue
+            self._apply_mutation(coord, mutation, turn_id, cause)
+            applied.append(mutation)
+
+        # Apply freeze / unfreeze regardless of approved_mutations
+        for slot in decision.freeze_slots:
+            coord.freeze_slot(slot, turn_id=turn_id, cause=cause)
+        for slot in decision.unfreeze_slots:
+            coord.unfreeze_slot(slot, turn_id=turn_id, cause=cause)
+
+        self._persist_safe(coord)
+
+        # Remove proposal from in-memory store (mark resolved)
+        del self._proposals[(session_id, decision.proposal_turn_id)]
+
+        from core.protocols.memory import (
+            StateCommitResult as _StateCommitResult,  # noqa: PLC0415
+        )
+
+        result = _StateCommitResult(
+            session_id=session_id,
+            version_before=version_before,
+            version_after=coord.get_state().version,
+            applied_mutations=applied,
+            skipped_slots=skipped,
+        )
+        self._persist_commit_safe(result)
+        return result
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -125,3 +245,159 @@ class LocalMemoryService:
             coord.persist_to_db()
         except Exception:  # noqa: BLE001
             pass
+
+    def _persist_proposal_safe(self, proposal: StateProposal) -> None:
+        """Persist proposal to DB for audit; fail open."""
+        import os  # noqa: PLC0415
+
+        if not os.getenv("DATABASE_URL", ""):
+            return
+        try:
+            self._persist_proposal_postgres(proposal)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("persist_proposal failed: %s", exc)
+
+    def _persist_proposal_postgres(self, proposal: StateProposal) -> None:
+        import json  # noqa: PLC0415
+
+        from db.engine import get_session  # noqa: PLC0415
+        from db.models import StateProposalRow  # noqa: PLC0415
+
+        mutations_json = json.dumps(
+            [dataclasses.asdict(m) for m in proposal.mutations],
+            default=str,
+        )
+        signals_json = json.dumps(proposal.triggered_signals)
+
+        with get_session() as db:
+            row = StateProposalRow(
+                session_id=proposal.session_id,
+                turn_id=proposal.turn_id,
+                source=proposal.source.value,
+                mutations=mutations_json,
+                triggered_signals=signals_json,
+                created_at=proposal.created_at,
+            )
+            db.add(row)
+            db.commit()
+
+    def _persist_commit_safe(self, result: StateCommitResult) -> None:
+        """Persist commit result to DB for audit; fail open."""
+        import os  # noqa: PLC0415
+
+        if not os.getenv("DATABASE_URL", ""):
+            return
+        try:
+            self._persist_commit_postgres(result)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("persist_commit failed: %s", exc)
+
+    def _persist_commit_postgres(self, result: StateCommitResult) -> None:
+        import json  # noqa: PLC0415
+
+        from db.engine import get_session  # noqa: PLC0415
+        from db.models import StateCommitRow  # noqa: PLC0415
+
+        applied_json = json.dumps(
+            [dataclasses.asdict(m) for m in result.applied_mutations],
+            default=str,
+        )
+        skipped_json = json.dumps(result.skipped_slots)
+
+        with get_session() as db:
+            row = StateCommitRow(
+                session_id=result.session_id,
+                version_before=result.version_before,
+                version_after=result.version_after,
+                applied_mutations=applied_json,
+                skipped_slots=skipped_json,
+                committed_at=result.committed_at,
+            )
+            db.add(row)
+            db.commit()
+
+    @staticmethod
+    def _build_reactive_mutations(
+        state: ActiveAnalyticalState,
+    ) -> list[SlotProposal]:
+        """Build identity SlotProposals for each user-editable slot."""
+        from core.protocols.memory import SlotProposal as _SlotProposal  # noqa: PLC0415
+
+        mutations: list[SlotProposal] = []
+        for slot in _REACTIVE_EDITABLE_SLOTS:
+            current = getattr(state, slot, None)
+            mutations.append(
+                _SlotProposal(
+                    slot=slot,
+                    current_value=current,
+                    proposed_value=current,
+                    reason="User-initiated reactive correction",
+                )
+            )
+        return mutations
+
+    @staticmethod
+    def _apply_mutation(
+        coord: MemoryCoordinator,
+        mutation: SlotProposal,
+        turn_id: int,
+        cause: str,
+    ) -> None:
+        """Dispatch a SlotProposal to the appropriate coordinator method."""
+        slot = mutation.slot
+        value: Any = mutation.proposed_value
+
+        if slot == "intent":
+            from memory.state.types import Intent  # noqa: PLC0415
+
+            if isinstance(value, str):
+                try:
+                    value = Intent(value)
+                except ValueError:
+                    return  # unknown intent string — skip silently
+            if isinstance(value, Intent):
+                coord.set_intent(value, turn_id=turn_id, cause=cause)
+        elif slot == "metrics":
+            # Replace the whole metrics list
+            coord._mutate(  # noqa: SLF001
+                slot="metrics",
+                new_value=value if isinstance(value, list) else [],
+                op_hint=TransitionOp.OVERWRITE,
+                turn_id=turn_id,
+                cause=cause,
+                evidence="user:correction:metrics",
+            )
+        elif slot == "active_simulation_run":
+            if isinstance(value, str) or value is None:
+                coord._mutate(  # noqa: SLF001
+                    slot="active_simulation_run",
+                    new_value=value,
+                    op_hint=TransitionOp.OVERWRITE,
+                    turn_id=turn_id,
+                    cause=cause,
+                    evidence="user:correction:active_simulation_run",
+                )
+        elif slot == "active_optimization_run":
+            if isinstance(value, str) or value is None:
+                coord._mutate(  # noqa: SLF001
+                    slot="active_optimization_run",
+                    new_value=value,
+                    op_hint=TransitionOp.OVERWRITE,
+                    turn_id=turn_id,
+                    cause=cause,
+                    evidence="user:correction:active_optimization_run",
+                )
+        elif slot == "active_scenarios":
+            coord._mutate(  # noqa: SLF001
+                slot="active_scenarios",
+                new_value=value if isinstance(value, list) else [],
+                op_hint=TransitionOp.OVERWRITE,
+                turn_id=turn_id,
+                cause=cause,
+                evidence="user:correction:active_scenarios",
+            )
+        else:
+            logger.warning(
+                "commit_state_update: unknown slot %r in approved_mutations — skipped",
+                slot,
+            )

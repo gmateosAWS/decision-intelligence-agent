@@ -20,7 +20,7 @@ Before implementing, verify the change aligns with:
 
 - The CEO's "llull Decision Intelligence Architecture" diagram (7 blocks + transversals)
 - The ADRs (001 pgvector ⚠️ superseded, 002 LangGraph orchestration, 003 LlullGen component reuse, 005 pgvector + pgvectorscale strategy)
-- The inventory v4 (116 items) and roadmap v4 — check if later items subsume or extend what you're doing
+- The inventory v4 (117 items) and roadmap v4 — check if later items subsume or extend what you're doing
 - The skills engine concept (item 4.3) — every capability should eventually be exposable as a skill/MCP server
 
 If a change touches something that a later inventory item will extend, implement it with that extension in mind from day one. Don't build a wall that the next iteration has to tear down.
@@ -486,12 +486,46 @@ not an invitation to question architectural decisions.
   34 new tests (21 grounded_tokens, 3 planner, 2 judge, 7 workflow+clarification, 1 API);
   tech debt entry "5.9 → futuro: Near-match suggestion" in `docs/tech_debt.md`. 370 tests total.
 
-## Current work: Item 5.9 ✅ — Next: Item 10.3 (eval-gated auto-promotion) or 5.13 (state mutations)
+### Item 5.13 ✅
 
-**Branch**: `feature/5.9-grounded-tokens`
+- [x] 5.13 User-driven state corrections: `agents/tools_registry.py` (tool cost classification:
+  `get_tool_cost_class`, `register_tool_cost_class`; cheap/expensive; defaults to cheap for unknown tools);
+  `memory/proactive_confirmation.py` (`get_active_signals()`, `should_request_confirmation()`;
+  structural signals `first_turn` + `thin_context`; `STATE_CONFIRMATION_SIGNALS` env var);
+  `core/protocols/memory.py` rewritten — real dataclasses `ProposalSource` (enum), `SlotProposal`,
+  `StateProposal`, `StateCommitDecision`, `StateCommitResult`; updated Protocol signatures;
+  `memory/coordinator/coordinator.py` `freeze_slot()` + `unfreeze_slot()` public methods;
+  `memory/service.py` fully implemented `propose_state_update()` (reactive + proactive) and
+  `commit_state_update()` (validate, apply, freeze/unfreeze, remove from in-memory store);
+  in-memory proposal store `_proposals: Dict[tuple[UUID, int], StateProposal]`;
+  `_persist_proposal_postgres()` + `_persist_commit_postgres()` audit persistence (fail-open);
+  `db/models.py` `StateProposalRow` + `StateCommitRow` ORM models + relationships on `AgentSession`;
+  migration 010 (`state_proposals` + `state_commits` tables + indexes);
+  `memory/state/active.py` `volatile_slots` + `sticky_slots` scaffolding (typed, not enforced v1);
+  `agents/state.py` `awaiting_user_confirmation`, `proposal`, `bypass_gate` fields;
+  `agents/workflow.py` `proactive_confirmation_gate` node + 4-way `_route_after_planner` routing
+  (clarification > proactive gate > synthesizer > tool); bypass via `state.bypass_gate`;
+  `agents/runner.py` `bypass_gate: bool` param; early-return path when gate fires;
+  `api/schemas/query.py` `awaiting_user_confirmation` + `proposal` on `QueryResponse`;
+  `api/schemas/sessions.py` `SlotProposalSchema`, `ProposalCreateRequest`, `ProposalResponse`,
+  `CommitDecisionRequest`, `CommitResultResponse`;
+  `api/routers/sessions.py` 3 new endpoints: `POST /sessions/{id}/state/proposals`,
+  `POST /sessions/{id}/state/commits`, commit validates + applies + returns result;
+  `api/routers/query.py` proactive path returns 200 with `awaiting_user_confirmation=True`;
+  `ui/components.py` `render_proactive_confirmation()` panel + confirm/cancel buttons;
+  `ui/app.py` bypass_gate flow via `_gate_bypass_prompt` session_state key;
+  51 new tests (5 tools_registry, 10 proposals_and_commits, 8 proactive_confirmation,
+  8 workflow_proactive_gate, 5 state_corrections_endpoints, 3 memory_protocol rewrites);
+  tech debt resolved (5.11→5.13 stub entry); new debt entry (5.13 v2 slot lifecycle).
+  382 tests total.
+
+## Current work: Item 5.13 ✅ — Next: Item 10.3 (eval-gated auto-promotion)
+
+**Branch**: `feature/5.13-user-correction-mutations`
 
 5.9 Completed 2026-05-17.
 10.2 Completed 2026-05-17.
+5.13 Completed 2026-05-18.
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 
@@ -535,7 +569,7 @@ Item 3.6 (spec semver) and 10.1 (prompt registry) from I2A completed ahead of sc
 
 ## Reference documents
 
-- `docs/llull_inventario_v4.md` — full backlog (116 items)
+- `docs/llull_inventario_v4.md` — full backlog (117 items)
 - `docs/llull_roadmap_v4.md` — iteration plan with progress
 - `docs/adr-001-pgvector-over-qdrant.md` ⚠️ SUPERSEDED by ADR-005
 - `docs/adr-002-langgraph-orchestration.md` (ADR-002)

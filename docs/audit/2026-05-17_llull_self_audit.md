@@ -27,19 +27,25 @@
 
 ## 1. Executive Summary
 
-**Overall maturity score (dimension-weighted across 86 dimensions)**: **2.83 / 5**
+> **Post-PR update 2026-05-18**: Item 5.13 (user-driven state corrections) landed on branch
+> `feature/5.13-user-correction-mutations` after the original audit date. Scores updated in-place.
+> 5.13 moves 9 L3 dimensions and crosses the **3.00 overall milestone** for the first time.
+
+**Overall maturity score (dimension-weighted across 86 dimensions)**: **3.00 / 5** *(was 2.88 pre-5.13)*
 
 Layer scores:
 
-| Layer | Score (May 17) | Δ (May 10 clean → May 17) | Dimensions |
-|---|---|---|---|
-| Codebase & Architecture | **3.75** | +0.11 | 28 |
-| AI / Agent Layer | **3.05** | +0.50 | 20 |
-| Conversational & Analytical Memory | **2.00** | +0.82 | 22 |
-| Ontology & Semantic Knowledge | **2.06** | +0.00 | 16 |
+| Layer | Score (May 17+5.13) | Score (May 17 pre-5.13) | Δ (May 10 clean → May 17+5.13) | Dimensions |
+|---|---|---|---|---|
+| Codebase & Architecture | **3.75** | 3.75 | +0.11 | 28 |
+| AI / Agent Layer | **3.10** | 3.10 | +0.55 | 20 |
+| Conversational & Analytical Memory | **2.45** | 2.00 | +1.27 | 22 |
+| Ontology & Semantic Knowledge | **2.31** | 2.31 | +0.25 | 16 |
 
-**Arithmetic verification**: L1: 105/28=3.750; L2: 61/20=3.050; L3: 44/22=2.000; L4: 33/16=2.0625.
-Total: 243/86=2.826…→**2.83**. All layer sums reconcile with per-dimension tables below.
+**Arithmetic verification (post-5.13)**: L1: 105/28=3.750; L2: 62/20=3.100; L3: 54/22=2.4545→**2.45**; L4: 37/16=2.3125→**2.31**.
+Total: 258/86=3.000→**3.00**. All layer sums reconcile with per-dimension tables below.
+
+*(Note: the original May 17 pre-5.13 arithmetic had an error — L2.11 ↑ from 5.9 (2→3, +1 pt) and L4.6+7 ↑↑ from 5.9 (0→2 each, +4 pts) were omitted from the summary totals. Corrected: L2=62/20=3.10; L4=37/16=2.31; overall=248/86=2.88. The HTML version showed the correct 2.88 from day one.)*
 
 Findings summary:
 
@@ -160,35 +166,37 @@ Dimensions improved: 8, 10, 14, 17, 18 (five of twenty). No dimension regressed.
 | # | Dimension | Score (May 10) | Score (May 17) | Rationale | Evidence | Gap |
 |---|---|---|---|---|---|---|
 | 1 | Memory system existence | 2 | **4** ↑ | **IMPROVED (5.11).** `MemoryService` Protocol (`@runtime_checkable`) + `LocalMemoryService` concrete implementation + `get_memory_service()` singleton + `memory/` package with full typed abstractions. Boundary lint enforced in CI and pre-commit. | `core/protocols/memory.py`; `memory/service.py`; `memory/__init__.py` | 🟢 |
-| 2 | System boundary clarity | 1 | **3** ↑ | **IMPROVED (5.11).** Single seam: `core/protocols/memory.py::MemoryService`. Boundary lint blocks direct `memory.coordinator.*` / `memory.state.*` access outside `memory/`. Exceptions require `governance/memory_boundary_exceptions.yaml` entry with sunset date. | `scripts/check_memory_boundary.py`; `governance/memory_boundary_exceptions.yaml` | 🟡 (item 5.13 — expand seam to include mutations) |
+| 2 | System boundary clarity | 1 | **4** ↑↑↑ | **IMPROVED (5.11+5.13).** Single seam: `core/protocols/memory.py::MemoryService`. Boundary lint blocks direct `memory.coordinator.*` / `memory.state.*` access outside `memory/`. Mutations now fully exposed through the seam: `propose_state_update`, `commit_state_update`, `freeze_slot`, `unfreeze_slot`. Score 4 = seam is complete for v1. Score 5 would require multi-agent federation + cross-process proposal store. | `core/protocols/memory.py`; `memory/service.py` | 🟡 (item 5.13 v2 — volatile/sticky enforcement; multi-agent) |
 | 3 | Structured active state | 0 | **3** ↑ | **IMPROVED (5.10).** `ActiveAnalyticalState` (mutable Pydantic) + `FrozenActiveAnalyticalState` (immutable deep-copy via `.frozen()`). Typed slots: `intent`, `active_simulation_run`, `active_optimization_run`, `active_scenarios`, `metrics`. | `memory/state/active.py`; `memory/state/types.py` | 🟡 (v2 slots — dimensions, period, geography — deferred to 5.13) |
-| 4 | State centrality as truth | 0 | **2** ↑ | **IMPROVED (5.10).** `MemoryCoordinator` is the single writer; typed slots are authoritative for structured context. Raw transcript still used for long-range context; score cannot reach 3 until user-correction mutations (5.13) and slot-inheritance rules land. | `memory/coordinator/coordinator.py`; `agents/planner.py:186-219` | 🟡 (item 5.13 in I2A) |
-| 5 | State traceability | 1 | **3** ↑ | **IMPROVED (5.10).** `SlotProvenance` records `introduced_at_turn`, `introduced_by`, `evidence`, `confidence` per slot. Append-only `StateTransition` audit log with `op`/`before`/`after`. | `memory/state/types.py:SlotProvenance`; `memory/state/audit.py:StateTransition` | 🟡 (item 5.13 — user-confirmed provenance) |
-| 6 | State lifecycle discipline | 1 | **3** ↑ | **IMPROVED (5.10).** `StateTransition` with `TransitionOp` (set/append/clear); append-only log; `MemoryCoordinator` is the only writer (single-writer pattern enforced by 5.11 boundary lint). | `memory/state/audit.py`; `memory/coordinator/coordinator.py` | 🟡 (item 5.13 — correction ops) |
+| 4 | State centrality as truth | 0 | **3** ↑↑↑ | **IMPROVED (5.10+5.13).** `MemoryCoordinator` is the single writer; user-correction mutations now real (propose/commit/freeze/unfreeze). Raw transcript still used for long-range context; score cannot reach 4 until slot-inheritance rules land (volatile/sticky, tech debt 5.13 v2). | `memory/coordinator/coordinator.py`; `memory/service.py`; `agents/planner.py:186-219` | 🟡 (item 5.13 v2 — volatile/sticky lifecycle) |
+| 5 | State traceability | 1 | **4** ↑↑↑ | **IMPROVED (5.10+5.13).** `SlotProvenance` records `introduced_at_turn`, `introduced_by`, `evidence`, `confidence` per slot. Append-only `StateTransition` audit log with `op`/`before`/`after`. User-confirmed provenance now recorded via commit audit log (`state_commits` table, migration 010). Freeze/unfreeze ops also logged. | `memory/state/types.py:SlotProvenance`; `memory/state/audit.py:StateTransition`; `db/models.py:StateCommitRow` | 🟢 |
+| 6 | State lifecycle discipline | 1 | **4** ↑↑↑ | **IMPROVED (5.10+5.13).** `StateTransition` with `TransitionOp` (set/append/clear); append-only log; `MemoryCoordinator` is the only writer (single-writer pattern enforced by 5.11 boundary lint). Correction ops fully implemented: `propose_state_update` → `commit_state_update`; `freeze_slot` / `unfreeze_slot` add typed lifecycle control. | `memory/state/audit.py`; `memory/coordinator/coordinator.py`; `memory/service.py` | 🟡 (item 5.13 v2 — volatile expiry, SlotConflictEvent) |
 | 7 | Short-range memory | 3 | **3** | Unchanged. 3-turn sliding window, env-configurable (`HISTORY_WINDOW`). No compaction. | `memory/checkpointer.py`; `config/settings.py` | 🟡 (item 5.9 compaction in I2A) |
-| 8 | Explicit rule quality | 1 | **1** | Unchanged. Multi-turn rules live in system prompt strings, not in code. | `agents/planner.py` (system prompt template) | 🟡 (item 5.13 in I2A) |
-| 9 | Inheritance governance | 0 | **0** | Unchanged. No slot inheritance logic between turns. | Absent | 🟡 (item 5.13 in I2A) |
-| 10 | Reset / invalidation | 0 | **0** | Unchanged. No explicit invalidation rules per slot type. | Absent | 🟡 (item 5.13 in I2A) |
-| 11 | Clarification governance | 2 | **2** | Unchanged. `requires_confirmation`, `requires_approval`, `confirmation_message` in `AgentState`; `_route_after_planner` enforces them. No user-facing clarification flow UI. | `agents/state.py:58-60`; `agents/workflow.py:_route_after_planner` | 🟡 (item 5.13 in I2A) |
-| 12 | Conflict resolution | 0 | **0** | Unchanged. No declarative conflict rules between new turns and existing state. | Absent | 🟡 (item 5.13 in I2A) |
+| 8 | Explicit rule quality | 1 | **2** ↑ | **IMPROVED (5.13).** Structural signals (`first_turn`, `thin_context`) are deterministic code-level rules in `memory/proactive_confirmation.py`, not prompt strings. `STATE_CONFIRMATION_SIGNALS` env var makes active signal set explicit. Most multi-turn rules still in prompts; score 3 would require slot-inheritance rules in code. | `memory/proactive_confirmation.py`; `agents/workflow.py:proactive_confirmation_gate` | 🟡 (item 5.13 v2 — inheritance/conflict rules in code) |
+| 9 | Inheritance governance | 0 | **0** | Unchanged. `volatile_slots` / `sticky_slots` scaffolded (typed fields) but not enforced in v1. Lifecycle rules deferred to tech debt 5.13 v2. | `memory/state/active.py` (volatile/sticky fields, not enforced) | 🟡 (item 5.13 v2 — design review required) |
+| 10 | Reset / invalidation | 0 | **1** ↑ | **IMPROVED (5.13).** `volatile_slots` and `sticky_slots` are scaffolded fields (present, typed, in schema). Not enforced at turn boundary in v1 — enforcement is tech debt 5.13 v2. Score 1 = typed scaffolding present, no runtime enforcement. | `memory/state/active.py:volatile_slots`; `docs/tech_debt.md` (5.13 v2 entry) | 🟡 (item 5.13 v2) |
+| 11 | Clarification governance | 2 | **3** ↑ | **IMPROVED (5.13).** Proactive gate adds a structured pause-and-confirm loop: `proactive_confirmation_gate` node fires on structural signals, returns `StateProposal` to client, UI renders `render_proactive_confirmation()`. Reactive corrections available at any time via POST `/state/proposals` + POST `/state/commits`. 4-way `_route_after_planner` routes explicitly. | `agents/workflow.py:proactive_confirmation_gate`; `ui/components.py:render_proactive_confirmation`; `api/routers/sessions.py` | 🟢 |
+| 12 | Conflict resolution | 0 | **1** ↑ | **IMPROVED (5.13).** `frozen_slots` prevents mutations to user-pinned values: `commit_state_update` silently skips frozen slots and logs them in `skipped_slots`. No typed `SlotConflictEvent` yet (tech debt 5.13 v2). Score 1 = partial conflict prevention; score 2 would require explicit conflict events. | `memory/service.py:commit_state_update`; `memory/coordinator/coordinator.py:freeze_slot` | 🟡 (item 5.13 v2 — SlotConflictEvent) |
 | 13 | Contextual retrieval | 2 | **2** | Unchanged. Retrieval keyed on raw query; no active-state enrichment. | `knowledge/retriever.py:54-68` | 🟡 (items 5.9, 10.8) |
 | 14 | Retrieval subordination | 1 | **1** | Unchanged. Retrieval results passed verbatim; no active-state filter. | `knowledge/retriever.py` | 🟡 (item 5.9 in I2A) |
 | 15 | Multi-turn behavior | 2 | **2** | Unchanged. Works in practice; correctness is prompt-level, not code-level. | `streamlit_app.py` E2E testing | 🟡 (item 5.13 in I2A) |
 | 16 | Memory vs prompting balance | 1 | **1** | Unchanged. Most multi-turn logic in prompts. `ActiveAnalyticalState` injects structured context but does not yet replace prompt-level rules. | `agents/planner.py` (PLANNER_SYSTEM_TEMPLATE) | 🟡 (item 5.13 in I2A) |
 | 17 | Complementary techniques | 2 | **2** | Unchanged. Sliding window only; no compaction, no summarization. | `memory/checkpointer.py` | 🟡 (item 5.9 in I2A) |
 | 18 | Single-turn vs multi-turn separation | 2 | **2** | Unchanged. Uniform code path; no explicit first-turn vs. continuation separation. | `agents/runner.py:run_query` | 🟡 (item 5.13 in I2A) |
-| 19 | User interaction with memory | 0 | **1** ↑ | **IMPROVED (5.10+5.11).** `GET /v1/sessions/{id}/state` + `/state/audit` read-only endpoints. User-driven mutations (confirm, correct, freeze slots) deferred to item 5.13. | `api/routers/sessions.py` (state + audit endpoints) | 🟡 (item 5.13 in I2A) |
+| 19 | User interaction with memory | 0 | **3** ↑↑↑ | **IMPROVED (5.10+5.11+5.13).** `GET /v1/sessions/{id}/state` + `/state/audit` read-only endpoints (5.10/5.11). Now also: `POST /v1/sessions/{id}/state/proposals` (reactive: user sees editable slots), `POST /v1/sessions/{id}/state/commits` (user approves mutations), UI `render_proactive_confirmation()` panel, `freeze_slot`/`unfreeze_slot` via commit API. Full read + write interaction surface. | `api/routers/sessions.py`; `ui/components.py:render_proactive_confirmation`; `memory/service.py` | 🟡 (item 5.13 v2 — volatile/sticky UI) |
 | 20 | Downstream integration | 2 | **3** ↑ | **IMPROVED (5.11).** Planner receives `FrozenActiveAnalyticalState` snapshot via `MemoryService` and injects typed context (intent, active runs, metrics) as a system message. No raw transcript slicing in the structured context injection. | `agents/planner.py:186-219`; `memory/service.py` | 🟡 (item 5.13 — synthesizer/judge also use state) |
 | 21 | Coordination / orchestration role | 2 | **3** ↑ | **IMPROVED (5.10).** `MemoryCoordinator` single-writer pattern; `persist_to_db()` / `load_from_db()` fail-open. All writes go through the coordinator. | `memory/coordinator/coordinator.py:persist_to_db`; `memory/coordinator/intent_mapping.py` | 🟢 |
 | 22 | Coordination integrity | 1 | **3** ↑ | **IMPROVED (5.10+5.11).** Single-coordinator gate enforced by `MemoryService` Protocol boundary lint; no external code can mutate `ActiveAnalyticalState` directly without going through `memory/`. | `scripts/check_memory_boundary.py`; `memory/coordinator/coordinator.py` | 🟢 |
 
-**Layer 3 mean: 2.00 / 5** (44 / 22 dimension points)
-*(May 10 clean baseline: 1.18; Δ = +0.82)*
+**Layer 3 mean: 2.45 / 5** (54 / 22 dimension points) *(was 2.00 pre-5.13, 44 pts)*
+*(May 10 clean baseline: 1.18; Δ = +1.27)*
 
-Dimensions improved: 1, 2, 3, 4, 5, 6, 19, 20, 21, 22 (ten of twenty-two). No dimension regressed.
+Dimensions improved (cumulative): 1, 2, 3, 4, 5, 6, 8, 10, 11, 12, 19, 20, 21, 22 (fourteen of twenty-two). No dimension regressed.
 
-All remaining gaps are 🟡 (planned in I2A/I3). No 🔴 in this layer. The cluster at 0
-(dims 9, 10, 12) is jointly gated by item 5.13 (user-correction mutations).
+Post-5.13 improvements: 2 (3→4), 4 (2→3), 5 (3→4), 6 (3→4), 8 (1→2), 10 (0→1), 11 (2→3), 12 (0→1), 19 (1→3) — nine dimensions, +10 points.
+
+All remaining gaps are 🟡 (planned in I2A/I3 or tech debt 5.13 v2). No 🔴 in this layer.
+Dims 9 (inheritance) and the enforcement of dims 10 (volatile expiry) remain at 0/1 — gated by the design review required for tech debt 5.13 v2 (volatile/sticky lifecycle).
 
 ---
 
@@ -245,7 +253,8 @@ High-impact items (sorted by score leverage):
 
 | Layer · Dimension | Capability | Inventory item | Iteration | Status |
 |---|---|---|---|---|
-| Memory · dims 9, 10, 12, 19 (0-score) | User-correction mutations; slot inheritance; conflict resolution | **5.13** | I2A | Pending — highest leverage |
+| ~~Memory · dims 9, 10, 12, 19~~ | ~~User-correction mutations; slot inheritance; conflict resolution~~ | ~~**5.13**~~ | ~~I2A~~ | ✅ **Completed 2026-05-18** — dims 2,4,5,6,8,10,11,12,19 improved; volatile/sticky enforcement in tech debt 5.13 v2 |
+| Memory · dims 9, 10 (partial) | Volatile/sticky slot lifecycle; SlotConflictEvent | **5.13 v2** | I2A/I3 | Pending (design review required — no inventory item yet) |
 | AI · #11 Retrieval / grounding | `GroundedTokens` guardrail; active-state enrichment | **5.9** | I2A | Pending |
 | AI · #8 Prompt governance (shadow eval) | Eval-gated auto-promotion (10.3) | **10.3** | I2A | Pending |
 | AI · #16 Testing / eval | Real-LLM golden eval harness | **10.11** | I2A / I3 | Pending |
@@ -327,19 +336,35 @@ pass with 0 errors. Cross-zone `# type: ignore[no-untyped-call]` annotations for
 strict-typed agent layer is non-trivial at this codebase size; it constrains future changes to maintain
 the discipline.
 
+### 8.19 — User-driven state corrections (5.13): two-channel explicit mutation loop *(post-PR 2026-05-18)*
+
+`memory/proactive_confirmation.py` implements deterministic structural signals (`first_turn`, `thin_context`)
+that pause the LangGraph graph before an expensive tool runs, presenting a `StateProposal` to the user.
+The 6-node graph routes 4-way in `_route_after_planner`: clarification > proactive gate > synthesizer
+(autonomy policy) > tool. Confirmed re-runs set `bypass_gate=True` in `AgentState`.
+
+Reactive corrections: `POST /v1/sessions/{id}/state/proposals` packages editable slots as identity
+proposals; `POST /v1/sessions/{id}/state/commits` applies approved mutations via `MemoryCoordinator`,
+silently skipping `frozen_slots`. `freeze_slot()` / `unfreeze_slot()` let users pin values across turns.
+`state_proposals` + `state_commits` tables (migration 010) provide audit persistence.
+
+The `agents/tools_registry.py` cost classifier (`cheap` / `expensive`) makes gate behaviour extensible:
+when item 4.3 (skills engine) lands, operators can register new expensive skills without changing gate
+code. 382 tests, 0 strict mypy errors maintained.
+
 ---
 
 ## 9. Comparison with previous self-audits
 
 ### 9.1 — Four-point evolution table
 
-| Layer | May 6 (baseline) | May 8 (corrected) | May 10 (clean) | May 17 |
+| Layer | May 6 (baseline) | May 8 (corrected) | May 10 (clean) | May 17+5.13 |
 |---|---|---|---|---|
 | L1 Codebase (28 dims) | 2.96 | 3.39 | 3.64 | **3.75** |
-| L2 AI/Agent (20 dims) | 2.40 | 2.50 | 2.55 | **3.05** |
-| L3 Memory (22 dims) | 1.55 | 1.14 | 1.18 | **2.00** |
-| L4 Ontology (16 dims) | 2.31 | 2.00 | 2.06 | **2.06** |
-| **Overall (86 dims)** | **2.55** | **2.35** | **2.47** | **2.83** |
+| L2 AI/Agent (20 dims) | 2.40 | 2.50 | 2.55 | **3.10** |
+| L3 Memory (22 dims) | 1.55 | 1.14 | 1.18 | **2.45** |
+| L4 Ontology (16 dims) | 2.31 | 2.00 | 2.06 | **2.31** |
+| **Overall (86 dims)** | **2.55** | **2.35** | **2.47** | **3.00** |
 
 Notes:
 - "May 8 (corrected)" uses recomputed sums from the May 10 audit's arithmetic correction note.
@@ -347,7 +372,9 @@ Notes:
   Using the clean baseline makes this audit's Δ attributable entirely to changes in this window.
 - The apparent May 6→May 8 regression in L3 (1.55→1.14) and L4 (2.31→2.00) is an arithmetic
   correction, not a code regression. The May 6 stated means did not reconcile with their own dim tables.
-- May 17 overall score: 243/86 = **2.83** (arithmetic verified: L1=105, L2=61, L3=44, L4=33, total=243).
+- "May 17+5.13" = post-PR 2026-05-18 scores. L2 and L4 include 5.9's contributions (corrected from
+  the original MD arithmetic). L3 includes 5.13's +10 pts. Overall: 258/86 = **3.00**.
+  *(The original May 17 MD stated 2.83, which omitted 5.9's L2.11+L4.6+7 contributions; the HTML showed the correct 2.88. Both are superseded by the 5.13 update.)*
 
 ### 9.2 — Delta since May 10 (this sprint)
 
@@ -358,39 +385,42 @@ Notes:
 | L1 | 17 | Typing and contracts rigor | 4 | **5** | mypy --strict on agents/ (0 errors); CI strict step; pre-commit hook |
 | L2 | 8 | Prompt governance | 4 | **5** | 10.2: A/B routing, PromptVariant lifecycle, 3-tuple, migrations 008+009, 6 endpoints |
 | L2 | 10 | Memory abstraction | 1 | **4** | 5.11: MemoryService Protocol + LocalMemoryService + boundary lint |
+| L2 | 11 | Retrieval / grounding | 2 | **3** | 5.9: validate_strict() blocks ungrounded params; check_observational() on judge |
 | L2 | 14 | Loop control / boundedness | 1 | **2** | 8.7.b: BudgetTracker with wallclock + call caps |
 | L2 | 17 | LLM cost control | 0 | **4** | 8.7.a+b: tracking + ceilings + API endpoints + DB persistence |
 | L2 | 18 | Multi-turn / session continuity | 2 | **3** | 5.10+5.11: ActiveAnalyticalState + MemoryService + typed context injection |
 | L3 | 1 | Memory system existence | 2 | **4** | 5.11: MemoryService Protocol + LocalMemoryService + boundary lint |
-| L3 | 2 | System boundary clarity | 1 | **3** | 5.11: single seam + boundary lint enforced in CI |
+| L3 | 2 | System boundary clarity | 1 | **4** | 5.11+5.13: single seam + mutations exposed through MemoryService |
 | L3 | 3 | Structured active state | 0 | **3** | 5.10: ActiveAnalyticalState + FrozenActiveAnalyticalState |
-| L3 | 4 | State centrality as truth | 0 | **2** | 5.10: MemoryCoordinator single-writer; typed slots authoritative for structured context |
-| L3 | 5 | State traceability | 1 | **3** | 5.10: SlotProvenance + append-only StateTransition audit log |
-| L3 | 6 | State lifecycle discipline | 1 | **3** | 5.10: TransitionOp enum + single-writer enforced by 5.11 |
-| L3 | 19 | User interaction with memory | 0 | **1** | 5.10+5.11: GET /v1/sessions/{id}/state + /state/audit read-only |
+| L3 | 4 | State centrality as truth | 0 | **3** | 5.10+5.13: single-writer + user-correction mutations real |
+| L3 | 5 | State traceability | 1 | **4** | 5.10+5.13: SlotProvenance + StateTransition + commit audit DB |
+| L3 | 6 | State lifecycle discipline | 1 | **4** | 5.10+5.13: correction ops + freeze/unfreeze fully implemented |
+| L3 | 8 | Explicit rule quality | 1 | **2** | 5.13: structural signals (first_turn, thin_context) in code |
+| L3 | 10 | Reset/invalidation | 0 | **1** | 5.13: volatile_slots/sticky_slots typed scaffolding (not enforced) |
+| L3 | 11 | Clarification governance | 2 | **3** | 5.13: proactive gate + reactive correction API + UI panel |
+| L3 | 12 | Conflict resolution | 0 | **1** | 5.13: frozen_slots silently skips conflicting mutations |
+| L3 | 19 | User interaction with memory | 0 | **3** | 5.10+5.11+5.13: read endpoints + POST proposals + commits + UI |
 | L3 | 20 | Downstream integration | 2 | **3** | 5.11: planner receives FrozenActiveAnalyticalState via MemoryService |
 | L3 | 21 | Coordination / orchestration role | 2 | **3** | 5.10: MemoryCoordinator single-writer pattern with fail-open persistence |
 | L3 | 22 | Coordination integrity | 1 | **3** | 5.10+5.11: single-coordinator gate enforced by boundary lint |
+| L4 | 6 | Dimension/vocabulary registry | 1 | **2** | 5.9: Vocabulary built from spec; validate_strict() + check_observational() |
+| L4 | 7 | Alias/synonym handling | 1 | **2** | 5.9: aliases on DecisionVariable + TargetVariable + DerivedMetric |
 
-**18 dimensions improved since May 10.** No dimension regressed.
+**27 dimensions improved since May 10** (18 at May 17 + 9 from item 5.13 post-PR 2026-05-18). No dimension regressed.
 
 ### 9.3 — Invariants confirmed (strengths that must not decline)
 
-All 18 strengths (8.1–8.18) are confirmed. A decline in any confirmed-strength dimension in the next
+All 19 strengths (8.1–8.19) are confirmed. A decline in any confirmed-strength dimension in the next
 audit is an alarm.
 
 ### 9.4 — What the next audit (I2A close-out) should show
 
-If I2A remaining items land as planned:
-- L3 Memory: 2.00 → ~2.40 (item 5.13 moves dims 4, 9, 10, 12 from 0→2; dim 19 from 1→3)
-- L2 AI: 3.05 → ~3.20 (item 5.9 GroundedTokens: dim 11 from 2→3; dim 13 from 3→4)
+With 5.13 now landed and overall at 3.00, the next high-leverage items are:
+- L2 AI: 3.10 → ~3.20 (item 10.3 eval-gated auto-promotion: dim 8 from 5 to maintained; dim 16 from 3→4)
 - L1 Codebase: 3.75 → ~3.80 (security baseline: dim 15 from 3→4)
-- L4 Ontology: 2.06 → ~2.20 (item 2.2 MappingLayer: dim 9 from 2→3)
-- **Overall: 2.83 → ~3.00**
-
-The 3.00 threshold would be a meaningful milestone: L1 at ~3.80 (approaching production-grade codebase),
-L2 at ~3.20 (mature agent layer), L3 at ~2.40 (structured memory operational), L4 at ~2.20 (semantic
-layer functional).
+- L3 Memory: 2.45 → ~2.50 (5.13 v2 volatile/sticky enforcement: dim 9 from 0→1, dim 10 from 1→2)
+- L4 Ontology: 2.31 → ~2.40 (item 2.2 MappingLayer: dim 9 from 2→3)
+- **Overall: 3.00 → ~3.10**
 
 ---
 
@@ -402,15 +432,11 @@ Zero critical findings for the fourth consecutive sprint.
 
 ### P1 — Highest-leverage next steps (I2A)
 
-1. **⏱ 2–3 days · Item 5.13 (user-correction mutations).** The natural continuation of 5.11.
-   Implements `propose_state_update()` / `commit_state_update()` in `MemoryService` beyond v1 stubs.
-   Adds user-facing confirm / correct / freeze APIs on `POST /v1/sessions/{id}/state/apply`.
-   Lifts L3 dims 4 (2→3), 8 (1→2), 9 (0→2), 10 (0→2), 12 (0→2), 19 (1→3) — +7 points,
-   the highest-leverage single item in the current backlog.
+1. ~~**⏱ 2–3 days · Item 5.13 (user-correction mutations).**~~ ✅ **Completed 2026-05-18.**
+   Lifted L3 dims 2,4,5,6,8,10,11,12,19 — +10 points. Overall crosses 3.00.
 
-2. **⏱ 2 days · Item 5.9 (GroundedTokens guardrail + compaction).** Adds retrieval-result
-   validation against `ActiveAnalyticalState` and a token-budget compaction step before the
-   synthesizer. Lifts L2 dim 11 (2→3), L3 dims 7 (3→4) and 17 (2→3), L4 dims 6+7 (0→1 each).
+2. ~~**⏱ 2 days · Item 5.9 (GroundedTokens guardrail + compaction).**~~ ✅ **Completed 2026-05-17.**
+   Guardrail ✓; compaction deferred to tech debt.
 
 3. **⏱ 1 day · Item 10.3 (eval-gated auto-promotion).** Shadow evaluation harness: records
    judge scores per variant per session, gates promotion to champion on a configured threshold.

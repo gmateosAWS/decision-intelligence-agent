@@ -18,12 +18,13 @@ Implemented slots:
   - active_simulation_run, active_optimization_run (str | None — see TODO)
   - active_scenarios (list[str] — see TODO)
   - provenance (dict per slot)
-  - frozen_slots (set — empty by default; user freeze/unfreeze in 5.11+)
+  - frozen_slots (set — user freeze/unfreeze via 5.13 commit API)
+  - volatile_slots, sticky_slots (scaffolding — declared, not enforced in v1)
 
 Placeholder slots (typed but unused in v1, populated by future items):
   - dimensions, period, geography (5.10 v2 + text2sql)
   - comparisons, transformations (5.10 v2)
-  - pending_confirmations (5.13)
+  - pending_confirmations (reserved for future use)
 """
 
 from __future__ import annotations
@@ -67,6 +68,10 @@ class ActiveAnalyticalState(BaseModel):
     # Provenance & governance ────────────────────────────────────────
     provenance: dict[str, SlotProvenance] = Field(default_factory=dict)
     frozen_slots: set[str] = Field(default_factory=set)
+    # Scaffolding for future slot-lifecycle rules (5.13 v2, not enforced in v1):
+    # volatile_slots expire at turn boundary; sticky_slots persist across topic changes.
+    volatile_slots: set[str] = Field(default_factory=set)
+    sticky_slots: set[str] = Field(default_factory=set)
 
     # Placeholder slots (v2 — populated when text2sql/dimensions land) ─
     # These fields exist so the contract is stable; downstream code can

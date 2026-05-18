@@ -41,6 +41,22 @@ def run_query_endpoint(req: QueryRequest, graph=Depends(get_graph)) -> QueryResp
     # run_query() calls observer.start_run() and observer.end_run() internally
     result = run_query(req.query, session_id, observer, graph)
 
+    # Proactive confirmation gate (item 5.13) — not a failure; return 200 with
+    # awaiting_user_confirmation=True and the proposal so the client can render
+    # a confirmation dialog and POST /commits when the user approves.
+    if result.awaiting_user_confirmation:
+        return QueryResponse(
+            answer=result.answer,
+            session_id=session_uuid,
+            run_id=result.run_id,
+            total_input_tokens=result.total_input_tokens,
+            total_output_tokens=result.total_output_tokens,
+            total_cost_usd=result.total_cost_usd,
+            llm_calls_count=result.llm_calls_count,
+            awaiting_user_confirmation=True,
+            proposal=result.proposal,
+        )
+
     # GroundedTokens clarification (item 5.9) — not a server error; return 200
     # with clarification fields so the client can prompt the user to rephrase.
     if result.clarification_needed:

@@ -42,6 +42,54 @@ def render_clarification_message(message: str) -> None:
     st.info(sanitize_markdown(message), icon="🔤")
 
 
+def render_proactive_confirmation(
+    proposal: Dict[str, Any],
+    on_confirm: Any,
+    on_cancel: Any,
+) -> None:
+    """Render a proactive confirmation panel for the planner's proposed action.
+
+    Item 5.13. Displayed when the proactive gate fires for an expensive tool.
+
+    Displayed when the gate fires for an expensive tool and the agent pauses
+    to ask the user to confirm the interpretation before execution.
+
+    Parameters
+    ----------
+    proposal  : JSON-serialisable StateProposal dict from RunResult.proposal.
+    on_confirm: Callable — invoked when the user clicks «Confirm».
+    on_cancel : Callable — invoked when the user clicks «Cancel».
+    """
+    st.warning(
+        "The agent wants to run an expensive analysis. "
+        "Please review the parameters and confirm.",
+        icon="⚠️",
+    )
+    mutations = proposal.get("mutations", [])
+    triggered = proposal.get("triggered_signals", [])
+    if triggered:
+        signal_txt = ", ".join(f"`{s}`" for s in triggered)
+        st.caption(f"Triggered signals: {signal_txt}")
+
+    if mutations:
+        st.markdown("**Proposed parameters:**")
+        for m in mutations:
+            slot = m.get("slot", "")
+            val = m.get("proposed_value")
+            reason = m.get("reason", "")
+            st.markdown(f"- **{slot}**: `{val}`")
+            if reason:
+                st.caption(f"  {reason}")
+
+    col_confirm, col_cancel = st.columns([1, 3])
+    with col_confirm:
+        if st.button("Confirm", type="primary", key="proactive_confirm"):
+            on_confirm()
+    with col_cancel:
+        if st.button("Cancel", key="proactive_cancel"):
+            on_cancel()
+
+
 def _render_assistant_extras(metadata: Dict[str, Any]) -> None:
     """Render tool badge, result cards, and technical details for an assistant msg."""
     try:

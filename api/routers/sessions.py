@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, Query, status
 
 from api.schemas.sessions import (
     AnalyticalStateResponse,
+    CommitDecisionRequest,
+    CommitResultResponse,
+    ProposalCreateRequest,
+    ProposalResponse,
     SessionListResponse,
     SessionResponse,
+    SlotProposalSchema,
     StateAuditResponse,
     StateTransitionResponse,
 )
@@ -148,4 +155,147 @@ def get_session_state_audit(
             for t in transitions
         ],
         total=len(transitions),
+    )
+
+
+# ── State proposals & commits (item 5.13) ────────────────────────────────────
+
+
+def _parse_session_uuid(session_id: str) -> Any:
+    import uuid as _uuid
+
+    try:
+        return _uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid session_id UUID")
+
+
+def _slot_proposal_to_schema(m: "Any") -> SlotProposalSchema:
+    return SlotProposalSchema(
+        slot=m.slot,
+        current_value=m.current_value,
+        proposed_value=m.proposed_value,
+        reason=m.reason,
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/state/proposals",
+    response_model=ProposalResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a state-mutation proposal (proactive or reactive)",
+)
+def create_state_proposal(
+    session_id: str,
+    body: ProposalCreateRequest,
+) -> ProposalResponse:
+    """Generate a StateProposal for the given session.
+
+    PROACTIVE_PLANNER: caller supplies ``pending_mutations`` (the planner's
+    intended slot changes). REACTIVE_USER: ``pending_mutations`` is omitted;
+    the current editable slots are packaged as identity proposals for the
+    user to edit.
+    """
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+    from memory import get_memory_service
+
+    sid = _parse_session_uuid(session_id)
+
+    try:
+        source = ProposalSource(body.source)
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid source '{body.source}'. "
+            "Use 'proactive_planner' or 'reactive_user'.",
+        )
+
+    pending: list[SlotProposal] | None = None
+    if body.pending_mutations is not None:
+        pending = [
+            SlotProposal(
+                slot=m.slot,
+                current_value=m.current_value,
+                proposed_value=m.proposed_value,
+                reason=m.reason,
+            )
+            for m in body.pending_mutations
+        ]
+
+    # turn_id: use last_turn_id + 1 from current state
+    svc = get_memory_service()
+    state = svc.get_active_state(sid)
+    turn_id = state.last_turn_id + 1
+
+    proposal = svc.propose_state_update(
+        session_id=sid,
+        turn_id=turn_id,
+        source=source,
+        pending_mutations=pending,
+    )
+
+    return ProposalResponse(
+        session_id=str(proposal.session_id),
+        turn_id=proposal.turn_id,
+        source=proposal.source.value,
+        mutations=[_slot_proposal_to_schema(m) for m in proposal.mutations],
+        triggered_signals=proposal.triggered_signals,
+        created_at=proposal.created_at.isoformat(),
+    )
+
+
+@router.post(
+    "/sessions/{session_id}/state/commits",
+    response_model=CommitResultResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Commit a state-mutation decision",
+)
+def commit_state_decision(
+    session_id: str,
+    body: CommitDecisionRequest,
+) -> CommitResultResponse:
+    """Apply the approved mutations from a StateProposal.
+
+    Raises HTTP 400 when the ``proposal_turn_id`` does not correspond to an
+    open proposal for this session. Frozen slots in ``approved_mutations``
+    are silently skipped and returned in ``skipped_slots``.
+    """
+    from core.protocols.memory import SlotProposal, StateCommitDecision
+    from memory import get_memory_service
+
+    sid = _parse_session_uuid(session_id)
+
+    decision = StateCommitDecision(
+        session_id=sid,
+        proposal_turn_id=body.proposal_turn_id,
+        approved_mutations=[
+            SlotProposal(
+                slot=m.slot,
+                current_value=m.current_value,
+                proposed_value=m.proposed_value,
+                reason=m.reason,
+            )
+            for m in body.approved_mutations
+        ],
+        rejected_slots=body.rejected_slots,
+        freeze_slots=body.freeze_slots,
+        unfreeze_slots=body.unfreeze_slots,
+    )
+
+    svc = get_memory_service()
+    try:
+        result = svc.commit_state_update(session_id=sid, decision=decision)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return CommitResultResponse(
+        session_id=str(result.session_id),
+        version_before=result.version_before,
+        version_after=result.version_after,
+        applied_mutations=[
+            _slot_proposal_to_schema(m) for m in result.applied_mutations
+        ],
+        skipped_slots=result.skipped_slots,
+        committed_at=result.committed_at.isoformat(),
     )

@@ -113,9 +113,13 @@ def main() -> None:
     # ------------------------------------------------------------------
     _chat_input = st.chat_input("Pregunta sobre tu negocio…")
 
-    # Resolve pending query from example-card buttons
+    # Resolve pending query from example-card buttons or gate bypass
     prompt: Optional[str] = None
-    if "_pending_query" in st.session_state:
+    bypass_gate: bool = False
+    if "_gate_bypass_prompt" in st.session_state:
+        prompt = st.session_state.pop("_gate_bypass_prompt")
+        bypass_gate = True
+    elif "_pending_query" in st.session_state:
         prompt = st.session_state.pop("_pending_query")
     elif _chat_input:
         prompt = _chat_input
@@ -128,6 +132,7 @@ def main() -> None:
     from ui.components import (
         render_chat_message,
         render_clarification_message,
+        render_proactive_confirmation,
         render_result_cards,
         render_technical_details,
         render_welcome_cards,
@@ -168,7 +173,7 @@ def main() -> None:
             # -- Agent execution + assistant message --
             with st.chat_message("assistant"):
                 with st.spinner("Analizando tu pregunta…"):
-                    result = run_agent_query(prompt, graph)
+                    result = run_agent_query(prompt, graph, bypass_gate=bypass_gate)
 
                 # Build metadata
                 metadata = {
@@ -191,6 +196,8 @@ def main() -> None:
                     "budget_exceeded_reason": result.budget_exceeded_reason,
                     "active_state": result.active_state,
                     "clarification_needed": result.clarification_needed,
+                    "awaiting_user_confirmation": result.awaiting_user_confirmation,
+                    "proposal": result.proposal,
                 }
 
                 # Append assistant to session_state
@@ -206,8 +213,28 @@ def main() -> None:
                 )
                 st.session_state.is_new_session = False
 
+                # Proactive confirmation gate (item 5.13): show proposal + buttons
+                if result.awaiting_user_confirmation and result.proposal:
+                    # Store the original prompt so "Confirm" can re-run it
+                    st.session_state["_gate_bypass_prompt_stored"] = prompt
+
+                    def _on_confirm() -> None:
+                        st.session_state["_gate_bypass_prompt"] = st.session_state.pop(
+                            "_gate_bypass_prompt_stored", prompt
+                        )
+                        st.rerun()
+
+                    def _on_cancel() -> None:
+                        st.session_state.pop("_gate_bypass_prompt_stored", None)
+                        st.rerun()
+
+                    render_proactive_confirmation(
+                        result.proposal,
+                        on_confirm=_on_confirm,
+                        on_cancel=_on_cancel,
+                    )
                 # GroundedTokens clarification (item 5.9): render with info style
-                if result.clarification_needed:
+                elif result.clarification_needed:
                     render_clarification_message(result.answer)
                 else:
                     # Render assistant response inline — always safe

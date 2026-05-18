@@ -74,6 +74,16 @@ class AgentSession(Base):
         cascade="all, delete-orphan",
         order_by="SessionStateTransition.version_after",
     )
+    state_proposals = relationship(
+        "StateProposalRow",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
+    state_commits = relationship(
+        "StateCommitRow",
+        back_populates="session",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         return f"<AgentSession id={self.session_id} title={self.title!r}>"
@@ -347,4 +357,88 @@ class SessionStateTransition(Base):
         return (
             f"<SessionStateTransition session={self.session_id}"
             f" slot={self.slot} op={self.op}>"
+        )
+
+
+class StateProposalRow(Base):
+    """One row per state-mutation proposal (proactive or reactive) — item 5.13."""
+
+    __tablename__ = "state_proposals"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    turn_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    source: Mapped[str] = mapped_column(Text, nullable=False)
+    mutations: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    triggered_signals: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, server_default=func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(TIMESTAMPTZ, nullable=True)
+
+    session: Mapped[AgentSession] = relationship(
+        "AgentSession", back_populates="state_proposals"
+    )
+    commits: Mapped[list["StateCommitRow"]] = relationship(
+        "StateCommitRow", back_populates="proposal"
+    )
+
+    __table_args__ = (
+        __import__("sqlalchemy").Index(
+            "idx_state_proposals_session_turn", "session_id", "turn_id"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<StateProposalRow session={self.session_id}"
+            f" turn_id={self.turn_id} source={self.source}>"
+        )
+
+
+class StateCommitRow(Base):
+    """One row per committed state-mutation decision — item 5.13."""
+
+    __tablename__ = "state_commits"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("agent_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    proposal_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("state_proposals.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    version_before: Mapped[int] = mapped_column(Integer, nullable=False)
+    version_after: Mapped[int] = mapped_column(Integer, nullable=False)
+    applied_mutations: Mapped[Any] = mapped_column(JSONB, nullable=False)
+    skipped_slots: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    committed_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, server_default=func.now()
+    )
+
+    session: Mapped[AgentSession] = relationship(
+        "AgentSession", back_populates="state_commits"
+    )
+    proposal: Mapped[Optional[StateProposalRow]] = relationship(
+        "StateProposalRow", back_populates="commits"
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<StateCommitRow session={self.session_id}"
+            f" v{self.version_before}→v{self.version_after}>"
         )

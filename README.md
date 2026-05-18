@@ -196,6 +196,19 @@ decision support, system explainability, and controlled LLM interaction:
   and vocabulary is rebuilt whenever the spec changes. Spec variables support `aliases` for
   case-insensitive synonym matching.
 
+- **User-driven state corrections** (item 5.13) -- explicit mutation cycle for the
+  `ActiveAnalyticalState`. Two channels: (1) **proactive gate** — before executing an expensive
+  tool (simulation/optimization), a `proactive_confirmation_gate` LangGraph node checks
+  structural signals (`first_turn`, `thin_context`) and pauses execution, returning a
+  `StateProposal` for the user to review and confirm (HTTP 200 with
+  `awaiting_user_confirmation: true`); (2) **reactive correction** — the user can POST to
+  `POST /v1/sessions/{id}/state/proposals` at any time to see current editable slots and
+  correct them, then `POST /v1/sessions/{id}/state/commits` to apply the approved mutations.
+  Frozen slots (user-pinned values) are silently skipped. The `STATE_CONFIRMATION_SIGNALS`
+  env var controls active signals; set to empty string to disable the gate entirely (useful
+  for automated testing). Tool cost classification lives in `agents/tools_registry.py`
+  (extensible for future skill registrations via item 4.3).
+
 ---
 
 ## Agent Execution Flow
@@ -413,7 +426,7 @@ The vector store is loaded **lazily** (on first query, not at import time). If t
 
 ### Agent Layer (`agents/`)
 
-The agent is implemented as a **5-node LangGraph graph** (planner, tool, synthesizer, judge, clarification):
+The agent is implemented as a **6-node LangGraph graph** (planner, proactive_confirmation_gate, tool, synthesizer, judge, clarification):
 
 **`planner_node`** -- Selects the appropriate tool using structured output (provider and model configurable via `PLANNER_PROVIDER` / `PLANNER_MODEL` env vars; defaults to OpenAI `gpt-4o-mini`). The system prompt is built dynamically from the spec, listing all decision variable names and ranges, and includes **few-shot examples generated from the spec** that demonstrate correct tool routing for optimization, simulation, and knowledge queries. The prompt also enforces a **Chain-of-Thought sequence** in the `reasoning` field: the LLM must articulate (1) what the user is asking, (2) whether concrete variable values are mentioned, (3) whether the intent is exploratory/optimization or conceptual, and (4) which tool fits best and why -- before committing to a tool choice. Output is a typed `ToolSelection(tool, reasoning, params, language)` object -- no string parsing. The `language` field carries the ISO 639-1 code of the query's language (detected by the planner itself), which flows through `AgentState` to the synthesizer and judge so both respond in the user's language without any separate detection call. After tool selection, the planner consults the active spec's **autonomy policy** (`spec.autonomy_policy.get_level(tool)`) and sets `requires_confirmation` or `requires_approval` flags in state accordingly. If the LLM call fails after retries, the planner falls back to the `knowledge` tool with `language="en"` rather than crashing the graph.
 
@@ -422,6 +435,8 @@ The agent is implemented as a **5-node LangGraph graph** (planner, tool, synthes
 **`synthesizer_node`** -- Receives the raw tool output and the original query, and produces a business-oriented draft answer (model configurable via `SYNTHESIZER_MODEL` env var, defaults to `gpt-4o-mini`): what do the numbers mean, what should the decision-maker do, and what risks or caveats matter. If `requires_confirmation` or `requires_approval` is set in state (autonomy policy gate), the synthesizer short-circuits: it returns the `confirmation_message` directly without an LLM call, skipping tool execution entirely.
 
 **`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version. The judge also runs a non-blocking `check_observational()` scan on the raw result keys against the spec vocabulary; any ungrounded key names are prefixed in `judge_feedback` as `[ungrounded: ...]`.
+
+**`proactive_confirmation_gate`** (item 5.13) -- 6th node, between planner and tool. Checks structural signals (`first_turn`: no conversation history; `thin_context`: query < 8 words AND no params) to decide whether to pause execution before an expensive tool runs. When fired, returns a `StateProposal` to the client (`awaiting_user_confirmation: true`) instead of executing the tool. Client resubmits with `bypass_gate: true` after user confirmation. The `STATE_CONFIRMATION_SIGNALS` env var controls active signals; empty string disables the gate entirely.
 
 **`clarification_node`** (item 5.9) -- Reached when the planner's GroundedTokens guardrail catches a param variable that is not in the spec vocabulary (decision variables + target variables + derived metrics + all aliases). Returns a clarification message to the user instead of executing a tool. The response is returned as HTTP 200 with `clarification_needed: true` in `QueryResponse` — not an error. The user can rephrase using a valid variable name and the agent continues normally.
 
@@ -462,7 +477,8 @@ decision-intelligence-agent/
 +-- db/
 |   +-- engine.py                   # SQLAlchemy engine, get_session() context manager
 |   +-- models.py                   # ORM: AgentSession, AgentRun, KnowledgeDocument, Spec, SpecVersion,
-|   |                               #      Prompt, PromptVariantRow, SessionStateTransition
+|   |                               #      Prompt, PromptVariantRow, SessionStateTransition,
+|   |                               #      StateProposalRow, StateCommitRow (item 5.13)
 |   +-- migrations/
 |       +-- env.py                  # Alembic env (psycopg2 URL normalisation)
 |       +-- versions/
@@ -475,6 +491,7 @@ decision-intelligence-agent/
 |           +-- 007_add_analytical_state_to_sessions.py # analytical_state JSONB + session_state_transitions (item 5.10)
 |           +-- 008_add_prompt_variants.py              # prompt_variants table for A/B testing (item 10.2)
 |           +-- 009_add_variant_labels_to_runs.py       # *_variant_label cols on agent_runs (item 10.2)
+|           +-- 010_add_state_proposals_and_commits.py  # state_proposals + state_commits tables (item 5.13)
 +-- data/
 |   +-- generate_data.py            # Synthetic dataset -- all params read from spec
 +-- models/
@@ -501,14 +518,15 @@ decision-intelligence-agent/
 |   +-- routing.py                  # A/B routing: _bucket_for, select_variant, invalidate_variant_cache
 |   |                               #   lru_cache on active variants per stage (item 10.2)
 +-- agents/
-|   +-- state.py                    # AgentState TypedDict
+|   +-- state.py                    # AgentState TypedDict (incl. awaiting_user_confirmation, proposal, bypass_gate)
 |   +-- tools.py                    # Tool wrappers (spec-driven defaults + generic params)
+|   +-- tools_registry.py           # Tool cost classification (cheap/expensive) + register_tool_cost_class() (item 5.13)
 |   +-- llm_factory.py              # get_chat_model() + invoke_with_fallback() + LLMUnavailableError
 |   +-- i18n.py                     # LANGUAGE_NAMES, get_synth/revise/directive helpers
 |   +-- runner.py                   # run_query() + RunResult (shared by UI + API — Directive 3)
 |   +-- planner.py                  # LLM planner: dynamic prompt + structured output + fallback policy
 |   +-- judge.py                    # Online answer-quality judge and single-pass reviser
-|   +-- workflow.py                 # LangGraph: planner -> tool -> synthesizer -> judge
+|   +-- workflow.py                 # LangGraph 6-node: planner → proactive_gate → tool → synthesizer → judge → clarification
 +-- core/                           # Shared contracts and protocols (item 5.11)
 |   +-- protocols/
 |   |   +-- memory.py               # MemoryService Protocol (@runtime_checkable) — 7 methods
@@ -518,9 +536,18 @@ decision-intelligence-agent/
 |   +-- check_memory_boundary.py    # Boundary lint: blocks direct memory internals access (item 5.11)
 +-- memory/
 |   +-- __init__.py                 # Public exports + get_memory_service() singleton
-|   +-- service.py                  # LocalMemoryService — concrete MemoryService impl (item 5.11)
+|   +-- service.py                  # LocalMemoryService — concrete MemoryService impl (items 5.11+5.13)
+|   +-- proactive_confirmation.py   # should_request_confirmation(): structural signals first_turn + thin_context (item 5.13)
 |   +-- checkpointer.py             # PostgresSaver (SqliteSaver fallback) + session helpers
 |   +-- session_manager.py          # CRUD: Postgres primary, SQLite fallback
+|   +-- state/
+|   |   +-- types.py                # Intent (closed enum), ResolvedMetric, SlotProvenance
+|   |   +-- active.py               # ActiveAnalyticalState (mutable) + FrozenActiveAnalyticalState
+|   |   |                           #   volatile_slots + sticky_slots scaffolded (enforcement deferred, tech debt 5.13 v2)
+|   |   +-- audit.py                # StateTransition, TransitionOp — append-only mutation log
+|   +-- coordinator/
+|   |   +-- coordinator.py          # MemoryCoordinator — single writer; freeze_slot/unfreeze_slot (item 5.13)
+|   |   +-- intent_mapping.py       # map_tool_to_intent(tool) → Intent
 +-- evaluation/
 |   +-- __init__.py
 |   +-- observer.py                 # AgentObserver: run lifecycle, dual-write JSONL + Postgres

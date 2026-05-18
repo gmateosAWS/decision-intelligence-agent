@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -38,3 +38,6 @@ class QueryResponse(BaseModel):
     # GroundedTokens clarification (item 5.9)
     clarification_needed: bool = False
     clarification_message: Optional[str] = None
+    # Proactive confirmation gate (item 5.13)
+    awaiting_user_confirmation: bool = False
+    proposal: Optional[Dict[str, Any]] = None

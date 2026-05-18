@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llull · Resumen Ejecutivo · Mayo 17, 2026 (rev. post-5.9)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700&family=DM+Serif+Display&display=swap');
+
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --text1: #1a1a1a;
+    --text2: #4a4a4a;
+    --text3: #8a8a8a;
+    --border: #e8e5e1;
+    --accent: #2d5a27;
+    --accent-light: #e8f0e6;
+    --blue: #1e4a8a;
+    --blue-light: #e6edf5;
+    --amber: #8a6b1e;
+    --amber-light: #f5f0e2;
+    --red: #8a2d2d;
+    --red-light: #f5e6e6;
+    --green: #2d7a3a;
+    --layer1: #2563eb;
+    --layer2: #7c3aed;
+    --layer3: #0891b2;
+    --layer4: #c2410c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text1);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 48px 32px;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 42px;
+    letter-spacing: -2px;
+    color: var(--text1);
+  }
+  .logo b { font-weight: 700; }
+  .header-meta {
+    text-align: right;
+    font-size: 13px;
+    color: var(--text3);
+    line-height: 1.8;
+  }
+  .header-meta strong { color: var(--text2); font-weight: 600; }
+
+  h2 {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 22px;
+    font-weight: 400;
+    margin: 40px 0 20px;
+    color: var(--text1);
+    letter-spacing: -0.3px;
+  }
+  h2:first-of-type { margin-top: 0; }
+
+  p, li {
+    font-size: 14.5px;
+    color: var(--text2);
+    line-height: 1.7;
+  }
+  p + p { margin-top: 12px; }
+
+  /* Gauge */
+  .gauge-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .gauge-score {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 64px;
+    color: var(--text1);
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  .gauge-label {
+    font-size: 14px;
+    color: var(--text3);
+    margin-top: 4px;
+  }
+  .gauge-delta {
+    display: inline-block;
+    margin-top: 16px;
+    padding: 4px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--accent-light);
+    color: var(--accent);
+  }
+  .gauge-note {
+    font-size: 12.5px;
+    color: var(--text3);
+    margin-top: 14px;
+    max-width: 580px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Trajectory chart */
+  .trajectory {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 32px;
+  }
+  .trajectory-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text2);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 16px;
+  }
+  .trajectory-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .trajectory-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--text3);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border);
+  }
+  .trajectory-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .trajectory-table tr:last-child td { border-bottom: none; }
+  .trajectory-table td.label { font-weight: 600; color: var(--text1); }
+  .trajectory-table td.now { font-weight: 700; color: var(--text1); }
+  .trajectory-table td.delta {
+    font-weight: 600;
+    color: var(--green);
+    font-size: 12px;
+  }
+  .trajectory-table tr.overall {
+    background: var(--accent-light);
+  }
+  .trajectory-table tr.overall td { font-weight: 700; }
+
+  /* Layer cards */
+  .layers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .layer-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+  .layer-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+  }
+  .lc-l1::before { background: var(--layer1); }
+  .lc-l2::before { background: var(--layer2); }
+  .lc-l3::before { background: var(--layer3); }
+  .lc-l4::before { background: var(--layer4); }
+  .lc-bottleneck { border: 1px solid var(--amber); }
+
+  .lc-name {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text3);
+    margin-bottom: 8px;
+  }
+  .lc-score {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 32px;
+    color: var(--text1);
+    letter-spacing: -1px;
+  }
+  .lc-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 12px 0 8px;
+    overflow: hidden;
+  }
+  .lc-fill { height: 100%; border-radius: 2px; }
+  .lc-l1 .lc-fill { background: var(--layer1); }
+  .lc-l2 .lc-fill { background: var(--layer2); }
+  .lc-l3 .lc-fill { background: var(--layer3); }
+  .lc-l4 .lc-fill { background: var(--layer4); }
+
+  .lc-delta {
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 600;
+  }
+  .lc-delta.flat { color: var(--text3); }
+
+  /* KPI strip */
+  .kpi-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+  }
+  .kpi-value {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-size: 36px;
+    letter-spacing: -1px;
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: var(--text3);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+  .kpi-green .kpi-value { color: var(--green); }
+  .kpi-blue .kpi-value { color: var(--blue); }
+  .kpi-amber .kpi-value { color: var(--amber); }
+
+  /* Completed items */
+  .completed-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .completed-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+  }
+  .completed-block h3 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text3);
+    margin-bottom: 12px;
+  }
+  .completed-block ul {
+    list-style: none;
+    padding: 0;
+  }
+  .completed-block li {
+    font-size: 13.5px;
+    padding: 4px 0;
+    color: var(--text2);
+  }
+  .completed-block li::before {
+    content: '✓ ';
+    color: var(--green);
+    font-weight: 700;
+  }
+
+  /* Strengths */
+  .strengths {
+    background: var(--accent-light);
+    border: 1px solid #c8dcc5;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+  .strengths h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .strength-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .strength-tag {
+    font-size: 12.5px;
+    padding: 5px 12px;
+    background: white;
+    border: 1px solid #c8dcc5;
+    border-radius: 6px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .strength-tag.new {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  /* Bottleneck */
+  .bottleneck {
+    background: var(--amber-light);
+    border: 1px solid #ddd5c0;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+  .bottleneck h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--amber);
+    margin-bottom: 8px;
+  }
+  .bottleneck p { font-size: 13.5px; }
+
+  /* Next section */
+  .next-section {
+    background: var(--blue-light);
+    border: 1px solid #c5d0e0;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 32px;
+  }
+  .next-section h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--blue);
+    margin-bottom: 12px;
+  }
+  .next-item {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(30,74,138,0.1);
+    font-size: 13.5px;
+  }
+  .next-item:last-child { border-bottom: none; }
+  .next-effort {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--blue);
+    min-width: 90px;
+    font-size: 12.5px;
+  }
+  .next-desc { color: var(--text2); }
+
+  /* Method note */
+  .method-note {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 32px;
+    font-size: 13.5px;
+  }
+  .method-note h3 {
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text3);
+    margin-bottom: 10px;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text3);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  @media print {
+    body { background: white; }
+    .page { padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="logo">||<b>u</b>||</div>
+      <p style="font-size:15px; color:var(--text2); margin-top:8px; font-weight:500;">
+        Decision Intelligence Platform
+      </p>
+      <p style="font-size:13px; color:var(--text3); margin-top:2px;">
+        Resumen ejecutivo · Self-Audit #4 (revisión post-5.9) · Preparado para Alfred Giralt
+      </p>
+    </div>
+    <div class="header-meta">
+      <strong>17 mayo 2026</strong><br>
+      Audit base · commit <code>28c1c48</code><br>
+      + item 5.9 inline update<br>
+      89 dimensiones · 4 capas<br>
+      4 audits consecutivos sin gaps críticos
+    </div>
+  </div>
+
+  <!-- Score global -->
+  <div class="gauge-section">
+    <div class="gauge-score">2.88</div>
+    <div class="gauge-label">Madurez global · 86 dimensiones · escala 0–5</div>
+    <div class="gauge-delta">↑ +0.41 vs 10 mayo · mayor delta en una ventana</div>
+    <div class="gauge-note">
+      21 dimensiones mejoradas, 0 regresiones. Tras 4 sprints, la trayectoria es
+      ascendente sostenida en las cuatro capas. Cero gaps críticos por cuarta auditoría
+      consecutiva. La ganancia es 100% atribuible a capacidades reales desplegadas,
+      no a cambios de definición ni reclassificaciones.
+    </div>
+  </div>
+
+  <!-- Trajectory -->
+  <div class="trajectory">
+    <div class="trajectory-title">Trayectoria 4-puntos · 11 días</div>
+    <table class="trajectory-table">
+      <thead>
+        <tr>
+          <th>Capa</th>
+          <th>6 mayo</th>
+          <th>8 mayo</th>
+          <th>10 mayo</th>
+          <th>17 mayo</th>
+          <th>Δ total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="label">L1 Codebase</td>
+          <td>2.96</td>
+          <td>3.39</td>
+          <td>3.64</td>
+          <td class="now">3.75</td>
+          <td class="delta">+0.79</td>
+        </tr>
+        <tr>
+          <td class="label">L2 AI / Agent</td>
+          <td>2.40</td>
+          <td>2.50</td>
+          <td>2.55</td>
+          <td class="now">3.10</td>
+          <td class="delta">+0.70</td>
+        </tr>
+        <tr>
+          <td class="label">L3 Memory</td>
+          <td>1.55</td>
+          <td>1.14</td>
+          <td>1.18</td>
+          <td class="now">2.00</td>
+          <td class="delta">+0.45</td>
+        </tr>
+        <tr>
+          <td class="label">L4 Ontology</td>
+          <td>2.31</td>
+          <td>2.00</td>
+          <td>2.06</td>
+          <td class="now">2.31</td>
+          <td class="delta">+0.00</td>
+        </tr>
+        <tr class="overall">
+          <td class="label">Overall</td>
+          <td>2.55</td>
+          <td>2.35</td>
+          <td>2.47</td>
+          <td class="now">2.88</td>
+          <td class="delta">+0.33</td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="font-size:11.5px; color:var(--text3); margin-top:10px; line-height:1.5;">
+      La columna del 17 mayo incluye los 9 items completados desde el 10 mayo: 3.3, lockfile,
+      8.7.a+b, 5.10, 5.11, ADR-005, mypy --strict, 10.2 y 5.9. Verificación aritmética
+      por capa: L1 105/28=3.75, L2 62/20=3.10, L3 44/22=2.00, L4 37/16=2.31, total 248/86=2.88.
+    </p>
+  </div>
+
+  <!-- Layer cards -->
+  <h2>Estado actual por capa</h2>
+  <div class="layers">
+    <div class="layer-card lc-l1">
+      <div class="lc-name">L1 · Codebase & Arquitectura</div>
+      <div class="lc-score">3.75 <span style="font-size:16px; color:var(--text3);">/ 5</span></div>
+      <div class="lc-bar"><div class="lc-fill" style="width:75%"></div></div>
+      <div class="lc-delta">+0.11 vs 10 mayo · zona "strong"</div>
+    </div>
+    <div class="layer-card lc-l2">
+      <div class="lc-name">L2 · AI / Agent Layer</div>
+      <div class="lc-score">3.10 <span style="font-size:16px; color:var(--text3);">/ 5</span></div>
+      <div class="lc-bar"><div class="lc-fill" style="width:62%"></div></div>
+      <div class="lc-delta">+0.55 vs 10 mayo · cruza los 3 puntos</div>
+    </div>
+    <div class="layer-card lc-l3 lc-bottleneck">
+      <div class="lc-name">L3 · Memoria Conversacional & Analítica</div>
+      <div class="lc-score">2.00 <span style="font-size:16px; color:var(--text3);">/ 5</span></div>
+      <div class="lc-bar"><div class="lc-fill" style="width:40%"></div></div>
+      <div class="lc-delta">+0.82 vs 10 mayo · cuello de botella actual</div>
+    </div>
+    <div class="layer-card lc-l4">
+      <div class="lc-name">L4 · Ontología & Conocimiento Semántico</div>
+      <div class="lc-score">2.31 <span style="font-size:16px; color:var(--text3);">/ 5</span></div>
+      <div class="lc-bar"><div class="lc-fill" style="width:46%"></div></div>
+      <div class="lc-delta">+0.25 vs 10 mayo · primera incursión real</div>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <h2>Indicadores clave de este sprint</h2>
+  <div class="kpi-strip">
+    <div class="kpi kpi-green">
+      <div class="kpi-value">0</div>
+      <div class="kpi-label">Gaps críticos (🔴)</div>
+    </div>
+    <div class="kpi kpi-blue">
+      <div class="kpi-value">21</div>
+      <div class="kpi-label">Dimensiones mejoradas</div>
+    </div>
+    <div class="kpi kpi-green">
+      <div class="kpi-value">19</div>
+      <div class="kpi-label">Fortalezas confirmadas</div>
+    </div>
+    <div class="kpi kpi-amber">
+      <div class="kpi-value">330+</div>
+      <div class="kpi-label">Tests · CI en verde</div>
+    </div>
+  </div>
+
+  <!-- Completado -->
+  <h2>Completado entre 10 y 17 de mayo</h2>
+  <div class="completed-grid">
+    <div class="completed-block">
+      <h3>Memoria & Estado tipado</h3>
+      <ul>
+        <li>Item 5.10 — ActiveAnalyticalState con 12 slots tipados</li>
+        <li>MemoryCoordinator como único mutador (single-writer)</li>
+        <li>Audit log de transitions tipado por turno</li>
+        <li>Item 5.11 — MemoryService Protocol</li>
+        <li>Boundary lint en CI: bloquea acceso raw fuera de memory/</li>
+        <li>Planner consume state tipado (cierra "el LLM se acuerda")</li>
+      </ul>
+    </div>
+    <div class="completed-block">
+      <h3>LLMOps & Control de coste</h3>
+      <ul>
+        <li>Item 8.7.a — Token tracking por run</li>
+        <li>Tabla de precios YAML versionable (todos los providers)</li>
+        <li>Conversión EUR via Frankfurter (ECB)</li>
+        <li>Item 8.7.b — Topes duros por run (calls, tiempo, coste, tokens)</li>
+        <li>Item 10.2 — A/B testing de prompts en producción</li>
+        <li>Routing determinista por sha256(session_id + stage)</li>
+      </ul>
+    </div>
+    <div class="completed-block">
+      <h3>Ontología & Guardrails</h3>
+      <ul>
+        <li>Item 5.9 — GroundedTokens guardrail spec-driven</li>
+        <li>Vocabularios certificados desde el spec en runtime</li>
+        <li>Planner bloqueante + judge observacional</li>
+        <li>Campo aliases y derived_metrics opcional en spec</li>
+        <li>Cero acoplamiento al spec del prototipo (verificado en CI)</li>
+        <li>Fixture sintética de healthcare prueba agnosticismo</li>
+      </ul>
+    </div>
+    <div class="completed-block">
+      <h3>Disciplina arquitectónica</h3>
+      <ul>
+        <li>mypy --strict en agents/ · 0 errores · enforced en CI</li>
+        <li>Item 3.3 — DAG cycle assertion (3 integration points)</li>
+        <li>pip-tools lockfile con hashes (supply-chain hardening)</li>
+        <li>Plan review discipline en CLAUDE.md (Garry Tan adaptado)</li>
+        <li>ADR-005 — pgvector + pgvectorscale (supersedes ADR-001)</li>
+        <li>4 entradas activas en docs/tech_debt.md</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Fortalezas -->
+  <div class="strengths">
+    <h3>19 fortalezas confirmadas (5 nuevas)</h3>
+    <div class="strength-tags">
+      <span class="strength-tag">Spec-driven architecture</span>
+      <span class="strength-tag">API-first runner compartido</span>
+      <span class="strength-tag">CI pipeline (3 jobs)</span>
+      <span class="strength-tag">RunSink Protocol</span>
+      <span class="strength-tag">Prompt Registry versionado</span>
+      <span class="strength-tag">Autonomy policies</span>
+      <span class="strength-tag">Zero dead code</span>
+      <span class="strength-tag">Dual-backend (Postgres + SQLite)</span>
+      <span class="strength-tag">Provider-agnostic LLM</span>
+      <span class="strength-tag">DAG topológico acíclico</span>
+      <span class="strength-tag">Judge online quality gate</span>
+      <span class="strength-tag">Structured ToolSelection</span>
+      <span class="strength-tag">Semver + auto-bump</span>
+      <span class="strength-tag">Config lazy zero import-time IO</span>
+      <span class="strength-tag new">MemoryService Protocol + boundary lint</span>
+      <span class="strength-tag new">A/B testing determinista de prompts</span>
+      <span class="strength-tag new">mypy --strict en agents/</span>
+      <span class="strength-tag new">Plan review discipline (Garry Tan adaptado)</span>
+      <span class="strength-tag new">Spec-driven vocabulary guardrail (5.9)</span>
+    </div>
+  </div>
+
+  <!-- Bottleneck -->
+  <div class="bottleneck">
+    <h3>Cuello de botella actual: Layer 3 — Memoria Conversacional & Analítica (2.00 / 5)</h3>
+    <p>
+      Tras el item 5.9, <strong>L4 Ontología sube a 2.31 y L3 vuelve a ser la capa más baja</strong>.
+      La conclusión arquitectónica es clara: el sprint pendiente es cerrar el ciclo de memoria
+      con corrections del usuario (item 5.13) y guard de recursión (5.12), ambos preparados
+      por la infraestructura ya desplegada (MemoryService Protocol + ActiveAnalyticalState).
+    </p>
+    <p style="margin-top:8px;">
+      <strong>Proyección:</strong> el item 5.13 (user-correction mutations) mueve L3 ~+0.40
+      y consolida el patrón propose/commit que ya está como placeholder en el Protocol.
+      Tras 5.13, el cuello de botella vuelve a Layer 4, donde los items 2.2 (MappingLayer),
+      10.8 (Registry unificado) y 10.11 (semantic goldens) son los próximos targets.
+    </p>
+  </div>
+
+  <!-- Next steps -->
+  <div class="next-section">
+    <h3>Próximos pasos · I2A restante (independiente de LlullGen)</h3>
+    <div class="next-item">
+      <span class="next-effort">1–2 días</span>
+      <span class="next-desc"><strong>Item 5.13</strong> — User-correction mutations. Cierra el ciclo MemoryService→corrections. Mueve L3 ~+0.40. Próximo target prioritario.</span>
+    </div>
+    <div class="next-item">
+      <span class="next-effort">1 día</span>
+      <span class="next-desc"><strong>Item 5.12</strong> — Recursion guard y depth limits. Preparación para multi-agente. Aprovecha la infraestructura de MemoryService.</span>
+    </div>
+    <div class="next-item">
+      <span class="next-effort">2–3 días</span>
+      <span class="next-desc"><strong>Item 10.11</strong> — Golden eval CI gates. Mueve L4 dim 13 (semantic tests) de 1 a 4.</span>
+    </div>
+    <div class="next-item">
+      <span class="next-effort">2 días</span>
+      <span class="next-desc"><strong>Item 10.8</strong> — Registry pattern unificado. Generaliza spec + prompts + variants en un único contrato GovernableArtifact. Mueve L4 dim 14 de 4 a 5.</span>
+    </div>
+    <div class="next-item">
+      <span class="next-effort">Bloqueado</span>
+      <span class="next-desc"><strong>Item 1.6 ObjectBus</strong> — pendiente de acceso al repo LlullGen. Desbloquea 5.10 v2 (slots completos) y migración tipada de run_id → ObjectId.</span>
+    </div>
+  </div>
+
+  <!-- Method note -->
+  <div class="method-note">
+    <h3>Método de trabajo · evidencia operativa</h3>
+    <p>
+      Las decisiones arquitectónicas se toman entre Claude (asistente arquitecto) y el equipo humano
+      antes de redactar cualquier prompt para Claude Code. Cada item completa un ciclo: especificación
+      en chat de arquitectura → prompt detallado a Claude Code → plan review obligatorio (capturando
+      riesgos concretos antes de tocar código) → implementación → tests → documentación → PR a main.
+    </p>
+    <p>
+      La disciplina del Plan review se introdujo en el sprint actual tras observar que Claude Code
+      tendía a ejecutar sin cuestionar y reproducir bugs sutiles. Aplicada en los últimos dos PRs
+      (10.2 A/B testing y 5.9 GroundedTokens), ha capturado 6 y 6 riesgos concretos respectivamente
+      antes de tocar código, incluyendo bugs sutiles de integración con LangGraph y try/except
+      amplios del planner. La adopción de esta disciplina es ya una fortaleza confirmada.
+    </p>
+  </div>
+
+  <!-- Vision -->
+  <h2>Visión de producto · estado de avance</h2>
+  <p>
+    llull se consolida como <strong>Decision Platform</strong> diferenciada de Databricks (datos) y
+    Palantir (significado). Responde a <em>"¿Qué deberíamos hacer?"</em> combinando los 30+ años de
+    expertise de Inverence en modelos bayesianos e inferencia causal con una interfaz conversacional
+    agentica y APIs programáticas.
+  </p>
+  <p>
+    Tras este sprint, las cuatro Directivas Arquitectónicas tienen evidencia operativa de calidad:
+    spec-driven con versionado semver activo y vocabularios certificados, API-first con runner
+    compartido entre UI y API, skills-aware con contratos tipados, product-grade con mypy --strict
+    + boundary lint + lockfile, y "no orphaned implementations" verificado en cada PR contra el
+    inventario v4. El item 5.9 añade una capa defensiva crítica: el sistema ya no procesa conceptos
+    inventados por el LLM, sólo los certificados del dominio del cliente.
+  </p>
+  <p>
+    El camino restante hacia producto enterprise pasa por completar I2A (5.12, 5.13, 10.8, 10.11),
+    ObjectBus cuando LlullGen sea accesible, e I2B (multi-tenant, SSO, audit log, cifrado). Cada
+    paso está planificado en el inventario (116 items) y el roadmap (4 iteraciones, 4 ADRs activos
+    y deuda técnica documentada).
+  </p>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div>
+      <strong>llull</strong> · Inverence · Self-Audit #4 (rev. post-5.9) · 17 mayo 2026<br>
+      Repo: github.com/gmateosAWS/decision-intelligence-agent · Demo: llull-sandbox.streamlit.app
+    </div>
+    <div style="text-align:right;">
+      Auditoría completa: docs/audit/2026-05-17_llull_self_audit.html<br>
+      Inventario: 116 items · Roadmap: 4 iteraciones · ADRs: 4 activos
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
