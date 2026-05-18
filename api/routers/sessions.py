@@ -301,6 +301,10 @@ def commit_state_decision(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    import logging  # noqa: PLC0415
+
+    _logger = logging.getLogger(__name__)
+
     resumed_run: Optional[dict[str, Any]] = None
     if body.resume_query and result.original_query:
         try:
@@ -324,8 +328,25 @@ def commit_state_decision(
                 "clarification_needed": run_result.clarification_needed,
                 "error": run_result.error,
             }
-        except Exception:  # noqa: BLE001
-            pass  # resume is best-effort; commit result is always returned
+        except Exception as exc:  # noqa: BLE001
+            # Resume is best-effort but failures MUST be visible. The commit
+            # itself already succeeded; surface the resume failure to the client
+            # via resumed_run so they can decide whether to retry.
+            _logger.exception(
+                "Resume after commit failed for session=%s proposal_turn=%s",
+                session_id,
+                body.proposal_turn_id,
+            )
+            resumed_run = {
+                "answer": None,
+                "success": False,
+                "tool_used": None,
+                "latency_ms": None,
+                "total_cost_usd": None,
+                "clarification_needed": None,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            }
 
     return CommitResultResponse(
         session_id=str(result.session_id),

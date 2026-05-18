@@ -82,7 +82,9 @@ def render_proactive_confirmation(
             if reason:
                 st.caption(f"  {reason}")
 
-    col_confirm, col_edit, col_cancel = st.columns([2, 2, 3])
+    # Compact button row: buttons grouped on the left with a wide spacer
+    # on the right so they don't sprawl across the full width.
+    col_confirm, col_edit, col_cancel, _spacer = st.columns([1.5, 1, 1, 5])
     with col_confirm:
         if st.button("Confirmar y ejecutar", type="primary", key="proactive_confirm"):
             on_confirm()

@@ -39,7 +39,9 @@ def run_query_endpoint(req: QueryRequest, graph=Depends(get_graph)) -> QueryResp
     register_turn(session_id, req.query)
 
     # run_query() calls observer.start_run() and observer.end_run() internally
-    result = run_query(req.query, session_id, observer, graph)
+    result = run_query(
+        req.query, session_id, observer, graph, bypass_gate=req.bypass_gate
+    )
 
     # Proactive confirmation gate (item 5.13) — not a failure; return 200 with
     # awaiting_user_confirmation=True and the proposal so the client can render

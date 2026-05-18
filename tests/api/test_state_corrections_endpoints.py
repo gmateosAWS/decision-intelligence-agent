@@ -315,5 +315,71 @@ def test_commit_with_resume_query_true_calls_run_query(client_and_svc) -> None:
     data = resp.json()
     mock_rq.assert_called_once()
     assert mock_rq.call_args.kwargs.get("bypass_gate") is True
-    assert data["resumed_run"] is not None
-    assert data["resumed_run"]["answer"] == "Precio óptimo: 28€"
+    rr = data["resumed_run"]
+    assert rr is not None
+    assert rr["answer"] == "Precio óptimo: 28€"
+    assert rr["success"] is True
+    assert rr["tool_used"] == "optimization"
+    assert rr["latency_ms"] == pytest.approx(500.0)
+    assert rr["total_cost_usd"] == pytest.approx(0.0)
+    assert rr.get("error") is None
+
+
+def test_commit_resume_failure_surfaces_error_in_resumed_run(
+    client_and_svc, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When resume fails, resumed_run carries the error and HTTP status stays 200."""
+    import logging
+
+    client, svc, _ = client_and_svc
+    sid_uuid = uuid.uuid4()
+    sid = str(sid_uuid)
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+
+    proposal = svc.propose_state_update(
+        sid_uuid,
+        turn_id=7,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="intent",
+                current_value=None,
+                proposed_value="optimization",
+                reason="test",
+            )
+        ],
+        original_query="optimiza el precio",
+    )
+
+    with patch(
+        "agents.runner.run_query",
+        side_effect=RuntimeError("simulated runner failure"),
+    ):
+        with caplog.at_level(logging.ERROR):
+            resp = client.post(
+                f"/v1/sessions/{sid}/state/commits",
+                json={
+                    "proposal_turn_id": proposal.turn_id,
+                    "approved_mutations": [
+                        {
+                            "slot": "intent",
+                            "current_value": None,
+                            "proposed_value": "optimization",
+                            "reason": "test",
+                        }
+                    ],
+                    "resume_query": True,
+                },
+            )
+
+    # Commit succeeds; resume error is surfaced in resumed_run
+    assert resp.status_code == 200
+    data = resp.json()
+    rr = data["resumed_run"]
+    assert rr is not None
+    assert rr["success"] is False
+    assert "simulated runner failure" in rr["error"]
+    assert rr["error_type"] == "RuntimeError"
+    # The failure must be logged at ERROR level
+    assert any("Resume after commit failed" in r.message for r in caplog.records)

@@ -124,6 +124,11 @@ def main() -> None:
     elif _chat_input:
         prompt = _chat_input
 
+    # If the user submits a fresh prompt (not a gate bypass), any pending
+    # proactive proposal becomes obsolete and is discarded.
+    if prompt and not bypass_gate:
+        st.session_state.pop("_pending_proposal", None)
+
     # ------------------------------------------------------------------
     # 7. Tabs
     # ------------------------------------------------------------------
@@ -213,33 +218,16 @@ def main() -> None:
                 )
                 st.session_state.is_new_session = False
 
-                # Proactive confirmation gate (item 5.13): show proposal + buttons
+                # Proactive confirmation gate (item 5.13): persist proposal so it
+                # survives across reruns. The panel itself is rendered outside
+                # this block (see below) so the button widgets are alive on the
+                # rerun where the user clicks them, not just on the rerun where
+                # the prompt was processed.
                 if result.awaiting_user_confirmation and result.proposal:
-                    # Store the original prompt so "Confirmar" can re-run it
-                    st.session_state["_gate_bypass_prompt_stored"] = prompt
-
-                    def _on_confirm() -> None:
-                        st.session_state["_gate_bypass_prompt"] = st.session_state.pop(
-                            "_gate_bypass_prompt_stored", prompt
-                        )
-                        st.rerun()
-
-                    def _on_edit() -> None:
-                        # Mark that we want to show the reactive correction form
-                        # on the next rerun so the user can adjust parameters.
-                        st.session_state["_show_reactive_correction"] = True
-                        st.rerun()
-
-                    def _on_cancel() -> None:
-                        st.session_state.pop("_gate_bypass_prompt_stored", None)
-                        st.rerun()
-
-                    render_proactive_confirmation(
-                        result.proposal,
-                        on_confirm=_on_confirm,
-                        on_edit=_on_edit,
-                        on_cancel=_on_cancel,
-                    )
+                    st.session_state["_pending_proposal"] = {
+                        "proposal": result.proposal,
+                        "original_prompt": prompt,
+                    }
                 # GroundedTokens clarification (item 5.9): render with info style
                 elif result.clarification_needed:
                     render_clarification_message(result.answer)
@@ -262,6 +250,33 @@ def main() -> None:
                         render_technical_details(metadata)
                     except Exception as e:  # noqa: BLE001
                         st.caption(f"⚠️ Error rendering details: {e}")
+
+        # Render proactive confirmation panel — persistent across reruns while a
+        # proposal is pending. Lives outside `if prompt:` so the button widgets
+        # exist on the rerun where the user clicks them (Streamlit requires the
+        # widget to be rendered in the same rerun where it receives a click).
+        _pending = st.session_state.get("_pending_proposal")
+        if _pending:
+
+            def _on_confirm() -> None:
+                st.session_state["_gate_bypass_prompt"] = _pending["original_prompt"]
+                st.session_state.pop("_pending_proposal", None)
+                st.rerun()
+
+            def _on_edit() -> None:
+                st.session_state["_show_reactive_correction"] = True
+                st.rerun()
+
+            def _on_cancel() -> None:
+                st.session_state.pop("_pending_proposal", None)
+                st.rerun()
+
+            render_proactive_confirmation(
+                _pending["proposal"],
+                on_confirm=_on_confirm,
+                on_edit=_on_edit,
+                on_cancel=_on_cancel,
+            )
 
     with tab_dashboard:
         render_dashboard()

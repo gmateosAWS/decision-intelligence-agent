@@ -13,6 +13,10 @@ class QueryRequest(BaseModel):
     session_id: Optional[uuid.UUID] = Field(
         None, description="Resume an existing session; omit to start a new one"
     )
+    bypass_gate: bool = Field(
+        False,
+        description="Skip the proactive gate (True after user confirms)",
+    )
 
 
 class QueryResponse(BaseModel):
