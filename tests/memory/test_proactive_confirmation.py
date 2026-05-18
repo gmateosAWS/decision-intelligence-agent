@@ -84,15 +84,21 @@ def test_first_turn_signal_does_not_fire_when_is_first_turn_false() -> None:
 # ── thin_context signal ────────────────────────────────────────────────────────
 
 
-def test_thin_context_signal_fires_for_short_query_no_params() -> None:
+def test_thin_context_alone_does_not_fire_under_and() -> None:
+    """thin_context signal fires but gate does NOT fire when first_turn is absent.
+
+    Under AND semantics with default env (both signals active), thin_context
+    alone is insufficient — first_turn must also trigger. The signal is still
+    returned so callers can inspect which signals fired.
+    """
     should_pause, triggered = should_request_confirmation(
         tool="optimization",
         query="optimize",  # 1 word, < 8
         params={},
-        is_first_session_turn=False,
+        is_first_session_turn=False,  # first_turn does not trigger
     )
-    assert should_pause
-    assert "thin_context" in triggered
+    assert not should_pause  # AND: {thin_context} ≠ {first_turn, thin_context}
+    assert "thin_context" in triggered  # signal fired; gate did not
 
 
 def test_thin_context_does_not_fire_when_params_supplied() -> None:
@@ -159,3 +165,57 @@ def test_all_signals_disabled_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert not should_pause
     assert triggered == []
+
+
+# ── AND semantics — new tests ─────────────────────────────────────────────────
+
+
+def test_and_semantics_first_turn_alone_does_not_fire() -> None:
+    """first_turn fires but gate does NOT fire when thin_context is absent.
+
+    Long query (≥8 words) with params → thin_context does not trigger.
+    Under AND, first_turn alone is insufficient.
+    """
+    should_pause, triggered = should_request_confirmation(
+        tool="optimization",
+        query="optimiza el precio y el marketing para maximizar el beneficio esperado",
+        params={"price": 30.0},
+        is_first_session_turn=True,  # first_turn triggers
+    )
+    assert not should_pause  # AND: {first_turn} ≠ {first_turn, thin_context}
+    assert triggered == ["first_turn"]
+
+
+def test_and_semantics_thin_context_alone_does_not_fire() -> None:
+    """thin_context fires but gate does NOT fire when first_turn is absent.
+
+    Turn N>1 (is_first_session_turn=False), short query, no params.
+    Under AND, thin_context alone is insufficient.
+    """
+    should_pause, triggered = should_request_confirmation(
+        tool="simulation",
+        query="simula",  # 1 word, no params
+        params={},
+        is_first_session_turn=False,  # first_turn does not trigger
+    )
+    assert not should_pause  # AND: {thin_context} ≠ {first_turn, thin_context}
+    assert triggered == ["thin_context"]
+
+
+def test_and_semantics_degenerates_with_single_active_signal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AND with a single active signal degenerates correctly.
+
+    When STATE_CONFIRMATION_SIGNALS=first_turn (only), the gate fires as soon
+    as that one signal triggers — {first_turn} == {first_turn}.
+    """
+    monkeypatch.setenv("STATE_CONFIRMATION_SIGNALS", "first_turn")
+    should_pause, triggered = should_request_confirmation(
+        tool="optimization",
+        query="optimiza el precio y el marketing para maximizar el beneficio",
+        params={"price": 30.0},  # thin_context would not fire anyway
+        is_first_session_turn=True,
+    )
+    assert should_pause  # {first_turn} == {first_turn} → fires
+    assert triggered == ["first_turn"]
