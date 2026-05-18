@@ -58,6 +58,7 @@ class StateProposal:
     source: ProposalSource
     mutations: list[SlotProposal]
     triggered_signals: list[str] = field(default_factory=list)
+    original_query: str = ""  # query that triggered the gate; used for resume
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -82,6 +83,7 @@ class StateCommitResult:
     version_after: int
     applied_mutations: list[SlotProposal]
     skipped_slots: list[str]
+    original_query: str = ""  # propagated from the proposal for resume_query
     committed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -170,6 +172,7 @@ class MemoryService(Protocol):
         turn_id: int,
         source: ProposalSource,
         pending_mutations: list[SlotProposal] | None = None,
+        original_query: str = "",
     ) -> StateProposal:
         """Generate a proposal of mutations awaiting user decision.
 

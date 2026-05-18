@@ -215,13 +215,19 @@ def main() -> None:
 
                 # Proactive confirmation gate (item 5.13): show proposal + buttons
                 if result.awaiting_user_confirmation and result.proposal:
-                    # Store the original prompt so "Confirm" can re-run it
+                    # Store the original prompt so "Confirmar" can re-run it
                     st.session_state["_gate_bypass_prompt_stored"] = prompt
 
                     def _on_confirm() -> None:
                         st.session_state["_gate_bypass_prompt"] = st.session_state.pop(
                             "_gate_bypass_prompt_stored", prompt
                         )
+                        st.rerun()
+
+                    def _on_edit() -> None:
+                        # Mark that we want to show the reactive correction form
+                        # on the next rerun so the user can adjust parameters.
+                        st.session_state["_show_reactive_correction"] = True
                         st.rerun()
 
                     def _on_cancel() -> None:
@@ -231,6 +237,7 @@ def main() -> None:
                     render_proactive_confirmation(
                         result.proposal,
                         on_confirm=_on_confirm,
+                        on_edit=_on_edit,
                         on_cancel=_on_cancel,
                     )
                 # GroundedTokens clarification (item 5.9): render with info style

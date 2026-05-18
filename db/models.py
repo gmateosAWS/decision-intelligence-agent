@@ -378,6 +378,7 @@ class StateProposalRow(Base):
     source: Mapped[str] = mapped_column(Text, nullable=False)
     mutations: Mapped[Any] = mapped_column(JSONB, nullable=False)
     triggered_signals: Mapped[Any] = mapped_column(JSONB, nullable=False, default=list)
+    original_query: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMPTZ, nullable=False, server_default=func.now()
     )

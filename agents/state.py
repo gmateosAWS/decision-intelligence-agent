@@ -100,5 +100,10 @@ class AgentState(TypedDict, total=False):
     # bypass_gate: set True by the UI/API when the user has confirmed; the
     # router skips the proactive check and routes directly to the tool.
     bypass_gate: bool
+    # has_prior_turns: set True by runner.py when the LangGraph thread has a
+    # prior checkpoint. The proactive gate reads this to decide whether
+    # first_turn signal applies. We cannot use state["history"] because
+    # history is never updated when the graph ends early via gate → END.
+    has_prior_turns: bool
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]

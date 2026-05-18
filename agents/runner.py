@@ -134,8 +134,24 @@ def run_query(
         cfg["configurable"]["budget_tracker"] = tracker
         cfg["configurable"]["memory_service"] = memory_svc
 
+        # Determine if this is the first turn of this LangGraph thread by
+        # checking whether the checkpoint already has state. We cannot rely
+        # on state["history"] because the gate ends the graph early (via
+        # proactive_gate → END) without writing history, so history stays []
+        # on every subsequent turn after a gate-only round.
+        try:
+            _existing = graph.get_state(cfg)
+            has_prior_turns = bool(_existing.values)
+        except Exception:  # noqa: BLE001
+            has_prior_turns = False
+
         result = graph.invoke(
-            {"query": query, "run_id": run_id, "bypass_gate": bypass_gate},
+            {
+                "query": query,
+                "run_id": run_id,
+                "bypass_gate": bypass_gate,
+                "has_prior_turns": has_prior_turns,
+            },
             config=cfg,
         )
 

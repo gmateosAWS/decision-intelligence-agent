@@ -143,6 +143,7 @@ class LocalMemoryService:
         turn_id: int,
         source: ProposalSource,
         pending_mutations: list[SlotProposal] | None = None,
+        original_query: str = "",
     ) -> StateProposal:
         """Generate a proposal of mutations awaiting user decision.
 
@@ -171,6 +172,7 @@ class LocalMemoryService:
             turn_id=turn_id,
             source=source,
             mutations=mutations,
+            original_query=original_query,
         )
         self._proposals[(session_id, turn_id)] = proposal
         self._persist_proposal_safe(proposal)
@@ -220,6 +222,9 @@ class LocalMemoryService:
 
         self._persist_safe(coord)
 
+        # Capture original_query before removing the proposal from the store.
+        proposal_original_query = proposal.original_query
+
         # Remove proposal from in-memory store (mark resolved)
         del self._proposals[(session_id, decision.proposal_turn_id)]
 
@@ -233,6 +238,7 @@ class LocalMemoryService:
             version_after=coord.get_state().version,
             applied_mutations=applied,
             skipped_slots=skipped,
+            original_query=proposal_original_query,
         )
         self._persist_commit_safe(result)
         return result
@@ -276,6 +282,7 @@ class LocalMemoryService:
                 source=proposal.source.value,
                 mutations=mutations_json,
                 triggered_signals=signals_json,
+                original_query=proposal.original_query,
                 created_at=proposal.created_at,
             )
             db.add(row)

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from api.schemas.sessions import (
     AnalyticalStateResponse,
@@ -20,6 +20,13 @@ from api.schemas.sessions import (
 )
 
 router = APIRouter(tags=["sessions"])
+
+
+def _get_graph() -> Any:
+    """FastAPI dependency — returns the compiled LangGraph agent singleton."""
+    from api.dependencies import get_graph  # noqa: PLC0415
+
+    return get_graph()
 
 
 def _row_to_response(row: dict) -> SessionResponse:
@@ -254,12 +261,17 @@ def create_state_proposal(
 def commit_state_decision(
     session_id: str,
     body: CommitDecisionRequest,
+    graph: Any = Depends(_get_graph),
 ) -> CommitResultResponse:
     """Apply the approved mutations from a StateProposal.
 
     Raises HTTP 400 when the ``proposal_turn_id`` does not correspond to an
     open proposal for this session. Frozen slots in ``approved_mutations``
     are silently skipped and returned in ``skipped_slots``.
+
+    When ``resume_query=True`` (default) and the proposal stored an
+    ``original_query``, the agent is re-invoked with ``bypass_gate=True``
+    and the result is embedded in ``resumed_run``.
     """
     from core.protocols.memory import SlotProposal, StateCommitDecision
     from memory import get_memory_service
@@ -289,6 +301,32 @@ def commit_state_decision(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
+    resumed_run: Optional[dict[str, Any]] = None
+    if body.resume_query and result.original_query:
+        try:
+            from agents.runner import run_query  # noqa: PLC0415
+            from evaluation.observer import AgentObserver  # noqa: PLC0415
+
+            observer = AgentObserver()
+            run_result = run_query(
+                query=result.original_query,
+                thread_id=session_id,
+                observer=observer,
+                graph=graph,
+                bypass_gate=True,
+            )
+            resumed_run = {
+                "answer": run_result.answer,
+                "success": run_result.success,
+                "tool_used": run_result.tool_used,
+                "latency_ms": run_result.latency_ms,
+                "total_cost_usd": run_result.total_cost_usd,
+                "clarification_needed": run_result.clarification_needed,
+                "error": run_result.error,
+            }
+        except Exception:  # noqa: BLE001
+            pass  # resume is best-effort; commit result is always returned
+
     return CommitResultResponse(
         session_id=str(result.session_id),
         version_before=result.version_before,
@@ -298,4 +336,5 @@ def commit_state_decision(
         ],
         skipped_slots=result.skipped_slots,
         committed_at=result.committed_at.isoformat(),
+        resumed_run=resumed_run,
     )

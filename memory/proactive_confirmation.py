@@ -40,7 +40,7 @@ def should_request_confirmation(
     tool: str,
     query: str,
     params: dict[str, Any],
-    history: list[dict[str, str]] | None,
+    is_first_session_turn: bool,
 ) -> tuple[bool, list[str]]:
     """Return (should_pause, triggered_signals).
 
@@ -48,10 +48,16 @@ def should_request_confirmation(
     This avoids hardcoding tool names — when new skills are registered
     (item 4.3) they declare their cost class and the gate adapts automatically.
 
+    ``is_first_session_turn`` must be computed from the LangGraph checkpoint
+    (graph.get_state() before invoke) rather than from state["history"].
+    History is never written when the graph ends early via gate → END, so
+    state["history"] stays [] on subsequent turns — causing false positives.
+
     Signal descriptions:
-    - first_turn: first message in the session and the tool is expensive.
-      The system has no conversational context to resolve ambiguity, so the
-      initial interpretation is most likely to need correction.
+    - first_turn: this is the first turn of the LangGraph thread (no prior
+      checkpoint) and the tool is expensive.  The system has no conversational
+      context to resolve ambiguity, so the initial interpretation is most
+      likely to need correction.
     - thin_context: query is very short (< 8 words) AND no params were
       extracted by the planner. Without either a long query or explicit params,
       the planner's slot-filling has minimal evidence to work from.
@@ -65,7 +71,7 @@ def should_request_confirmation(
     active = get_active_signals()
     triggered: list[str] = []
 
-    if "first_turn" in active and not (history or []):
+    if "first_turn" in active and is_first_session_turn:
         triggered.append("first_turn")
 
     if "thin_context" in active:

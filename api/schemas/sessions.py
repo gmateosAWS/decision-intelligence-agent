@@ -95,6 +95,7 @@ class CommitDecisionRequest(BaseModel):
     rejected_slots: List[str] = []
     freeze_slots: List[str] = []
     unfreeze_slots: List[str] = []
+    resume_query: bool = True  # if True, re-invoke agent with bypass_gate after commit
 
 
 class CommitResultResponse(BaseModel):
@@ -106,3 +107,4 @@ class CommitResultResponse(BaseModel):
     applied_mutations: List[SlotProposalSchema]
     skipped_slots: List[str]
     committed_at: str
+    resumed_run: Optional[Dict[str, Any]] = None  # populated when resume_query=True
