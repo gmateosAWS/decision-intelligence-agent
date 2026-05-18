@@ -178,3 +178,102 @@ full `RunEnvelope` including reservations, lineage, and lifecycle hooks.
 - No type safety: a stale `run_id` pointing to a deleted run can sit in state silently
 - When multi-agent (5.3.a/b) lands, `ObjectId`s enable peer agents to consume objects;
   bare `run_id` strings do not
+
+---
+
+## ~~5.13 hotfix: LangGraph gate-only checkpoint bleed~~
+
+**Status:** ✅ Resolved in hotfix/5.13-proactive-gate-and-resume (2026-05-19).
+**Affected:** `agents/runner.py`
+
+### Issue
+
+Gate-only turns (proactive gate → END, without writing `history`) caused LangGraph to
+checkpoint `awaiting_user_confirmation=True` and `proposal={...}`. On the user's
+subsequent query, `graph.invoke()` inherited these values from the checkpoint instead of
+starting clean, making the gate appear to fire again even after the user had confirmed.
+
+### Fix
+
+Pass `awaiting_user_confirmation: False, proposal: None, bypass_gate: False` explicitly
+in the input dict to `graph.invoke()` in `agents/runner.py`. LangGraph uses the input
+dict to override checkpoint values at invocation time; the explicit reset takes
+precedence over the persisted checkpoint.
+
+---
+
+## 5.13 hotfix: i18n for proactive gate messages
+
+**Status:** Open. Created 2026-05-19.
+**Blocker:** i18n extension work (no dedicated inventory item yet).
+**Affected:** `memory/proactive_confirmation.py`, `ui/components.py`, `api/routers/sessions.py`
+
+### Current state (v1)
+
+The gate message returned in `StateProposal.message` (built in `memory/service.py`) is
+English-only. `ui/components.py:render_proactive_confirmation()` uses hardcoded Spanish
+strings (`"¿Continuar?"`, `"Confirmar"`, `"Cancelar"`, `"No confirmar"`). Neither path
+goes through the planner's ISO 639-1 language detection (the `language` field in
+`AgentState`).
+
+### Target state
+
+Gate messages should be templated per detected language, following the same pattern as
+`agents/i18n.py` (`get_synth_instruction()` / `get_revise_instruction()`). A
+`get_gate_message(language)` helper would supply the correct prompt per language.
+UI strings in `render_proactive_confirmation()` should derive from the same dict.
+
+### Migration path
+
+1. Add `get_gate_message(language)` to `agents/i18n.py`
+2. Thread `state["language"]` into `proactive_confirmation_gate` node and
+   `memory/service.py:propose_state_update()`
+3. Replace hardcoded Spanish strings in `ui/components.py` with dict lookup
+4. Add tests for es/en/fr gate message output
+
+### Risk if not migrated
+
+- Non-English-speaking users receive English gate messages even when the rest of the
+  interface responds in their language (Spanish queries → English confirmation prompt)
+
+---
+
+## 5.13.c: Reactive correction inline form not implemented in Streamlit UI
+
+**Status:** Open. Created 2026-05-19. Tracked as item 5.13.c in inventory.
+**Blocker:** Design decision — slot display format and edit UX for non-technical users.
+**Affected:** `ui/components.py`, `ui/app.py`
+
+### Current state (v1)
+
+The reactive correction API is fully implemented: `POST /v1/sessions/{id}/state/proposals`
+returns editable slots as identity proposals; `POST /v1/sessions/{id}/state/commits`
+applies approved mutations. The session state flag `_show_reactive_correction` is wired
+in `ui/app.py` but the Streamlit form that presents slots and collects user edits does
+not exist.
+
+```python
+# TODO(5.13.c/ui): render_reactive_correction() not implemented.
+# When 5.13.c lands: add to ui/components.py a form that calls
+# GET /v1/sessions/{id}/state, renders editable text inputs per slot,
+# and POSTs the approved mutations to /v1/sessions/{id}/state/commits.
+```
+
+### Target state
+
+`ui/components.py:render_reactive_correction(session_id, graph)` presents current
+analytical state slots as editable Streamlit form fields. The user modifies values,
+clicks "Aplicar corrección", and the form calls the commit endpoint.
+
+### Migration path
+
+1. Implement `render_reactive_correction(session_id, graph)` in `ui/components.py`
+2. Wire into `ui/app.py` wherever `_show_reactive_correction` is checked
+3. Add tests for the component (mock the memory service)
+4. Remove this debt entry
+
+### Risk if not migrated
+
+- Reactive corrections are only accessible via the REST API, not through the UI
+- Consultants using the Streamlit UI cannot self-correct slot misidentification without
+  API access or developer tooling

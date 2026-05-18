@@ -524,6 +524,30 @@ _Resuelve:_ sin 5.13, los errores de identificación de intent o de métricas se
 
 ---
 
+### 5.13.c Reactive correction inline form (Streamlit UI) `[v4 — parche]`
+
+Componente Streamlit que permite al usuario corregir el `ActiveAnalyticalState` directamente desde la UI, sin necesidad de llamar a la API REST. El backend ya existe completo (ítem 5.13): `POST /v1/sessions/{id}/state/proposals` devuelve los slots actuales como propuesta identidad; `POST /v1/sessions/{id}/state/commits` aplica las mutaciones aprobadas. Lo que falta es el formulario en `ui/components.py` que presenta esos slots, permite editarlos, y llama al endpoint de commit.
+
+**Descripción funcional:** El usuario hace clic en un botón "Corregir estado" en la UI. Aparece un formulario con los slots actuales del `ActiveAnalyticalState` (intent, active simulation run, active optimization run, métricas activas). El usuario modifica los que quiera, confirma, y el sistema aplica las correcciones vía API. Los slots congelados (`frozen_slots`) se muestran como read-only. La UI actualiza el estado mostrado tras el commit.
+
+**Lo que existe:**
+- `_show_reactive_correction` flag en `ui/app.py` (scaffolded)
+- `POST /v1/sessions/{id}/state/proposals` — devuelve slots editables como propuesta identidad
+- `POST /v1/sessions/{id}/state/commits` — aplica mutaciones aprobadas
+- `memory/service.py:propose_state_update()` y `commit_state_update()` — implementados al 100%
+
+**Lo que falta:**
+- `render_reactive_correction(session_id, graph)` en `ui/components.py`
+- Integración en `ui/app.py` — renderizar el formulario cuando `_show_reactive_correction=True`
+
+_Resuelve:_ sin este formulario, las correcciones reactivas sólo son accesibles vía API REST — no desde la UI de Streamlit. El consultor de Inverence que usa la UI no puede corregir un intent mal identificado sin salir a curl o a Swagger.
+
+**Dependencia:** 5.13. **Granularidad:** `[parche]`. Estimación 0.5 día.
+
+**Crea deuda técnica:** entrada "5.13.c: Reactive correction inline form not implemented" en `docs/tech_debt.md`.
+
+---
+
 ## 6. Capa de servicio y API
 
 La transición del REPL actual a un servicio expuesto que puedan consumir otras aplicaciones y usuarios múltiples.

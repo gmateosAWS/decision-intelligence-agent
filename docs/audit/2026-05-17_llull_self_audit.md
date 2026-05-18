@@ -468,3 +468,11 @@ Auditor: Claude Sonnet 4.6 (Anthropic) · Methodology: llull self-audit v1.0
 Previous audits: 2026-05-06 (baseline), 2026-05-08 (delta #1), 2026-05-10 (delta #2)
 Next re-audit recommended: after item 5.13 (user-correction mutations) or 10.3 (eval-gated promotion) lands.
 Expected overall score after I2A completion: ~3.00 / 5.
+
+**Post-PR note 2026-05-19**: hotfix/5.13-proactive-gate-and-resume merged (PR #27). Changes:
+AND semantics in `memory/proactive_confirmation.py` (`triggered == active` — gate fires only when
+all active signals trigger simultaneously); LangGraph checkpoint reset in `agents/runner.py`
+(gate-only checkpoint bleed); `bypass_gate` wired into `QueryRequest` + `api/routers/query.py`;
+session state cleanup in `ui/session.py`. Item 5.13.c (reactive correction inline form) opened as
+pending — backend complete, Streamlit form not yet implemented. 417 tests. No dimension scores
+change (behavioral fix, not new capability).

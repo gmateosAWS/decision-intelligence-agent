@@ -199,8 +199,9 @@ decision support, system explainability, and controlled LLM interaction:
 - **User-driven state corrections** (item 5.13) -- explicit mutation cycle for the
   `ActiveAnalyticalState`. Two channels: (1) **proactive gate** — before executing an expensive
   tool (simulation/optimization), a `proactive_confirmation_gate` LangGraph node checks
-  structural signals (`first_turn`, `thin_context`) and pauses execution, returning a
-  `StateProposal` for the user to review and confirm (HTTP 200 with
+  structural signals (`first_turn`: no prior turns; `thin_context`: query < 8 words AND no params)
+  using **AND semantics** (gate fires only when ALL active signals trigger simultaneously) and
+  pauses execution, returning a `StateProposal` for the user to review and confirm (HTTP 200 with
   `awaiting_user_confirmation: true`); (2) **reactive correction** — the user can POST to
   `POST /v1/sessions/{id}/state/proposals` at any time to see current editable slots and
   correct them, then `POST /v1/sessions/{id}/state/commits` to apply the approved mutations.
@@ -436,7 +437,7 @@ The agent is implemented as a **6-node LangGraph graph** (planner, proactive_con
 
 **`judge_node`** -- Evaluates the synthesized answer online before it is returned to the user. The judge checks whether the answer is grounded in the raw tool output, whether it actually answers the user's question, and whether it is quantitatively consistent. If the answer does not meet the configured quality threshold, the judge revises it once and returns the corrected version. The judge also runs a non-blocking `check_observational()` scan on the raw result keys against the spec vocabulary; any ungrounded key names are prefixed in `judge_feedback` as `[ungrounded: ...]`.
 
-**`proactive_confirmation_gate`** (item 5.13) -- 6th node, between planner and tool. Checks structural signals (`first_turn`: no conversation history; `thin_context`: query < 8 words AND no params) to decide whether to pause execution before an expensive tool runs. When fired, returns a `StateProposal` to the client (`awaiting_user_confirmation: true`) instead of executing the tool. Client resubmits with `bypass_gate: true` after user confirmation. The `STATE_CONFIRMATION_SIGNALS` env var controls active signals; empty string disables the gate entirely.
+**`proactive_confirmation_gate`** (item 5.13) -- 6th node, between planner and tool. Checks structural signals (`first_turn`: no conversation history; `thin_context`: query < 8 words AND no params) using **AND semantics**: the gate fires only when ALL active signals trigger simultaneously. A single signal firing alone does not pause execution. When the gate fires, returns a `StateProposal` to the client (`awaiting_user_confirmation: true`) instead of executing the tool. Client resubmits with `bypass_gate: true` after user confirmation. The `STATE_CONFIRMATION_SIGNALS` env var controls active signals; empty string disables the gate entirely. Single-signal configuration degenerates correctly ({signal} == {signal} fires when that signal triggers).
 
 **`clarification_node`** (item 5.9) -- Reached when the planner's GroundedTokens guardrail catches a param variable that is not in the spec vocabulary (decision variables + target variables + derived metrics + all aliases). Returns a clarification message to the user instead of executing a tool. The response is returned as HTTP 200 with `clarification_needed: true` in `QueryResponse` — not an error. The user can rephrase using a valid variable name and the agent continues normally.
 

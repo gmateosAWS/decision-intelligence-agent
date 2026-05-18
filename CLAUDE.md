@@ -116,6 +116,11 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    │                                            [policy]→ synthesizer (proposal) → judge
         │    │                                            [clarification]→ clarification → END (item 5.9)
         │    │                         synthesizer reads prompt from registry (fallback to inline)
+        │    │                         proactive_confirmation_gate node (item 5.13); 4-way _route_after_planner
+        │    │                         (clarification > proactive gate > synthesizer > tool).
+        │    │                         Dual resume paths after gate confirmation:
+        │    │                           Streamlit — _gate_bypass_prompt key in session_state (ui/app.py);
+        │    │                           API — POST /sessions/{id}/state/commits with resume_query=True
         │    ├── judge.py             online quality gate + single-pass revision;
         │    │                         judge + judge.revision prompts from registry (fallback to inline)
         │    └── runner.py            run_query(query, thread_id, observer, graph) → RunResult
@@ -144,6 +149,11 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    │                          Coordinator cache (session_id → MemoryCoordinator).
         │    │                          _get_or_load() lazy DB load, fail-open on error.
         │    │                          get_memory_service() singleton (process-level).
+        │    ├── proactive_confirmation.py  should_request_confirmation(): structural signals
+        │    │                          first_turn + thin_context; AND semantics (`triggered == active`)
+        │    │                          — ALL active signals must fire simultaneously to pause execution;
+        │    │                          STATE_CONFIRMATION_SIGNALS env var; single-signal env degenerates
+        │    │                          correctly ({signal} == {signal} fires) (item 5.13)
         │    └── coordinator/
         │         ├── coordinator.py   MemoryCoordinator — ONLY writer of ActiveAnalyticalState
         │         │                    Single-writer pattern: all other code reads frozen() snapshots.
@@ -582,14 +592,24 @@ no new env vars, no new endpoints").
   8 workflow_proactive_gate, 5 state_corrections_endpoints, 3 memory_protocol rewrites);
   tech debt resolved (5.11→5.13 stub entry); new debt entry (5.13 v2 slot lifecycle).
   382 tests total.
+  Hotfixes 2026-05-19 (PR #27 — hotfix/5.13-proactive-gate-and-resume → main): AND semantics in
+  `memory/proactive_confirmation.py` (`triggered == active` — all active signals must fire
+  simultaneously; prior behavior was implicit OR); LangGraph checkpoint reset in `agents/runner.py`
+  (gate-only turns wrote `awaiting_user_confirmation=True` to checkpoint, bleeding into next
+  invocation); `bypass_gate` wired into `QueryRequest` schema + `api/routers/query.py`; session
+  state cleanup in `ui/session.py` (`handle_new_session` + `resume_session` clear
+  `_pending_proposal` / `_show_reactive_correction` / `_gate_bypass_prompt` / `_pending_query`).
+  417 tests.
+- [ ] 5.13.c Reactive correction inline form — `render_reactive_correction(session_id, graph)` in
+  `ui/components.py` + integration in `ui/app.py`. Backend complete (5.13); UI form pending.
+  Tech debt registered. Tracked in roadmap + inventory.
 
-## Current work: Item 5.13 ✅ — Next: Item 10.3 (eval-gated auto-promotion)
-
-**Branch**: `feature/5.13-user-correction-mutations`
+## Current work: Item 10.3 (eval-gated auto-promotion)
 
 5.9 Completed 2026-05-17.
 10.2 Completed 2026-05-17.
-5.13 Completed 2026-05-18.
+5.13 Completed 2026-05-18. Hotfixes merged 2026-05-19 (PR #27).
+5.13.c Opened 2026-05-19 (reactive correction inline form, pending implementation).
 
 ### Audit P2.2 — Streamlit split into ui/ package + Directive 3 runner
 
