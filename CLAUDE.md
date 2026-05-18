@@ -126,9 +126,10 @@ spec/organizational_model.yaml  ← seed + SQLite fallback (runtime: specs table
         │    ├── models.py             AgentSession (+analytical_state JSONB + version col),
         │    │                         AgentRun (+3 prompt_version cols + 6 cost cols),
         │    │                         SessionStateTransition (item 5.10 audit log),
+        │    │                         StateProposalRow + StateCommitRow (item 5.13),
         │    │                         KnowledgeDocument, Spec, SpecVersion, Prompt
-        │    └── migrations/           Alembic 001–007 (007: analytical_state +
-        │                              session_state_transitions table)
+        │    └── migrations/           Alembic 001–011
+        │                              011: original_query on state_proposals (hotfix 5.13)
         │
         ├── memory/
         │    ├── checkpointer.py       PostgresSaver (SQLite fallback)
@@ -271,7 +272,7 @@ PostgreSQL 16 with pgvector. Docker Compose + Alembic.
 DATABASE_URL=postgresql://llull:llull@localhost:5432/llull
 ```
 
-Seven tables: `agent_sessions`, `agent_runs`, `knowledge_documents`, `specs`, `spec_versions`, `prompts`, `session_state_transitions`.
+Ten tables: `agent_sessions`, `agent_runs`, `knowledge_documents`, `specs`, `spec_versions`, `prompts`, `prompt_variants`, `session_state_transitions`, `state_proposals`, `state_commits`.
 
 Without `DATABASE_URL`, falls back to SQLite + FAISS automatically.
 

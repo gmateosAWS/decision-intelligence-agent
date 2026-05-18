@@ -45,34 +45,35 @@ def render_clarification_message(message: str) -> None:
 def render_proactive_confirmation(
     proposal: Dict[str, Any],
     on_confirm: Any,
+    on_edit: Any,
     on_cancel: Any,
 ) -> None:
     """Render a proactive confirmation panel for the planner's proposed action.
 
-    Item 5.13. Displayed when the proactive gate fires for an expensive tool.
-
-    Displayed when the gate fires for an expensive tool and the agent pauses
-    to ask the user to confirm the interpretation before execution.
+    Item 5.13. Displayed when the proactive gate fires for an expensive tool
+    and the agent pauses to ask the user to confirm before execution.
 
     Parameters
     ----------
     proposal  : JSON-serialisable StateProposal dict from RunResult.proposal.
-    on_confirm: Callable — invoked when the user clicks «Confirm».
-    on_cancel : Callable — invoked when the user clicks «Cancel».
+    on_confirm: Callable — re-runs the original query with bypass_gate=True.
+    on_edit   : Callable — opens the reactive correction form so the user can
+                edit parameter values before confirming.
+    on_cancel : Callable — discards the proposal and returns to idle state.
     """
     st.warning(
-        "The agent wants to run an expensive analysis. "
-        "Please review the parameters and confirm.",
+        "El agente quiere ejecutar un análisis costoso. "
+        "Revisa los parámetros y confirma antes de continuar.",
         icon="⚠️",
     )
     mutations = proposal.get("mutations", [])
     triggered = proposal.get("triggered_signals", [])
     if triggered:
         signal_txt = ", ".join(f"`{s}`" for s in triggered)
-        st.caption(f"Triggered signals: {signal_txt}")
+        st.caption(f"Señales detectadas: {signal_txt}")
 
     if mutations:
-        st.markdown("**Proposed parameters:**")
+        st.markdown("**Parámetros propuestos:**")
         for m in mutations:
             slot = m.get("slot", "")
             val = m.get("proposed_value")
@@ -81,12 +82,17 @@ def render_proactive_confirmation(
             if reason:
                 st.caption(f"  {reason}")
 
-    col_confirm, col_cancel = st.columns([1, 3])
+    # Compact button row: buttons grouped on the left with a wide spacer
+    # on the right so they don't sprawl across the full width.
+    col_confirm, col_edit, col_cancel, _spacer = st.columns([1.5, 1, 1, 5])
     with col_confirm:
-        if st.button("Confirm", type="primary", key="proactive_confirm"):
+        if st.button("Confirmar y ejecutar", type="primary", key="proactive_confirm"):
             on_confirm()
+    with col_edit:
+        if st.button("Editar", key="proactive_edit"):
+            on_edit()
     with col_cancel:
-        if st.button("Cancel", key="proactive_cancel"):
+        if st.button("Cancelar", key="proactive_cancel"):
             on_cancel()
 
 

@@ -492,6 +492,7 @@ decision-intelligence-agent/
 |           +-- 008_add_prompt_variants.py              # prompt_variants table for A/B testing (item 10.2)
 |           +-- 009_add_variant_labels_to_runs.py       # *_variant_label cols on agent_runs (item 10.2)
 |           +-- 010_add_state_proposals_and_commits.py  # state_proposals + state_commits tables (item 5.13)
+|           +-- 011_add_original_query_to_proposals.py  # original_query on state_proposals (hotfix 5.13)
 +-- data/
 |   +-- generate_data.py            # Synthetic dataset -- all params read from spec
 +-- models/
@@ -637,7 +638,7 @@ pip install -r requirements.txt
 
 ```bash
 docker compose up -d        # starts PostgreSQL 16 + pgvector on port 5432
-alembic upgrade head        # creates all tables (agent_sessions, agent_runs, knowledge_documents, specs, spec_versions)
+alembic upgrade head        # creates all 10 tables (agent_sessions, agent_runs, knowledge_documents, specs, spec_versions, prompts, prompt_variants, session_state_transitions, state_proposals, state_commits)
 ```
 
 Without this step the system runs in SQLite/FAISS fallback mode automatically.

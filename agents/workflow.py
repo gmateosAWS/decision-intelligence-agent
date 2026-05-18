@@ -307,10 +307,13 @@ def proactive_confirmation_gate(
     action: str = state.get("action") or "knowledge"
     query: str = state.get("query", "")
     params: dict[str, Any] = state.get("params") or {}
-    history: list[dict[str, str]] = state.get("history") or []
+    is_first_session_turn: bool = not state.get("has_prior_turns", False)
 
     should_pause, triggered = should_request_confirmation(
-        tool=action, query=query, params=params, history=history
+        tool=action,
+        query=query,
+        params=params,
+        is_first_session_turn=is_first_session_turn,
     )
     if not should_pause:
         return {}
@@ -348,6 +351,7 @@ def proactive_confirmation_gate(
                 turn_id=turn_id,
                 source=ProposalSource.PROACTIVE_PLANNER,
                 pending_mutations=pending_mutations,
+                original_query=query,
             )
             import dataclasses  # noqa: PLC0415
             import json  # noqa: PLC0415
@@ -399,9 +403,12 @@ def _route_after_planner(state: AgentState) -> str:
         action: str = state.get("action") or "knowledge"
         query: str = state.get("query", "")
         params: dict[str, Any] = state.get("params") or {}
-        history: list[dict[str, str]] = state.get("history") or []
+        is_first: bool = not state.get("has_prior_turns", False)
         should_pause, _ = should_request_confirmation(
-            tool=action, query=query, params=params, history=history
+            tool=action,
+            query=query,
+            params=params,
+            is_first_session_turn=is_first,
         )
         if should_pause:
             return "proactive_confirmation_gate"

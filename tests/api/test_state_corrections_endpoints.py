@@ -8,7 +8,7 @@ Offline — memory service uses in-memory store (no DB).
 from __future__ import annotations
 
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,23 +16,40 @@ from fastapi.testclient import TestClient
 from memory import LocalMemoryService
 
 
+def _mock_graph() -> MagicMock:
+    """Return a MagicMock that satisfies the graph dependency without LLM calls."""
+    g = MagicMock()
+    g.get_state.return_value = MagicMock(values={})
+    return g
+
+
 @pytest.fixture()
 def client_and_svc():
-    """TestClient with a real (in-memory) LocalMemoryService injected."""
+    """TestClient with a real (in-memory) LocalMemoryService injected.
+
+    The graph dependency is overridden with a MagicMock so the commit endpoint
+    can be called without building the full LangGraph workflow.
+    """
     from api.main import app
+    from api.routers.sessions import _get_graph
 
     svc = LocalMemoryService()
+    mock_graph = _mock_graph()
+
+    app.dependency_overrides[_get_graph] = lambda: mock_graph
 
     with patch("memory._memory_service", svc):
         with TestClient(app, raise_server_exceptions=True) as client:
-            yield client, svc
+            yield client, svc, mock_graph
+
+    app.dependency_overrides.clear()
 
 
 # ── POST /sessions/{id}/state/proposals ──────────────────────────────────────
 
 
 def test_create_reactive_proposal_returns_201(client_and_svc):
-    client, svc = client_and_svc
+    client, svc, _ = client_and_svc
     sid = str(uuid.uuid4())
     resp = client.post(
         f"/v1/sessions/{sid}/state/proposals",
@@ -46,7 +63,7 @@ def test_create_reactive_proposal_returns_201(client_and_svc):
 
 
 def test_create_proactive_proposal_with_mutations_returns_201(client_and_svc):
-    client, svc = client_and_svc
+    client, svc, _ = client_and_svc
     sid = str(uuid.uuid4())
     resp = client.post(
         f"/v1/sessions/{sid}/state/proposals",
@@ -68,7 +85,7 @@ def test_create_proactive_proposal_with_mutations_returns_201(client_and_svc):
 
 
 def test_create_proposal_invalid_source_returns_422(client_and_svc):
-    client, _ = client_and_svc
+    client, _, _ = client_and_svc
     sid = str(uuid.uuid4())
     resp = client.post(
         f"/v1/sessions/{sid}/state/proposals",
@@ -81,11 +98,10 @@ def test_create_proposal_invalid_source_returns_422(client_and_svc):
 
 
 def test_commit_decision_applies_mutation(client_and_svc):
-    client, svc = client_and_svc
+    client, svc, _ = client_and_svc
     sid_uuid = uuid.uuid4()
     sid = str(sid_uuid)
 
-    # Create proposal first
     from core.protocols.memory import ProposalSource, SlotProposal
 
     proposal = svc.propose_state_update(
@@ -114,6 +130,7 @@ def test_commit_decision_applies_mutation(client_and_svc):
                     "reason": "API test",
                 }
             ],
+            "resume_query": False,  # no rerun needed for this test
         },
     )
     assert resp.status_code == 200
@@ -123,10 +140,246 @@ def test_commit_decision_applies_mutation(client_and_svc):
 
 
 def test_commit_unknown_proposal_returns_400(client_and_svc):
-    client, _ = client_and_svc
+    client, _, _ = client_and_svc
     sid = str(uuid.uuid4())
     resp = client.post(
         f"/v1/sessions/{sid}/state/commits",
-        json={"proposal_turn_id": 9999},
+        json={"proposal_turn_id": 9999, "resume_query": False},
     )
     assert resp.status_code == 400
+
+
+# ── resume_query behaviour (hotfix 5.13 Bug 2) ────────────────────────────────
+
+
+def test_commit_with_resume_query_false_does_not_set_resumed_run(client_and_svc):
+    """When resume_query=False, resumed_run must be None."""
+    client, svc, _ = client_and_svc
+    sid_uuid = uuid.uuid4()
+    sid = str(sid_uuid)
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+
+    proposal = svc.propose_state_update(
+        sid_uuid,
+        turn_id=2,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="intent",
+                current_value=None,
+                proposed_value="optimization",
+                reason="test",
+            )
+        ],
+        original_query="optimiza el precio",
+    )
+
+    resp = client.post(
+        f"/v1/sessions/{sid}/state/commits",
+        json={
+            "proposal_turn_id": proposal.turn_id,
+            "approved_mutations": [
+                {
+                    "slot": "intent",
+                    "current_value": None,
+                    "proposed_value": "optimization",
+                    "reason": "test",
+                }
+            ],
+            "resume_query": False,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["resumed_run"] is None
+
+
+def test_commit_with_no_original_query_does_not_resume(client_and_svc):
+    """When original_query='', resume_query=True still skips re-invocation."""
+    client, svc, _ = client_and_svc
+    sid_uuid = uuid.uuid4()
+    sid = str(sid_uuid)
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+
+    proposal = svc.propose_state_update(
+        sid_uuid,
+        turn_id=3,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="intent",
+                current_value=None,
+                proposed_value="simulation",
+                reason="test",
+            )
+        ],
+        original_query="",  # no original query stored
+    )
+
+    resp = client.post(
+        f"/v1/sessions/{sid}/state/commits",
+        json={
+            "proposal_turn_id": proposal.turn_id,
+            "approved_mutations": [
+                {
+                    "slot": "intent",
+                    "current_value": None,
+                    "proposed_value": "simulation",
+                    "reason": "test",
+                }
+            ],
+            "resume_query": True,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["resumed_run"] is None
+
+
+def test_original_query_stored_in_proposal(client_and_svc) -> None:
+    """original_query passed to propose_state_update is stored in the proposal."""
+    _, svc, _ = client_and_svc
+    sid_uuid = uuid.uuid4()
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+
+    proposal = svc.propose_state_update(
+        sid_uuid,
+        turn_id=4,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="intent",
+                current_value=None,
+                proposed_value="optimization",
+                reason="",
+            )
+        ],
+        original_query="optimiza el precio para maximizar el beneficio",
+    )
+    assert proposal.original_query == "optimiza el precio para maximizar el beneficio"
+
+
+def test_commit_with_resume_query_true_calls_run_query(client_and_svc) -> None:
+    """When resume_query=True and original_query is set, run_query is invoked."""
+    client, svc, _ = client_and_svc
+    sid_uuid = uuid.uuid4()
+    sid = str(sid_uuid)
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+
+    proposal = svc.propose_state_update(
+        sid_uuid,
+        turn_id=5,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="intent",
+                current_value=None,
+                proposed_value="optimization",
+                reason="test",
+            )
+        ],
+        original_query="optimiza el precio",
+    )
+
+    from agents.runner import RunResult
+
+    mock_run_result = RunResult(
+        answer="Precio óptimo: 28€",
+        session_id=sid,
+        run_id="run-test",
+        success=True,
+        tool_used="optimization",
+        latency_ms=500.0,
+    )
+
+    with patch("agents.runner.run_query", return_value=mock_run_result) as mock_rq:
+        resp = client.post(
+            f"/v1/sessions/{sid}/state/commits",
+            json={
+                "proposal_turn_id": proposal.turn_id,
+                "approved_mutations": [
+                    {
+                        "slot": "intent",
+                        "current_value": None,
+                        "proposed_value": "optimization",
+                        "reason": "test",
+                    }
+                ],
+                "resume_query": True,
+            },
+        )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    mock_rq.assert_called_once()
+    assert mock_rq.call_args.kwargs.get("bypass_gate") is True
+    rr = data["resumed_run"]
+    assert rr is not None
+    assert rr["answer"] == "Precio óptimo: 28€"
+    assert rr["success"] is True
+    assert rr["tool_used"] == "optimization"
+    assert rr["latency_ms"] == pytest.approx(500.0)
+    assert rr["total_cost_usd"] == pytest.approx(0.0)
+    assert rr.get("error") is None
+
+
+def test_commit_resume_failure_surfaces_error_in_resumed_run(
+    client_and_svc, caplog: pytest.LogCaptureFixture
+) -> None:
+    """When resume fails, resumed_run carries the error and HTTP status stays 200."""
+    import logging
+
+    client, svc, _ = client_and_svc
+    sid_uuid = uuid.uuid4()
+    sid = str(sid_uuid)
+
+    from core.protocols.memory import ProposalSource, SlotProposal
+
+    proposal = svc.propose_state_update(
+        sid_uuid,
+        turn_id=7,
+        source=ProposalSource.PROACTIVE_PLANNER,
+        pending_mutations=[
+            SlotProposal(
+                slot="intent",
+                current_value=None,
+                proposed_value="optimization",
+                reason="test",
+            )
+        ],
+        original_query="optimiza el precio",
+    )
+
+    with patch(
+        "agents.runner.run_query",
+        side_effect=RuntimeError("simulated runner failure"),
+    ):
+        with caplog.at_level(logging.ERROR):
+            resp = client.post(
+                f"/v1/sessions/{sid}/state/commits",
+                json={
+                    "proposal_turn_id": proposal.turn_id,
+                    "approved_mutations": [
+                        {
+                            "slot": "intent",
+                            "current_value": None,
+                            "proposed_value": "optimization",
+                            "reason": "test",
+                        }
+                    ],
+                    "resume_query": True,
+                },
+            )
+
+    # Commit succeeds; resume error is surfaced in resumed_run
+    assert resp.status_code == 200
+    data = resp.json()
+    rr = data["resumed_run"]
+    assert rr is not None
+    assert rr["success"] is False
+    assert "simulated runner failure" in rr["error"]
+    assert rr["error_type"] == "RuntimeError"
+    # The failure must be logged at ERROR level
+    assert any("Resume after commit failed" in r.message for r in caplog.records)

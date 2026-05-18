@@ -47,12 +47,12 @@ def test_proactive_gate_uses_registry_not_hardcoded() -> None:
         original = os.environ.get("STATE_CONFIRMATION_SIGNALS", None)
         os.environ["STATE_CONFIRMATION_SIGNALS"] = "first_turn,thin_context"
 
-        # first_turn signal: no history → should fire
+        # first_turn signal: is_first_session_turn=True → should fire
         should_pause, triggered = should_request_confirmation(
             tool="new_expensive_skill",
             query="short",
             params={},
-            history=[],
+            is_first_session_turn=True,
         )
         assert should_pause
         assert "first_turn" in triggered

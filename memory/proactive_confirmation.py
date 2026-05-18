@@ -40,21 +40,29 @@ def should_request_confirmation(
     tool: str,
     query: str,
     params: dict[str, Any],
-    history: list[dict[str, str]] | None,
+    is_first_session_turn: bool,
 ) -> tuple[bool, list[str]]:
     """Return (should_pause, triggered_signals).
 
-    Only triggers for tools classified as "expensive" in the tools registry.
-    This avoids hardcoding tool names — when new skills are registered
-    (item 4.3) they declare their cost class and the gate adapts automatically.
+    AND semantics: the gate fires only when ALL signals listed in
+    STATE_CONFIRMATION_SIGNALS have triggered for the current turn.
+    Empty env var disables the gate entirely (no signals active → never fires).
+    Only applies to tools classified as "expensive" in the tools registry.
+
+    ``is_first_session_turn`` must be computed from agent_sessions.turn_count
+    (not from state["history"] — history stays [] on gate-only rounds, causing
+    false positives on subsequent turns if used directly).
 
     Signal descriptions:
-    - first_turn: first message in the session and the tool is expensive.
-      The system has no conversational context to resolve ambiguity, so the
-      initial interpretation is most likely to need correction.
+    - first_turn: this is the first turn of the session (no prior checkpoint).
+      The system has no conversational context to resolve ambiguity.
     - thin_context: query is very short (< 8 words) AND no params were
-      extracted by the planner. Without either a long query or explicit params,
-      the planner's slot-filling has minimal evidence to work from.
+      extracted by the planner. Minimal evidence for reliable slot-filling.
+
+    Degenerate case: if STATE_CONFIRMATION_SIGNALS lists a single signal,
+    AND degenerates correctly — {signal} == {signal} fires when that signal
+    triggers. Unknown signal names never appear in triggered, so the gate
+    never fires for unrecognised signals.
     """
     # Import deferred to avoid circular import at module load time.
     from agents.tools_registry import get_tool_cost_class  # noqa: PLC0415
@@ -63,14 +71,19 @@ def should_request_confirmation(
         return False, []
 
     active = get_active_signals()
-    triggered: list[str] = []
+    if not active:
+        return False, []
 
-    if "first_turn" in active and not (history or []):
-        triggered.append("first_turn")
+    triggered: set[str] = set()
+
+    if "first_turn" in active and is_first_session_turn:
+        triggered.add("first_turn")
 
     if "thin_context" in active:
         word_count = len(query.split())
         if word_count < 8 and not params:
-            triggered.append("thin_context")
+            triggered.add("thin_context")
 
-    return (len(triggered) > 0, triggered)
+    # AND semantics: every active signal must have triggered simultaneously.
+    should_pause = triggered == active
+    return (should_pause, sorted(triggered))

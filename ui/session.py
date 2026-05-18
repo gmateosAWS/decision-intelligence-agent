@@ -54,12 +54,24 @@ def handle_new_session() -> None:
     st.session_state.is_new_session = True
     st.session_state.messages = []
     st.session_state.turn_count = 0
+    # Discard any pending proactive proposal or reactive correction state
+    # from the previous session so stale panels do not ghost into the new one.
+    st.session_state.pop("_pending_proposal", None)
+    st.session_state.pop("_show_reactive_correction", None)
+    st.session_state.pop("_gate_bypass_prompt", None)
+    st.session_state.pop("_pending_query", None)
 
 
 def resume_session(session_id: str, graph: Any) -> None:
     """Restore a session and populate display messages from graph state."""
     st.session_state.session_id = session_id
     st.session_state.is_new_session = False
+    # Discard any pending proactive proposal or reactive correction state
+    # from the previous session so stale panels do not ghost into the new one.
+    st.session_state.pop("_pending_proposal", None)
+    st.session_state.pop("_show_reactive_correction", None)
+    st.session_state.pop("_gate_bypass_prompt", None)
+    st.session_state.pop("_pending_query", None)
     messages: List[Dict] = []
     try:
         cfg = {"configurable": {"thread_id": session_id}}
