@@ -134,14 +134,21 @@ def run_query(
         cfg["configurable"]["budget_tracker"] = tracker
         cfg["configurable"]["memory_service"] = memory_svc
 
-        # Determine if this is the first turn of this LangGraph thread by
-        # checking whether the checkpoint already has state. We cannot rely
-        # on state["history"] because the gate ends the graph early (via
-        # proactive_gate → END) without writing history, so history stays []
-        # on every subsequent turn after a gate-only round.
+        # Determine whether prior turns exist for this session. We cannot use
+        # graph.get_state() because PostgresSaver returns empty state values
+        # for gate-only checkpoints, and state["history"] stays [] when the
+        # graph ends early (gate → END). Instead, read agent_sessions.turn_count:
+        # register_turn() is called by the UI/API before run_query() and has
+        # already incremented turn_count for the current turn, so turn_count > 1
+        # means at least one prior turn completed.
+        has_prior_turns: bool = False
         try:
-            _existing = graph.get_state(cfg)
-            has_prior_turns = bool(_existing.values)
+            from memory import SessionManager as _SM
+
+            _session_row = _SM.get_session(thread_id)
+            has_prior_turns = bool(
+                _session_row is not None and _session_row.get("turn_count", 0) > 1
+            )
         except Exception:  # noqa: BLE001
             has_prior_turns = False
 
@@ -151,6 +158,15 @@ def run_query(
                 "run_id": run_id,
                 "bypass_gate": bypass_gate,
                 "has_prior_turns": has_prior_turns,
+                # Explicitly reset per-turn flags so LangGraph does not inherit
+                # stale values from the previous checkpoint. Without this, a
+                # gate-only turn (awaiting_user_confirmation=True in checkpoint)
+                # would bleed into the next turn even after the tool has run.
+                "awaiting_user_confirmation": False,
+                "proposal": None,
+                "clarification_needed": False,
+                "clarification_message": None,
+                "ungrounded_token": None,
             },
             config=cfg,
         )
