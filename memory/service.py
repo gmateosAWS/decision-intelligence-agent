@@ -407,7 +407,13 @@ class LocalMemoryService:
         turn_id: int,
         cause: str,
     ) -> None:
-        """Dispatch a SlotProposal to the appropriate coordinator method."""
+        """Dispatch a SlotProposal to the appropriate coordinator method.
+
+        Uses coord.attempt_mutation for all non-intent slots so that:
+        - Identity mutations are silent no-ops (no log, no version bump).
+        - Frozen slots return MutationBlocked (pre-filtered by caller, but
+          the protocol remains consistent).
+        """
         slot = mutation.slot
         value: Any = mutation.proposed_value
 
@@ -422,37 +428,54 @@ class LocalMemoryService:
             if isinstance(value, Intent):
                 coord.set_intent(value, turn_id=turn_id, cause=cause)
         elif slot == "metrics":
-            # Replace the whole metrics list
-            coord._mutate(  # noqa: SLF001
+            # B4 fix: coerce list[dict] → list[ResolvedMetric] so Pydantic
+            # does not warn about unexpected value types on serialization.
+            from memory.state.types import (  # noqa: PLC0415
+                ResolvedMetric as _ResolvedMetric,
+            )
+
+            raw_list: list[Any] = value if isinstance(value, list) else []
+            coerced: list[ResolvedMetric] = []
+            for item in raw_list:
+                if isinstance(item, _ResolvedMetric):
+                    coerced.append(item)
+                elif isinstance(item, dict):
+                    try:
+                        coerced.append(_ResolvedMetric(**item))
+                    except Exception:  # noqa: BLE001
+                        pass  # skip malformed entries silently
+            coord.attempt_mutation(
                 slot="metrics",
-                new_value=value if isinstance(value, list) else [],
+                new_value=coerced,
                 op_hint=TransitionOp.OVERWRITE,
                 turn_id=turn_id,
                 cause=cause,
                 evidence="user:correction:metrics",
             )
         elif slot == "active_simulation_run":
-            if isinstance(value, str) or value is None:
-                coord._mutate(  # noqa: SLF001
-                    slot="active_simulation_run",
-                    new_value=value,
-                    op_hint=TransitionOp.OVERWRITE,
-                    turn_id=turn_id,
-                    cause=cause,
-                    evidence="user:correction:active_simulation_run",
-                )
+            # B1(C) fix: normalize empty string → None (text input returns ""
+            # when user clears the field; None means "no active run").
+            norm_sim = value if (isinstance(value, str) and value.strip()) else None
+            coord.attempt_mutation(
+                slot="active_simulation_run",
+                new_value=norm_sim,
+                op_hint=TransitionOp.OVERWRITE,
+                turn_id=turn_id,
+                cause=cause,
+                evidence="user:correction:active_simulation_run",
+            )
         elif slot == "active_optimization_run":
-            if isinstance(value, str) or value is None:
-                coord._mutate(  # noqa: SLF001
-                    slot="active_optimization_run",
-                    new_value=value,
-                    op_hint=TransitionOp.OVERWRITE,
-                    turn_id=turn_id,
-                    cause=cause,
-                    evidence="user:correction:active_optimization_run",
-                )
+            norm_opt = value if (isinstance(value, str) and value.strip()) else None
+            coord.attempt_mutation(
+                slot="active_optimization_run",
+                new_value=norm_opt,
+                op_hint=TransitionOp.OVERWRITE,
+                turn_id=turn_id,
+                cause=cause,
+                evidence="user:correction:active_optimization_run",
+            )
         elif slot == "active_scenarios":
-            coord._mutate(  # noqa: SLF001
+            coord.attempt_mutation(
                 slot="active_scenarios",
                 new_value=value if isinstance(value, list) else [],
                 op_hint=TransitionOp.OVERWRITE,

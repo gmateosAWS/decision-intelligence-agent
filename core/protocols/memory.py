@@ -22,12 +22,43 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, List, Protocol, runtime_checkable
+from typing import Any, List, Protocol, Union, runtime_checkable
 from uuid import UUID
 
 from memory.state.active import ActiveAnalyticalState
 from memory.state.audit import StateTransition
 from memory.state.types import ResolvedMetric
+
+# ── Mutation outcome types (item 5.13.c) ─────────────────────────────────────
+
+
+@dataclass
+class MutationApplied:
+    """A mutation that succeeded and was written to state."""
+
+    slot: str
+    before: Any
+    after: Any
+    version_after: int
+
+
+@dataclass
+class MutationBlocked:
+    """A mutation that was rejected because the slot is frozen.
+
+    Both sources of blocks (intent-freeze in planner_node, slot-freeze via
+    attempt_mutation in the coordinator) produce this type and accumulate in
+    RunResult.blocked_mutations. The UI does not distinguish origin.
+    """
+
+    slot: str
+    blocked_value: Any  # the value that was attempted
+    reason: str  # always "frozen_by_user" in v1
+    current_value: Any  # the value that was preserved
+
+
+MutationOutcome = Union[MutationApplied, MutationBlocked]
+
 
 # ── Proposal / commit data model (item 5.13) ─────────────────────────────────
 

@@ -44,6 +44,29 @@ def render_clarification_message(message: str) -> None:
     st.info(sanitize_markdown(message), icon="🔤")
 
 
+def render_blocked_mutations_banner(blocked_mutations: list[Dict[str, Any]]) -> None:
+    """Render a warning banner for mutations blocked by user-pinned frozen slots.
+
+    Item 5.13.c. Displayed after a successful run when one or more slots were
+    frozen by the user and the agent attempted to change them. Both sources of
+    blocks (planner intent-freeze, coordinator slot-freeze) are shown here;
+    the UI does not distinguish origin.
+    """
+    if not blocked_mutations:
+        return
+    lines = []
+    for block in blocked_mutations:
+        slot = block.get("slot", "?")
+        attempted = block.get("blocked_value", "?")
+        frozen = block.get("current_value", "?")
+        lines.append(
+            f"- **{slot}**: el agente habría elegido `{attempted}`, "
+            f"pero está congelado en `{frozen}`."
+        )
+    banner = "**Acción bloqueada por valores congelados:**\n\n" + "\n".join(lines)
+    st.warning(sanitize_markdown(banner), icon="🔒")
+
+
 def render_proactive_confirmation(
     proposal: Dict[str, Any],
     on_confirm: Any,
@@ -112,6 +135,7 @@ def _render_assistant_extras(metadata: Dict[str, Any]) -> None:
             st.caption(f"{total_ms:,.0f} ms")
 
         render_result_cards(action, raw_result)
+        render_blocked_mutations_banner(metadata.get("blocked_mutations") or [])
         render_technical_details(metadata)
     except Exception as e:  # noqa: BLE001
         st.caption(f"⚠️ Error en visualización: {e}")
@@ -432,18 +456,25 @@ def render_reactive_correction_form(
 
         # ── Section: Intent ───────────────────────────────────────────────
         intent_cv = mutations_by_slot.get("intent", {}).get("current_value")
+        # B3 fix: Intent is an enum; use .value for display, not str() which
+        # produces "Intent.OPTIMIZE" instead of "optimize".
+        _intent_str = (
+            (intent_cv.value if hasattr(intent_cv, "value") else str(intent_cv))
+            if intent_cv is not None
+            else ""
+        )
         with st.expander("Intención", expanded=True):
             if advanced_mode:
                 current_vals["intent"] = st.text_input(
                     "Valor (enum)",
-                    value=str(intent_cv) if intent_cv else "",
+                    value=_intent_str,
                     key="reactive_form_intent_adv",
                     placeholder="optimize | simulate | explain | explore",
                 )
             else:
                 _options = [e.value for e in Intent]
                 _display = [_INTENT_DISPLAY.get(o, o) for o in _options]
-                _def_idx = _options.index(intent_cv) if intent_cv in _options else 0
+                _def_idx = _options.index(_intent_str) if _intent_str in _options else 0
                 _sel = st.selectbox(
                     "Intención analítica",
                     options=_display,

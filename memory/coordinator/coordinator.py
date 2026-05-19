@@ -15,8 +15,11 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from core.protocols.memory import MutationOutcome
 
 from memory.state.active import ActiveAnalyticalState
 from memory.state.audit import StateTransition, TransitionOp
@@ -154,6 +157,75 @@ class MemoryCoordinator:
                 cause=cause,
                 evidence=f"frozen_slots.discard({slot!r})",
             )
+        )
+
+    def attempt_mutation(
+        self,
+        *,
+        slot: str,
+        new_value: Any,
+        op_hint: TransitionOp,
+        turn_id: int,
+        cause: str,
+        evidence: str,
+    ) -> "MutationOutcome":
+        """Attempt a slot mutation; return typed MutationApplied or MutationBlocked.
+
+        Identity mutations (new_value == current_value) are silent no-ops —
+        they return MutationApplied without logging or incrementing version.
+        This prevents spurious freeze_block noise when the planner re-sets a
+        slot to the value it already holds (e.g. record_tool_selection after
+        planner overrides a frozen action).
+
+        Frozen slots return MutationBlocked with reason="frozen_by_user".
+        All non-identity, non-frozen mutations delegate to _mutate and return
+        MutationApplied.
+        """
+        from core.protocols.memory import (  # noqa: PLC0415
+            MutationApplied as _MutationApplied,
+        )
+        from core.protocols.memory import (
+            MutationBlocked as _MutationBlocked,
+        )
+
+        current_value = getattr(self._state, slot, None)
+
+        # Identity check: no-op, return Applied without writing or logging.
+        if new_value == current_value:
+            return _MutationApplied(
+                slot=slot,
+                before=current_value,
+                after=current_value,
+                version_after=self._state.version,
+            )
+
+        if slot in self._state.frozen_slots:
+            logger.info(
+                "[memory] freeze_block: slot=%s attempted=%r current=%r",
+                slot,
+                new_value,
+                current_value,
+            )
+            return _MutationBlocked(
+                slot=slot,
+                blocked_value=new_value,
+                reason="frozen_by_user",
+                current_value=current_value,
+            )
+
+        self._mutate(
+            slot=slot,
+            new_value=new_value,
+            op_hint=op_hint,
+            turn_id=turn_id,
+            cause=cause,
+            evidence=evidence,
+        )
+        return _MutationApplied(
+            slot=slot,
+            before=current_value,
+            after=new_value,
+            version_after=self._state.version,
         )
 
     # ── Persistence API ─────────────────────────────────────────────────────

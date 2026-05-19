@@ -233,6 +233,22 @@ class AgentObserver:
             self._truncate(reasoning, 80),
         )
 
+    def record_freeze_block(
+        self,
+        slot: str,
+        attempted: Any,
+        frozen: Any,
+        source: str = "planner",
+    ) -> None:
+        """Log a slot mutation blocked by a user-pinned freeze (item 5.13.c)."""
+        self._logger.info(
+            "  FREEZE_BLOCK  slot=%-22s  attempted=%-20s  frozen=%s  [%s]",
+            slot,
+            str(attempted)[:20],
+            str(frozen)[:20],
+            source,
+        )
+
     def record_tool(
         self,
         tool_name: str,

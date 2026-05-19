@@ -135,6 +135,7 @@ def main() -> None:
     tab_chat, tab_dashboard = st.tabs(["Chat", "Dashboard"])
 
     from ui.components import (
+        render_blocked_mutations_banner,
         render_chat_message,
         render_clarification_message,
         render_proactive_confirmation,
@@ -206,6 +207,7 @@ def main() -> None:
                     "proposal": result.proposal,
                     # run_id used as unique key for per-message buttons (5.13.c)
                     "run_id": result.run_id,
+                    "blocked_mutations": result.blocked_mutations,
                 }
 
                 # Append assistant to session_state
@@ -250,6 +252,7 @@ def main() -> None:
                         elif total_ms:
                             st.caption(f"{total_ms:,.0f} ms")
                         render_result_cards(action, result.raw_result or {})
+                        render_blocked_mutations_banner(result.blocked_mutations or [])
                         render_technical_details(metadata)
                     except Exception as e:  # noqa: BLE001
                         st.caption(f"⚠️ Error rendering details: {e}")
@@ -422,13 +425,18 @@ def main() -> None:
                     try:
                         from agents.runner import run_query as _run_query
 
-                        _rr = _run_query(
-                            query=_orig,
-                            thread_id=str(st.session_state.session_id),
-                            observer=st.session_state.observer,
-                            graph=graph,
-                            bypass_gate=True,
-                        )
+                        # B1(A) fix: show spinner so the UI does not appear frozen
+                        # during the 3-10s agent invocation.
+                        with st.spinner(
+                            "Ejecutando análisis con las correcciones aplicadas…"
+                        ):
+                            _rr = _run_query(
+                                query=_orig,
+                                thread_id=str(st.session_state.session_id),
+                                observer=st.session_state.observer,
+                                graph=graph,
+                                bypass_gate=True,
+                            )
                         _resume_meta = {
                             "action": _rr.tool_used,
                             "reasoning": _rr.reasoning,
@@ -454,6 +462,7 @@ def main() -> None:
                             ),
                             "proposal": _rr.proposal,
                             "run_id": _rr.run_id,
+                            "blocked_mutations": _rr.blocked_mutations,
                         }
                         st.session_state.messages.append(
                             {

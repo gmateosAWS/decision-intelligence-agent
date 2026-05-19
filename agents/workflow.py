@@ -29,6 +29,7 @@ after each node and can resume a thread by ``thread_id``.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from typing import Any, Dict, Optional
@@ -47,6 +48,8 @@ from .state import AgentState
 from .tools import knowledge_tool, optimization_tool, simulation_tool
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 _PLANNER_MODEL = os.getenv("PLANNER_MODEL", "gpt-4o-mini")
 _SYNTHESIZER_PROVIDER = os.getenv("SYNTHESIZER_PROVIDER", "openai")
@@ -122,6 +125,7 @@ def planner_node(
 
     # Deterministic bypass when resuming after a gate confirmation with a known intent.
     # Skips the LLM entirely to honour the user-corrected intent (R5 fix, 5.13.c).
+    _blocked_mutations: list[dict[str, Any]] = []
     if (
         state.get("bypass_gate")
         and active_state is not None
@@ -152,6 +156,35 @@ def planner_node(
                 session_id=session_id_str,
             )
         )
+        # B2 fix: enforce frozen intent after the LLM has run.
+        # If the user pinned intent to X but the LLM chose a different action,
+        # override the action to preserve the frozen intent. The LLM output is
+        # still used for notification (blocked_value = what LLM would have done).
+        if (
+            active_state is not None
+            and "intent" in active_state.frozen_slots
+            and active_state.intent is not None
+        ):
+            _frozen_action = _INTENT_TO_ACTION.get(active_state.intent)
+            _llm_action = result.get("action")
+            if _frozen_action and _llm_action != _frozen_action:
+                if obs:
+                    obs.record_freeze_block(
+                        slot="intent",
+                        attempted=_llm_action,
+                        frozen=active_state.intent.value,
+                        source="planner",
+                    )
+                _blocked_mutations.append(
+                    {
+                        "slot": "intent",
+                        "blocked_value": _llm_action,
+                        "current_value": active_state.intent.value,
+                        "reason": "frozen_by_user",
+                        "source": "planner",
+                    }
+                )
+                result["action"] = _frozen_action
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
@@ -164,6 +197,10 @@ def planner_node(
             variant_label=result.get("planner_variant_label"),
         )
     # Record tool selection in analytical state — fail-open (item 5.11).
+    # Intent-frozen sessions: record_tool_selection will call set_intent which
+    # calls _mutate — the coordinator silently returns for frozen slots, so
+    # memory is consistent. No double-block logged because attempt_mutation
+    # identity check returns MutationApplied when value == current.
     if memory is not None and session_id is not None:
         try:
             current = memory.get_active_state(session_id)
@@ -177,6 +214,8 @@ def planner_node(
             )
         except Exception:  # noqa: BLE001
             pass
+    if _blocked_mutations:
+        result["blocked_mutations"] = _blocked_mutations
     return result
 
 

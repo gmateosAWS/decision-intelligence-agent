@@ -55,6 +55,11 @@ class RunResult:
     # Proactive confirmation gate (item 5.13)
     awaiting_user_confirmation: bool = False
     proposal: Optional[Dict[str, Any]] = None
+    # Freeze enforcement (item 5.13.c): mutations blocked by frozen slots.
+    # Each entry: {slot, blocked_value, current_value, reason, source}.
+    # source is "planner" (intent-freeze) or "coordinator" (slot-freeze).
+    # Both sources accumulate here; UI renders all blocks identically.
+    blocked_mutations: list[Dict[str, Any]] = field(default_factory=list)
 
 
 def run_query(
@@ -167,6 +172,7 @@ def run_query(
                 "clarification_needed": False,
                 "clarification_message": None,
                 "ungrounded_token": None,
+                "blocked_mutations": [],
             },
             config=cfg,
         )
@@ -270,6 +276,7 @@ def run_query(
             total_cost_usd=tracker.total_cost_usd,
             llm_calls_count=tracker.llm_calls,
             active_state=active_state_dict,
+            blocked_mutations=result.get("blocked_mutations") or [],
         )
 
     except BudgetExceededError as exc:

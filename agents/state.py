@@ -106,5 +106,9 @@ class AgentState(TypedDict, total=False):
     # (stays [] on gate-only rounds) or graph.get_state() (PostgresSaver
     # returns empty values for gate-only checkpoints).
     has_prior_turns: bool
+    # Freeze enforcement (item 5.13.c): mutations blocked by frozen slots.
+    # Each entry: {slot, blocked_value, current_value, reason, source}.
+    # Populated by planner_node (intent-freeze); consumed by runner → RunResult.
+    blocked_mutations: List[Dict[str, Any]]
     # Conversation history – LangGraph merges with operator.add (append)
     history: Annotated[List[Dict[str, str]], operator.add]
