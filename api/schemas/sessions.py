@@ -84,6 +84,7 @@ class ProposalResponse(BaseModel):
     source: str
     mutations: List[SlotProposalSchema]
     triggered_signals: List[str] = []
+    candidate_runs: Dict[str, List[Dict[str, Any]]] = {}
     created_at: str
 
 

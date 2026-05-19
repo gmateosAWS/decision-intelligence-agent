@@ -265,7 +265,7 @@ def render_technical_details(metadata: Dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Reactive correction form (item 5.13.c)
+# Reactive correction form — pure helpers (item 5.13.c)
 # ---------------------------------------------------------------------------
 
 _REACTIVE_SLOTS: Tuple[str, ...] = (
@@ -278,11 +278,70 @@ _REACTIVE_SLOTS: Tuple[str, ...] = (
 
 _REACTIVE_SLOT_LABELS: Dict[str, str] = {
     "intent": "Intención",
-    "metrics": "Métricas (JSON)",
-    "active_simulation_run": "ID de simulación activa",
-    "active_optimization_run": "ID de optimización activa",
-    "active_scenarios": "Escenarios activos (JSON)",
+    "metrics": "Métricas",
+    "active_simulation_run": "Simulación activa",
+    "active_optimization_run": "Optimización activa",
+    "active_scenarios": "Escenarios activos",
 }
+
+# Human-readable descriptions for the Intent selectbox.
+_INTENT_DISPLAY: Dict[str, str] = {
+    "optimize": "optimize — encontrar los valores óptimos",
+    "simulate": "simulate — evaluar un escenario específico",
+    "explain": "explain — entender el modelo causal",
+    "explore": "explore — explorar relaciones entre variables",
+}
+
+
+def _normalize_metrics_list(value: Any) -> List[Dict[str, Any]]:
+    """Convert any metrics representation (Pydantic models or raw dicts) to list[dict].
+
+    Pure — no st.* calls, fully unit-testable.
+    """
+    if not value:
+        return []
+    result: List[Dict[str, Any]] = []
+    for item in value:
+        if hasattr(item, "model_dump"):
+            result.append(item.model_dump())
+        elif isinstance(item, dict):
+            result.append(dict(item))
+        else:
+            result.append(
+                {
+                    "id": str(item),
+                    "name": str(item),
+                    "source_turn": 0,
+                    "confidence": 1.0,
+                }
+            )
+    return result
+
+
+def _assemble_metrics_from_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Validate and normalise structured metric rows.  Pure — no st.* calls.
+
+    Rows with empty id are skipped.  confidence is clamped to [0.0, 1.0].
+    """
+    result: List[Dict[str, Any]] = []
+    for row in rows:
+        id_ = str(row.get("id", "")).strip()
+        if not id_:
+            continue
+        result.append(
+            {
+                "id": id_,
+                "name": str(row.get("name", "") or id_).strip() or id_,
+                "confidence": max(0.0, min(1.0, float(row.get("confidence", 1.0)))),
+                "source_turn": int(row.get("source_turn", 0)),
+            }
+        )
+    return result
+
+
+def _assemble_scenarios_from_rows(rows: List[str]) -> List[str]:
+    """Strip and filter empty scenario strings.  Pure — no st.* calls."""
+    return [s.strip() for s in rows if s.strip()]
 
 
 def _parse_reactive_form_inputs(
@@ -290,12 +349,10 @@ def _parse_reactive_form_inputs(
     raw_str: str,
     current_value: Any,
 ) -> Tuple[Any, Optional[str]]:
-    """Parse and validate a raw form string for a state slot.
+    """Parse and validate a raw form string for a state slot.  Pure — no st.* calls.
 
-    Pure function — no st.* calls, fully unit-testable.
-
-    Returns (parsed_value, error_message). error_message is None on success;
-    on failure parsed_value is current_value (caller keeps the form open).
+    Used by the Modo avanzado path.  Returns (parsed_value, error_message).
+    error_message is None on success; on failure parsed_value is current_value.
     """
     if slot == "intent":
         valid = {e.value for e in Intent}
@@ -322,7 +379,7 @@ def _compute_freeze_decisions(
 ) -> Tuple[List[str], List[str]]:
     """Return (freeze_slots, unfreeze_slots) for a single slot state transition.
 
-    Pure function — no st.* calls, fully unit-testable.
+    Pure — no st.* calls, fully unit-testable.
     """
     if is_now_checked and not was_frozen:
         return [slot], []
@@ -338,30 +395,19 @@ def render_reactive_correction_form(
     on_cancel: Any,
     source: str,
 ) -> Dict[str, Any]:
-    """Render an inline form for editing the 5 analytical state slots.
+    """Render the inline reactive-correction form (item 5.13.c).
 
-    Item 5.13.c. Two entry points:
-
-    - source="reactive": opened from "Corregir contexto" in the technical
-      details expander. on_save commits edits; no query resume.
-    - source="proactive_edit": opened from "Editar" in the proactive
-      confirmation panel. on_save commits edits AND resumes the original
-      query (resume logic handled by the caller's on_save closure).
+    Accordion layout with four st.expander sections (Intención, Métricas,
+    Simulación activa, Optimización activa, Escenarios).  A "Modo avanzado"
+    toggle reveals raw JSON / UUID inputs for power users.
 
     Parameters
     ----------
-    proposal     : dict with keys turn_id, mutations (list[dict] with slot,
-                   current_value, proposed_value, reason), session_id, etc.
-    frozen_slots : list of slot names currently frozen in ActiveAnalyticalState.
-    on_save      : Callable[(list[dict], dict)] — receives approved_mutations
-                   and freeze_decisions {"freeze": [...], "unfreeze": [...]}.
-    on_cancel    : Callable — discards edits; called when user clicks Cancelar.
+    proposal     : dict — turn_id, mutations, candidate_runs (new), etc.
+    frozen_slots : slots currently frozen in ActiveAnalyticalState.
+    on_save      : Callable[(approved_mutations, freeze_decisions)].
+    on_cancel    : Callable — discards edits.
     source       : "reactive" | "proactive_edit" — controls button labels.
-
-    Returns
-    -------
-    dict — current widget values keyed by slot name (useful in tests that
-    mock st.session_state without calling on_save).
     """
     title = "Editar parámetros" if source == "proactive_edit" else "Corregir contexto"
     save_label = "Guardar y ejecutar" if source == "proactive_edit" else "Guardar"
@@ -369,6 +415,7 @@ def render_reactive_correction_form(
     mutations_by_slot: Dict[str, Dict[str, Any]] = {
         m["slot"]: m for m in proposal.get("mutations", [])
     }
+    candidate_runs: Dict[str, List[Dict[str, Any]]] = proposal.get("candidate_runs", {})
 
     current_vals: Dict[str, Any] = {}
     save_clicked = False
@@ -377,51 +424,278 @@ def render_reactive_correction_form(
     with st.container(border=True):
         st.markdown(f"**{title}**")
 
-        for slot in _REACTIVE_SLOTS:
-            m = mutations_by_slot.get(slot, {})
-            current_value = m.get("current_value")
-            label = _REACTIVE_SLOT_LABELS.get(slot, slot)
+        advanced_mode: bool = st.toggle(
+            "Modo avanzado",
+            key="reactive_form_advanced_mode",
+            help="Muestra los campos en formato JSON/UUID para edición directa.",
+        )
 
-            if slot == "intent":
-                options = [e.value for e in Intent]
-                default_idx = (
-                    options.index(current_value) if current_value in options else 0
-                )
-                current_vals[slot] = st.selectbox(
-                    label,
-                    options=options,
-                    index=default_idx,
-                    key=f"reactive_form_{slot}",
-                )
-            elif slot in ("metrics", "active_scenarios"):
-                default_json = (
-                    json.dumps(current_value, indent=2, ensure_ascii=False)
-                    if current_value
-                    else "[]"
-                )
-                current_vals[slot] = st.text_area(
-                    label,
-                    value=default_json,
-                    key=f"reactive_form_{slot}",
-                    height=80,
+        # ── Section: Intent ───────────────────────────────────────────────
+        intent_cv = mutations_by_slot.get("intent", {}).get("current_value")
+        with st.expander("Intención", expanded=True):
+            if advanced_mode:
+                current_vals["intent"] = st.text_input(
+                    "Valor (enum)",
+                    value=str(intent_cv) if intent_cv else "",
+                    key="reactive_form_intent_adv",
+                    placeholder="optimize | simulate | explain | explore",
                 )
             else:
-                current_vals[slot] = st.text_input(
-                    label,
-                    value=current_value or "",
-                    key=f"reactive_form_{slot}",
+                _options = [e.value for e in Intent]
+                _display = [_INTENT_DISPLAY.get(o, o) for o in _options]
+                _def_idx = _options.index(intent_cv) if intent_cv in _options else 0
+                _sel = st.selectbox(
+                    "Intención analítica",
+                    options=_display,
+                    index=_def_idx,
+                    key="reactive_form_intent",
                 )
+                current_vals["intent"] = _options[_display.index(_sel)]
 
-            was_frozen = slot in frozen_slots
             st.checkbox(
                 "Congelar",
-                value=was_frozen,
-                key=f"reactive_form_freeze_{slot}",
+                value="intent" in frozen_slots,
+                key="reactive_form_freeze_intent",
                 help="Impide que el agente sobreescriba este valor automáticamente.",
             )
 
+        # ── Section: Metrics ──────────────────────────────────────────────
+        metrics_cv = mutations_by_slot.get("metrics", {}).get("current_value")
+        norm_metrics = _normalize_metrics_list(metrics_cv)
+
+        # Init structured keys on first render; cleared by _clear_form_state on close.
+        if "reactive_form_metrics_count" not in st.session_state:
+            st.session_state["reactive_form_metrics_count"] = len(norm_metrics)
+            st.session_state["reactive_form_metrics_deleted"] = []
+            for _i, _nm in enumerate(norm_metrics):
+                st.session_state[f"reactive_form_metric_{_i}_id"] = _nm.get("id", "")
+                st.session_state[f"reactive_form_metric_{_i}_name"] = _nm.get(
+                    "name", ""
+                )
+                st.session_state[f"reactive_form_metric_{_i}_confidence"] = float(
+                    _nm.get("confidence", 1.0)
+                )
+
+        with st.expander("Métricas", expanded=False):
+            if advanced_mode:
+                _def_json = (
+                    json.dumps(norm_metrics, indent=2, ensure_ascii=False)
+                    if norm_metrics
+                    else "[]"
+                )
+                current_vals["metrics"] = st.text_area(
+                    "Lista de métricas (JSON)",
+                    value=_def_json,
+                    key="reactive_form_metrics_adv",
+                    height=120,
+                )
+            else:
+                _m_count: int = st.session_state.get("reactive_form_metrics_count", 0)
+                _m_deleted: List[int] = st.session_state.get(
+                    "reactive_form_metrics_deleted", []
+                )
+                _m_deleted_set = set(_m_deleted)
+                _rows_collected: List[Dict[str, Any]] = []
+
+                if _m_count > 0:
+                    _h1, _h2, _h3, _ = st.columns([3, 3, 2, 1])
+                    _h1.caption("ID")
+                    _h2.caption("Nombre")
+                    _h3.caption("Conf.")
+
+                for _i in range(_m_count):
+                    if _i in _m_deleted_set:
+                        continue
+                    _c1, _c2, _c3, _c4 = st.columns([3, 3, 2, 1])
+                    with _c1:
+                        _id_v = st.text_input(
+                            "id",
+                            key=f"reactive_form_metric_{_i}_id",
+                            label_visibility="collapsed",
+                            placeholder="id métrica",
+                        )
+                    with _c2:
+                        _nm_v = st.text_input(
+                            "nombre",
+                            key=f"reactive_form_metric_{_i}_name",
+                            label_visibility="collapsed",
+                            placeholder="nombre",
+                        )
+                    with _c3:
+                        _cf_v = st.number_input(
+                            "conf",
+                            min_value=0.0,
+                            max_value=1.0,
+                            step=0.1,
+                            key=f"reactive_form_metric_{_i}_confidence",
+                            label_visibility="collapsed",
+                        )
+                    with _c4:
+                        if st.button("✕", key=f"reactive_form_metric_{_i}_del"):
+                            _m_deleted.append(_i)
+                            st.session_state["reactive_form_metrics_deleted"] = (
+                                _m_deleted
+                            )
+                            st.rerun()
+                    _rows_collected.append(
+                        {
+                            "id": _id_v,
+                            "name": _nm_v,
+                            "confidence": _cf_v,
+                            "source_turn": 0,
+                        }
+                    )
+
+                if _m_count == 0 or _m_count == len(_m_deleted_set):
+                    st.caption("Sin métricas activas.")
+
+                if st.button("＋ Añadir métrica", key="reactive_form_metrics_add"):
+                    _new_i = st.session_state.get("reactive_form_metrics_count", 0)
+                    st.session_state["reactive_form_metrics_count"] = _new_i + 1
+                    st.session_state[f"reactive_form_metric_{_new_i}_id"] = ""
+                    st.session_state[f"reactive_form_metric_{_new_i}_name"] = ""
+                    st.session_state[f"reactive_form_metric_{_new_i}_confidence"] = 1.0
+                    st.rerun()
+
+                current_vals["metrics"] = _rows_collected
+
+            st.checkbox(
+                "Congelar",
+                value="metrics" in frozen_slots,
+                key="reactive_form_freeze_metrics",
+                help="Impide que el agente sobreescriba este valor automáticamente.",
+            )
+
+        # ── Helper: render a run slot (simulation or optimization) ────────
+        def _render_run_expander(slot: str, label: str) -> None:
+            """Render one run-selection expander, setting current_vals[slot]."""
+            run_cv = mutations_by_slot.get(slot, {}).get("current_value")
+            candidates: List[Dict[str, Any]] = candidate_runs.get(slot, [])
+
+            with st.expander(label, expanded=False):
+                if advanced_mode:
+                    current_vals[slot] = st.text_input(
+                        "ID de ejecución (UUID)",
+                        value=str(run_cv) if run_cv else "",
+                        key=f"reactive_form_{slot}_adv",
+                        placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+                    )
+                elif candidates:
+                    _none_lbl = "— ninguna (borrar valor actual) —"
+                    _drop_labels = [_none_lbl] + [
+                        f"{c['label']}  ·  {c['run_id'][:8]}…" for c in candidates
+                    ]
+                    _def_idx = 0
+                    if run_cv:
+                        for _j, _c in enumerate(candidates):
+                            if _c["run_id"] == str(run_cv):
+                                _def_idx = _j + 1
+                                break
+                    _sel_lbl = st.selectbox(
+                        "Seleccionar ejecución",
+                        options=_drop_labels,
+                        index=_def_idx,
+                        key=f"reactive_form_{slot}_select",
+                    )
+                    if _sel_lbl == _none_lbl:
+                        current_vals[slot] = None
+                    else:
+                        _sidx = _drop_labels.index(_sel_lbl) - 1
+                        current_vals[slot] = candidates[_sidx]["run_id"]
+                else:
+                    current_vals[slot] = st.text_input(
+                        "ID de ejecución",
+                        value=str(run_cv) if run_cv else "",
+                        key=f"reactive_form_{slot}",
+                        placeholder="Pega aquí el ID de la ejecución",
+                    )
+
+                st.checkbox(
+                    "Congelar",
+                    value=slot in frozen_slots,
+                    key=f"reactive_form_freeze_{slot}",
+                    help="Impide que el agente sobreescriba este valor.",
+                )
+
+        _render_run_expander("active_simulation_run", "Simulación activa")
+        _render_run_expander("active_optimization_run", "Optimización activa")
+
+        # ── Section: Scenarios ────────────────────────────────────────────
+        scen_cv_raw = mutations_by_slot.get("active_scenarios", {}).get("current_value")
+        scen_cv: List[str] = (
+            [str(s) for s in scen_cv_raw] if isinstance(scen_cv_raw, list) else []
+        )
+
+        if "reactive_form_scenarios_count" not in st.session_state:
+            st.session_state["reactive_form_scenarios_count"] = len(scen_cv)
+            st.session_state["reactive_form_scenarios_deleted"] = []
+            for _i, _sc in enumerate(scen_cv):
+                st.session_state[f"reactive_form_scenario_{_i}"] = _sc
+
+        with st.expander("Escenarios activos", expanded=False):
+            if advanced_mode:
+                _def_scen = (
+                    json.dumps(scen_cv, indent=2, ensure_ascii=False)
+                    if scen_cv
+                    else "[]"
+                )
+                current_vals["active_scenarios"] = st.text_area(
+                    "Lista de escenarios (JSON)",
+                    value=_def_scen,
+                    key="reactive_form_active_scenarios_adv",
+                    height=80,
+                )
+            else:
+                _sc_count: int = st.session_state.get(
+                    "reactive_form_scenarios_count", 0
+                )
+                _sc_deleted: List[int] = st.session_state.get(
+                    "reactive_form_scenarios_deleted", []
+                )
+                _sc_deleted_set = set(_sc_deleted)
+                _scen_rows: List[str] = []
+
+                for _i in range(_sc_count):
+                    if _i in _sc_deleted_set:
+                        continue
+                    _cv, _cd = st.columns([9, 1])
+                    with _cv:
+                        _sv = st.text_input(
+                            "escenario",
+                            key=f"reactive_form_scenario_{_i}",
+                            label_visibility="collapsed",
+                            placeholder="descripción del escenario",
+                        )
+                    with _cd:
+                        if st.button("✕", key=f"reactive_form_scenario_{_i}_del"):
+                            _sc_deleted.append(_i)
+                            st.session_state["reactive_form_scenarios_deleted"] = (
+                                _sc_deleted
+                            )
+                            st.rerun()
+                    _scen_rows.append(_sv)
+
+                if _sc_count == 0 or _sc_count == len(_sc_deleted_set):
+                    st.caption("Sin escenarios activos.")
+
+                if st.button("＋ Añadir escenario", key="reactive_form_scenarios_add"):
+                    _new_sc = st.session_state.get("reactive_form_scenarios_count", 0)
+                    st.session_state["reactive_form_scenarios_count"] = _new_sc + 1
+                    st.session_state[f"reactive_form_scenario_{_new_sc}"] = ""
+                    st.rerun()
+
+                current_vals["active_scenarios"] = _scen_rows
+
+            st.checkbox(
+                "Congelar",
+                value="active_scenarios" in frozen_slots,
+                key="reactive_form_freeze_active_scenarios",
+                help="Impide que el agente sobreescriba este valor automáticamente.",
+            )
+
+        # ── Footer buttons ────────────────────────────────────────────────
         st.markdown("---")
-        col_save, col_cancel, _spacer = st.columns([1.5, 1, 5])
+        col_save, col_cancel, _sp = st.columns([1.5, 1, 5])
         with col_save:
             save_clicked = st.button(
                 save_label, key="reactive_form_save", type="primary"
@@ -429,44 +703,112 @@ def render_reactive_correction_form(
         with col_cancel:
             cancel_clicked = st.button("Cancelar", key="reactive_form_cancel")
 
+    # ── Cancel ────────────────────────────────────────────────────────────
     if cancel_clicked:
         on_cancel()
         return current_vals
 
+    # ── Save ──────────────────────────────────────────────────────────────
     if save_clicked:
         errors: List[str] = []
         approved: List[Dict[str, Any]] = []
-        for slot in _REACTIVE_SLOTS:
-            m = mutations_by_slot.get(slot, {})
-            raw = str(st.session_state.get(f"reactive_form_{slot}", ""))
-            current_value = m.get("current_value")
-            parsed, err = _parse_reactive_form_inputs(slot, raw, current_value)
-            if err:
-                errors.append(f"**{_REACTIVE_SLOT_LABELS.get(slot, slot)}**: {err}")
-            else:
+
+        if advanced_mode:
+            # Advanced path: read raw text/JSON inputs and validate.
+            _adv_raw: Dict[str, str] = {
+                "intent": str(st.session_state.get("reactive_form_intent_adv", "")),
+                "metrics": str(st.session_state.get("reactive_form_metrics_adv", "[]")),
+                "active_simulation_run": str(
+                    st.session_state.get("reactive_form_active_simulation_run_adv", "")
+                ),
+                "active_optimization_run": str(
+                    st.session_state.get(
+                        "reactive_form_active_optimization_run_adv", ""
+                    )
+                ),
+                "active_scenarios": str(
+                    st.session_state.get("reactive_form_active_scenarios_adv", "[]")
+                ),
+            }
+            for _slot in _REACTIVE_SLOTS:
+                _m = mutations_by_slot.get(_slot, {})
+                _raw = _adv_raw.get(_slot, "")
+                _cv = _m.get("current_value")
+                _parsed, _err = _parse_reactive_form_inputs(_slot, _raw, _cv)
+                if _err:
+                    errors.append(
+                        f"**{_REACTIVE_SLOT_LABELS.get(_slot, _slot)}**: {_err}"
+                    )
+                else:
+                    approved.append(
+                        {
+                            "slot": _slot,
+                            "current_value": _cv,
+                            "proposed_value": _parsed,
+                            "reason": "user edit (advanced mode)",
+                        }
+                    )
+        else:
+            # Structured path: collect from widget values set during rendering.
+            _intent_cv2 = mutations_by_slot.get("intent", {}).get("current_value")
+            approved.append(
+                {
+                    "slot": "intent",
+                    "current_value": _intent_cv2,
+                    "proposed_value": current_vals.get("intent", _intent_cv2),
+                    "reason": "user edit",
+                }
+            )
+            _metrics_cv2 = mutations_by_slot.get("metrics", {}).get("current_value")
+            approved.append(
+                {
+                    "slot": "metrics",
+                    "current_value": _metrics_cv2,
+                    "proposed_value": _assemble_metrics_from_rows(
+                        current_vals.get("metrics") or []
+                    ),
+                    "reason": "user edit",
+                }
+            )
+            for _rslot in ("active_simulation_run", "active_optimization_run"):
                 approved.append(
                     {
-                        "slot": slot,
-                        "current_value": current_value,
-                        "proposed_value": parsed,
+                        "slot": _rslot,
+                        "current_value": mutations_by_slot.get(_rslot, {}).get(
+                            "current_value"
+                        ),
+                        "proposed_value": current_vals.get(_rslot),
                         "reason": "user edit",
                     }
                 )
+            _scen_cv2 = mutations_by_slot.get("active_scenarios", {}).get(
+                "current_value"
+            )
+            approved.append(
+                {
+                    "slot": "active_scenarios",
+                    "current_value": _scen_cv2,
+                    "proposed_value": _assemble_scenarios_from_rows(
+                        current_vals.get("active_scenarios") or []
+                    ),
+                    "reason": "user edit",
+                }
+            )
 
         if errors:
-            for err_msg in errors:
-                st.error(sanitize_markdown(err_msg))
+            for _emsg in errors:
+                st.error(sanitize_markdown(_emsg))
         else:
             freeze_all: List[str] = []
             unfreeze_all: List[str] = []
-            for slot in _REACTIVE_SLOTS:
-                was_frozen = slot in frozen_slots
-                is_checked = bool(
-                    st.session_state.get(f"reactive_form_freeze_{slot}", False)
+            for _slot2 in _REACTIVE_SLOTS:
+                _was = _slot2 in frozen_slots
+                _chk = bool(
+                    st.session_state.get(f"reactive_form_freeze_{_slot2}", False)
                 )
-                f, u = _compute_freeze_decisions(slot, was_frozen, is_checked)
-                freeze_all.extend(f)
-                unfreeze_all.extend(u)
+                _f, _u = _compute_freeze_decisions(_slot2, _was, _chk)
+                freeze_all.extend(_f)
+                unfreeze_all.extend(_u)
             on_save(approved, {"freeze": freeze_all, "unfreeze": unfreeze_all})
 
     return current_vals

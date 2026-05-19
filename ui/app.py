@@ -322,20 +322,32 @@ def main() -> None:
                             turn_id=_snap.last_turn_id + 1,
                             source=ProposalSource.REACTIVE_USER,
                         )
+
+                        def _ser(v: Any) -> Any:
+                            """Serialize Pydantic models to plain dicts (recursive)."""
+                            if v is None:
+                                return v
+                            if isinstance(v, list):
+                                return [_ser(x) for x in v]
+                            if hasattr(v, "model_dump"):
+                                return v.model_dump()
+                            return v
+
                         _prop_dict = {
                             "turn_id": _prop_obj.turn_id,
                             "session_id": str(_prop_obj.session_id),
                             "mutations": [
                                 {
                                     "slot": m.slot,
-                                    "current_value": m.current_value,
-                                    "proposed_value": m.proposed_value,
+                                    "current_value": _ser(m.current_value),
+                                    "proposed_value": _ser(m.proposed_value),
                                     "reason": m.reason,
                                 }
                                 for m in _prop_obj.mutations
                             ],
                             "triggered_signals": _prop_obj.triggered_signals,
                             "original_query": _prop_obj.original_query,
+                            "candidate_runs": _prop_obj.candidate_runs,
                         }
                         _src = "reactive"
 
@@ -355,30 +367,15 @@ def main() -> None:
             _frozen_slots = _cached.get("frozen_slots", [])
             _form_source = _cached.get("source", "reactive")
 
-            _FORM_SLOT_KEYS = [
-                f"reactive_form_{s}"
-                for s in (
-                    "intent",
-                    "metrics",
-                    "active_simulation_run",
-                    "active_optimization_run",
-                    "active_scenarios",
-                )
-            ] + [
-                f"reactive_form_freeze_{s}"
-                for s in (
-                    "intent",
-                    "metrics",
-                    "active_simulation_run",
-                    "active_optimization_run",
-                    "active_scenarios",
-                )
-            ]
-
             def _clear_form_state() -> None:
-                """Remove reactive form widget keys from session_state."""
-                for _k in _FORM_SLOT_KEYS:
-                    st.session_state.pop(_k, None)
+                """Remove all reactive_form_* widget keys from session_state."""
+                _to_clear = [
+                    _k
+                    for _k in list(st.session_state.keys())
+                    if _k.startswith("reactive_form_")
+                ]
+                for _k in _to_clear:
+                    del st.session_state[_k]
 
             def _form_on_save(
                 approved_mutations: list,

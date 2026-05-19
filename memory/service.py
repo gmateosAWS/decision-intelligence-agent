@@ -163,9 +163,11 @@ class LocalMemoryService:
 
         if source == _ProposalSource.PROACTIVE_PLANNER:
             mutations = list(pending_mutations or [])
+            candidate_runs: dict[str, list[dict]] = {}
         else:
             # Reactive: build SlotProposal for each editable slot
             mutations = self._build_reactive_mutations(state)
+            candidate_runs = self._build_candidate_runs(session_id)
 
         proposal = _StateProposal(
             session_id=session_id,
@@ -173,6 +175,7 @@ class LocalMemoryService:
             source=source,
             mutations=mutations,
             original_query=original_query,
+            candidate_runs=candidate_runs,
         )
         self._proposals[(session_id, turn_id)] = proposal
         self._persist_proposal_safe(proposal)
@@ -322,6 +325,60 @@ class LocalMemoryService:
             )
             db.add(row)
             db.commit()
+
+    @staticmethod
+    def _build_candidate_runs(session_id: UUID) -> dict[str, list[dict]]:
+        """Query agent_runs for recent sim/opt runs in this session.
+
+        Returns a dict keyed by slot name with up to 10 most-recent runs each.
+        Each entry: {run_id, label (HH:MM), timestamp}. Fails open → returns {}.
+        """
+        import os  # noqa: PLC0415
+
+        if not os.getenv("DATABASE_URL", ""):
+            return {}
+        try:
+            from db.engine import get_session as _get_db_session  # noqa: PLC0415
+            from db.models import AgentRun  # noqa: PLC0415
+
+            slot_to_action = {
+                "active_simulation_run": "simulation",
+                "active_optimization_run": "optimization",
+            }
+            result: dict[str, list[dict]] = {}
+            for slot, action_val in slot_to_action.items():
+                with _get_db_session() as db:
+                    rows = (
+                        db.query(AgentRun)
+                        .filter(
+                            AgentRun.session_id == session_id,
+                            AgentRun.action == action_val,
+                        )
+                        .order_by(AgentRun.timestamp.desc())
+                        .limit(10)
+                        .all()
+                    )
+                    candidates = []
+                    for row in rows:
+                        ts = (
+                            row.timestamp.strftime("%H:%M")
+                            if row.timestamp
+                            else "??:??"
+                        )
+                        candidates.append(
+                            {
+                                "run_id": str(row.run_id),
+                                "label": ts,
+                                "timestamp": (
+                                    row.timestamp.isoformat() if row.timestamp else ""
+                                ),
+                            }
+                        )
+                    if candidates:
+                        result[slot] = candidates
+            return result
+        except Exception:  # noqa: BLE001
+            return {}
 
     @staticmethod
     def _build_reactive_mutations(

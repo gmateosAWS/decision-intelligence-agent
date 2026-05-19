@@ -59,6 +59,10 @@ class StateProposal:
     mutations: list[SlotProposal]
     triggered_signals: list[str] = field(default_factory=list)
     original_query: str = ""  # query that triggered the gate; used for resume
+    # Candidate historical runs per slot — populated for REACTIVE_USER proposals only.
+    # Keys: "active_simulation_run", "active_optimization_run".
+    # Each value: list of {run_id, label, timestamp} dicts, newest first.
+    candidate_runs: dict[str, list[dict]] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

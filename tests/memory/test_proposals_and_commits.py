@@ -222,3 +222,82 @@ def test_commit_freeze_and_unfreeze_slots() -> None:
     )
     state2 = svc.get_active_state(sid)
     assert "metrics" not in state2.frozen_slots
+
+
+# ── candidate_runs (item 5.13.c) ─────────────────────────────────────────────
+
+
+def test_reactive_proposal_has_candidate_runs_field() -> None:
+    """StateProposal must carry the candidate_runs field (default empty dict)."""
+    sid = uuid.uuid4()
+    proposal = StateProposal(
+        session_id=sid,
+        turn_id=1,
+        source=ProposalSource.REACTIVE_USER,
+        mutations=[],
+    )
+    assert hasattr(proposal, "candidate_runs")
+    assert isinstance(proposal.candidate_runs, dict)
+
+
+def test_reactive_proposal_candidate_runs_empty_without_db() -> None:
+    """Without DATABASE_URL, _build_candidate_runs returns {} (fail-open)."""
+    import os
+
+    sid = uuid.uuid4()
+    svc = _svc()
+    # Ensure DATABASE_URL is absent so the early-return path is hit.
+    original = os.environ.pop("DATABASE_URL", None)
+    try:
+        result = svc._build_candidate_runs(sid)
+        assert result == {}
+    finally:
+        if original is not None:
+            os.environ["DATABASE_URL"] = original
+
+
+def test_propose_reactive_candidate_runs_empty_without_db() -> None:
+    """propose_state_update (REACTIVE_USER) sets candidate_runs={} when no DB."""
+    import os
+
+    sid = uuid.uuid4()
+    svc = _svc()
+    original = os.environ.pop("DATABASE_URL", None)
+    try:
+        proposal = svc.propose_state_update(
+            session_id=sid,
+            turn_id=1,
+            source=ProposalSource.REACTIVE_USER,
+        )
+        assert isinstance(proposal.candidate_runs, dict)
+        assert proposal.candidate_runs == {}
+    finally:
+        if original is not None:
+            os.environ["DATABASE_URL"] = original
+
+
+def test_proactive_proposal_has_no_candidate_runs() -> None:
+    """PROACTIVE_PLANNER proposals never build candidate_runs (no DB query)."""
+    import os
+
+    sid = uuid.uuid4()
+    svc = _svc()
+    original = os.environ.pop("DATABASE_URL", None)
+    try:
+        proposal = svc.propose_state_update(
+            session_id=sid,
+            turn_id=1,
+            source=ProposalSource.PROACTIVE_PLANNER,
+            pending_mutations=[
+                SlotProposal(
+                    slot="intent",
+                    current_value=None,
+                    proposed_value="optimize",
+                    reason="test",
+                ),
+            ],
+        )
+        assert proposal.candidate_runs == {}
+    finally:
+        if original is not None:
+            os.environ["DATABASE_URL"] = original

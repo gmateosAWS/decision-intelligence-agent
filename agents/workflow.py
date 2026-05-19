@@ -81,6 +81,18 @@ _TOOLS: Dict[str, Any] = {
     "knowledge": knowledge_tool,
 }
 
+# Deterministic mapping from a known user-corrected Intent to the tool action string.
+# Used by the planner bypass when bypass_gate=True (item 5.13.c / R5 fix).
+# Raise ValueError on unknown variant so new Intent values are caught at dev time.
+from memory import Intent as _Intent  # noqa: E402
+
+_INTENT_TO_ACTION: Dict[_Intent, str] = {
+    _Intent.OPTIMIZE: "optimization",
+    _Intent.SIMULATE: "simulation",
+    _Intent.EXPLAIN: "knowledge",
+    _Intent.EXPLORE: "knowledge",
+}
+
 
 # ---------------------------------------------------------------------------
 # Node definitions
@@ -107,14 +119,40 @@ def planner_node(
 
     session_id_str = _session_id_as_str(config)
     t0 = time.perf_counter()
-    result: dict[str, Any] = _sanitize_for_state(
-        _planner_node_impl(
-            state,
-            tracker=tracker,
-            active_state=active_state,
-            session_id=session_id_str,
+
+    # Deterministic bypass when resuming after a gate confirmation with a known intent.
+    # Skips the LLM entirely to honour the user-corrected intent (R5 fix, 5.13.c).
+    if (
+        state.get("bypass_gate")
+        and active_state is not None
+        and active_state.intent is not None
+    ):
+        _action = _INTENT_TO_ACTION.get(active_state.intent)
+        if _action is None:
+            raise ValueError(
+                f"No _INTENT_TO_ACTION mapping for intent {active_state.intent!r}"
+            )
+        result: dict[str, Any] = _sanitize_for_state(
+            {
+                "action": _action,
+                "reasoning": (
+                    f"bypass_gate: intent={active_state.intent.value} → {_action}"
+                ),
+                "params": state.get("params") or {},
+                "planner_prompt_version": None,
+                "planner_variant_label": "bypass_gate",
+            }
         )
-    )
+    else:
+        result = _sanitize_for_state(
+            _planner_node_impl(
+                state,
+                tracker=tracker,
+                active_state=active_state,
+                session_id=session_id_str,
+            )
+        )
+
     elapsed_ms = (time.perf_counter() - t0) * 1000
     if obs:
         obs.record_planner(
