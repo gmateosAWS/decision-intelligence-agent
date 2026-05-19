@@ -138,6 +138,7 @@ def main() -> None:
         render_chat_message,
         render_clarification_message,
         render_proactive_confirmation,
+        render_reactive_correction_form,
         render_result_cards,
         render_technical_details,
         render_welcome_cards,
@@ -203,6 +204,8 @@ def main() -> None:
                     "clarification_needed": result.clarification_needed,
                     "awaiting_user_confirmation": result.awaiting_user_confirmation,
                     "proposal": result.proposal,
+                    # run_id used as unique key for per-message buttons (5.13.c)
+                    "run_id": result.run_id,
                 }
 
                 # Append assistant to session_state
@@ -255,8 +258,10 @@ def main() -> None:
         # proposal is pending. Lives outside `if prompt:` so the button widgets
         # exist on the rerun where the user clicks them (Streamlit requires the
         # widget to be rendered in the same rerun where it receives a click).
+        # Hidden while the reactive correction form is open (5.13.c) so both
+        # panels are never visible simultaneously.
         _pending = st.session_state.get("_pending_proposal")
-        if _pending:
+        if _pending and not st.session_state.get("_show_reactive_correction"):
 
             def _on_confirm() -> None:
                 st.session_state["_gate_bypass_prompt"] = _pending["original_prompt"]
@@ -276,6 +281,212 @@ def main() -> None:
                 on_confirm=_on_confirm,
                 on_edit=_on_edit,
                 on_cancel=_on_cancel,
+            )
+
+        # ── 5.13.c: Reactive correction form ─────────────────────────────────
+        # Rendered when either:
+        #   (a) "Corregir contexto" button is clicked from technical details
+        #       (source="reactive" — _pending_proposal absent or irrelevant)
+        #   (b) "Editar" is clicked from the proactive panel
+        #       (source="proactive_edit" — _pending_proposal present, reused)
+        #
+        # The UI calls get_memory_service() and run_query() directly, mirroring
+        # the existing pattern where run_agent_query() bypasses the HTTP API for
+        # the in-process Streamlit deployment. The HTTP endpoints
+        # (POST /v1/sessions/{id}/state/proposals and /commits) remain the
+        # canonical path for non-Streamlit clients.
+        if st.session_state.get("_show_reactive_correction"):
+            _cached = st.session_state.get("_reactive_proposal_cache")
+
+            # First render: build and cache the form data
+            if _cached is None:
+                try:
+                    import uuid as _uuid
+
+                    from core.protocols.memory import ProposalSource
+                    from memory import get_memory_service
+
+                    _msvc = get_memory_service()
+                    _sid = _uuid.UUID(str(st.session_state.session_id))
+                    _snap = _msvc.get_active_state(_sid)
+                    _frozen = list(_snap.frozen_slots)
+
+                    if _pending:
+                        # Proactive edit — reuse the proposal already in session
+                        _prop_dict = _pending["proposal"]
+                        _src = "proactive_edit"
+                    else:
+                        # Reactive — fetch identity proposals for current state
+                        _prop_obj = _msvc.propose_state_update(
+                            session_id=_sid,
+                            turn_id=_snap.last_turn_id + 1,
+                            source=ProposalSource.REACTIVE_USER,
+                        )
+                        _prop_dict = {
+                            "turn_id": _prop_obj.turn_id,
+                            "session_id": str(_prop_obj.session_id),
+                            "mutations": [
+                                {
+                                    "slot": m.slot,
+                                    "current_value": m.current_value,
+                                    "proposed_value": m.proposed_value,
+                                    "reason": m.reason,
+                                }
+                                for m in _prop_obj.mutations
+                            ],
+                            "triggered_signals": _prop_obj.triggered_signals,
+                            "original_query": _prop_obj.original_query,
+                        }
+                        _src = "reactive"
+
+                    st.session_state["_reactive_proposal_cache"] = {
+                        "proposal": _prop_dict,
+                        "frozen_slots": _frozen,
+                        "source": _src,
+                    }
+                    _cached = st.session_state["_reactive_proposal_cache"]
+
+                except Exception as _exc:
+                    st.error(f"Error preparando el formulario de corrección: {_exc}")
+                    st.session_state.pop("_show_reactive_correction", None)
+                    st.stop()
+
+            _form_proposal = _cached["proposal"]
+            _frozen_slots = _cached.get("frozen_slots", [])
+            _form_source = _cached.get("source", "reactive")
+
+            _FORM_SLOT_KEYS = [
+                f"reactive_form_{s}"
+                for s in (
+                    "intent",
+                    "metrics",
+                    "active_simulation_run",
+                    "active_optimization_run",
+                    "active_scenarios",
+                )
+            ] + [
+                f"reactive_form_freeze_{s}"
+                for s in (
+                    "intent",
+                    "metrics",
+                    "active_simulation_run",
+                    "active_optimization_run",
+                    "active_scenarios",
+                )
+            ]
+
+            def _clear_form_state() -> None:
+                """Remove reactive form widget keys from session_state."""
+                for _k in _FORM_SLOT_KEYS:
+                    st.session_state.pop(_k, None)
+
+            def _form_on_save(
+                approved_mutations: list,
+                freeze_decisions: dict,
+            ) -> None:
+                import uuid as _uuid
+
+                from core.protocols.memory import SlotProposal, StateCommitDecision
+                from memory import get_memory_service
+
+                _svc = get_memory_service()
+                _sid2 = _uuid.UUID(str(st.session_state.session_id))
+                _decision = StateCommitDecision(
+                    session_id=_sid2,
+                    proposal_turn_id=_form_proposal["turn_id"],
+                    approved_mutations=[
+                        SlotProposal(
+                            slot=m["slot"],
+                            current_value=m["current_value"],
+                            proposed_value=m["proposed_value"],
+                            reason=m.get("reason", "user edit"),
+                        )
+                        for m in approved_mutations
+                    ],
+                    freeze_slots=freeze_decisions.get("freeze", []),
+                    unfreeze_slots=freeze_decisions.get("unfreeze", []),
+                )
+                try:
+                    _svc.commit_state_update(session_id=_sid2, decision=_decision)
+                except ValueError as _exc:
+                    st.error(f"Error al guardar las correcciones: {_exc}")
+                    return
+
+                # Clear form UI state
+                st.session_state.pop("_show_reactive_correction", None)
+                st.session_state.pop("_reactive_proposal_cache", None)
+                _clear_form_state()
+
+                if _form_source == "proactive_edit" and _pending:
+                    # Commit applied; now resume the original query with bypass_gate.
+                    # Clears _pending_proposal so the proactive panel does not reappear.
+                    st.session_state.pop("_pending_proposal", None)
+                    _orig = _pending["original_prompt"]
+                    try:
+                        from agents.runner import run_query as _run_query
+
+                        _rr = _run_query(
+                            query=_orig,
+                            thread_id=str(st.session_state.session_id),
+                            observer=st.session_state.observer,
+                            graph=graph,
+                            bypass_gate=True,
+                        )
+                        _resume_meta = {
+                            "action": _rr.tool_used,
+                            "reasoning": _rr.reasoning,
+                            "raw_result": _rr.raw_result,
+                            "judge_score": _rr.judge_score,
+                            "judge_passed": _rr.judge_passed,
+                            "judge_revised": _rr.judge_revised,
+                            "total_ms": _rr.latency_ms,
+                            "latencies": _rr.latencies,
+                            "requires_confirmation": _rr.requires_confirmation,
+                            "requires_approval": _rr.requires_approval,
+                            "confirmation_message": _rr.confirmation_message,
+                            "total_cost_usd": _rr.total_cost_usd,
+                            "total_input_tokens": _rr.total_input_tokens,
+                            "total_output_tokens": _rr.total_output_tokens,
+                            "llm_calls_count": _rr.llm_calls_count,
+                            "budget_exceeded": _rr.budget_exceeded,
+                            "budget_exceeded_reason": _rr.budget_exceeded_reason,
+                            "active_state": _rr.active_state,
+                            "clarification_needed": _rr.clarification_needed,
+                            "awaiting_user_confirmation": (
+                                _rr.awaiting_user_confirmation
+                            ),
+                            "proposal": _rr.proposal,
+                            "run_id": _rr.run_id,
+                        }
+                        st.session_state.messages.append(
+                            {
+                                "role": "assistant",
+                                "content": _rr.answer,
+                                "metadata": _resume_meta,
+                            }
+                        )
+                    except Exception as _exc:
+                        st.error(
+                            f"Correcciones guardadas. "
+                            f"Error al reanudar la consulta: {_exc}"
+                        )
+
+                st.rerun()
+
+            def _form_on_cancel() -> None:
+                st.session_state.pop("_show_reactive_correction", None)
+                st.session_state.pop("_reactive_proposal_cache", None)
+                _clear_form_state()
+                # _pending_proposal is intentionally NOT cleared here so the
+                # proactive panel reappears and the user can choose again.
+                st.rerun()
+
+            render_reactive_correction_form(
+                proposal=_form_proposal,
+                frozen_slots=_frozen_slots,
+                on_save=_form_on_save,
+                on_cancel=_form_on_cancel,
+                source=_form_source,
             )
 
     with tab_dashboard:

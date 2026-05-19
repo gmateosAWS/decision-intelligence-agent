@@ -7,6 +7,7 @@ not access st.session_state directly — keeping them testable and reusable.
 
 from __future__ import annotations
 
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -14,6 +15,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from scipy.stats import norm
 
+from memory import Intent
 from ui.styles import TOOL_LABELS, sanitize_markdown
 
 # ---------------------------------------------------------------------------
@@ -251,6 +253,223 @@ def render_technical_details(metadata: Dict[str, Any]) -> None:
             if opt_run:
                 parts.append(f"opt: `{opt_run}`")
             st.caption("  ·  ".join(parts))
+            # 5.13.c: button to open reactive correction form
+            if version > 0:
+                if st.button(
+                    "Corregir contexto",
+                    key=f"reactive_open_{metadata.get('run_id', 'current')}",
+                    type="secondary",
+                ):
+                    st.session_state["_show_reactive_correction"] = True
+                    st.rerun()
+
+
+# ---------------------------------------------------------------------------
+# Reactive correction form (item 5.13.c)
+# ---------------------------------------------------------------------------
+
+_REACTIVE_SLOTS: Tuple[str, ...] = (
+    "intent",
+    "metrics",
+    "active_simulation_run",
+    "active_optimization_run",
+    "active_scenarios",
+)
+
+_REACTIVE_SLOT_LABELS: Dict[str, str] = {
+    "intent": "Intención",
+    "metrics": "Métricas (JSON)",
+    "active_simulation_run": "ID de simulación activa",
+    "active_optimization_run": "ID de optimización activa",
+    "active_scenarios": "Escenarios activos (JSON)",
+}
+
+
+def _parse_reactive_form_inputs(
+    slot: str,
+    raw_str: str,
+    current_value: Any,
+) -> Tuple[Any, Optional[str]]:
+    """Parse and validate a raw form string for a state slot.
+
+    Pure function — no st.* calls, fully unit-testable.
+
+    Returns (parsed_value, error_message). error_message is None on success;
+    on failure parsed_value is current_value (caller keeps the form open).
+    """
+    if slot == "intent":
+        valid = {e.value for e in Intent}
+        if raw_str not in valid:
+            return current_value, f"Valor inválido. Debe ser uno de: {sorted(valid)}"
+        return raw_str, None
+    elif slot in ("metrics", "active_scenarios"):
+        stripped = raw_str.strip()
+        try:
+            parsed = json.loads(stripped) if stripped else []
+        except json.JSONDecodeError as exc:
+            return current_value, f"JSON inválido: {exc}"
+        return parsed, None
+    elif slot in ("active_simulation_run", "active_optimization_run"):
+        val = raw_str.strip()
+        return val if val else None, None
+    return raw_str, None
+
+
+def _compute_freeze_decisions(
+    slot: str,
+    was_frozen: bool,
+    is_now_checked: bool,
+) -> Tuple[List[str], List[str]]:
+    """Return (freeze_slots, unfreeze_slots) for a single slot state transition.
+
+    Pure function — no st.* calls, fully unit-testable.
+    """
+    if is_now_checked and not was_frozen:
+        return [slot], []
+    if not is_now_checked and was_frozen:
+        return [], [slot]
+    return [], []
+
+
+def render_reactive_correction_form(
+    proposal: Dict[str, Any],
+    frozen_slots: List[str],
+    on_save: Any,
+    on_cancel: Any,
+    source: str,
+) -> Dict[str, Any]:
+    """Render an inline form for editing the 5 analytical state slots.
+
+    Item 5.13.c. Two entry points:
+
+    - source="reactive": opened from "Corregir contexto" in the technical
+      details expander. on_save commits edits; no query resume.
+    - source="proactive_edit": opened from "Editar" in the proactive
+      confirmation panel. on_save commits edits AND resumes the original
+      query (resume logic handled by the caller's on_save closure).
+
+    Parameters
+    ----------
+    proposal     : dict with keys turn_id, mutations (list[dict] with slot,
+                   current_value, proposed_value, reason), session_id, etc.
+    frozen_slots : list of slot names currently frozen in ActiveAnalyticalState.
+    on_save      : Callable[(list[dict], dict)] — receives approved_mutations
+                   and freeze_decisions {"freeze": [...], "unfreeze": [...]}.
+    on_cancel    : Callable — discards edits; called when user clicks Cancelar.
+    source       : "reactive" | "proactive_edit" — controls button labels.
+
+    Returns
+    -------
+    dict — current widget values keyed by slot name (useful in tests that
+    mock st.session_state without calling on_save).
+    """
+    title = "Editar parámetros" if source == "proactive_edit" else "Corregir contexto"
+    save_label = "Guardar y ejecutar" if source == "proactive_edit" else "Guardar"
+
+    mutations_by_slot: Dict[str, Dict[str, Any]] = {
+        m["slot"]: m for m in proposal.get("mutations", [])
+    }
+
+    current_vals: Dict[str, Any] = {}
+    save_clicked = False
+    cancel_clicked = False
+
+    with st.container(border=True):
+        st.markdown(f"**{title}**")
+
+        for slot in _REACTIVE_SLOTS:
+            m = mutations_by_slot.get(slot, {})
+            current_value = m.get("current_value")
+            label = _REACTIVE_SLOT_LABELS.get(slot, slot)
+
+            if slot == "intent":
+                options = [e.value for e in Intent]
+                default_idx = (
+                    options.index(current_value) if current_value in options else 0
+                )
+                current_vals[slot] = st.selectbox(
+                    label,
+                    options=options,
+                    index=default_idx,
+                    key=f"reactive_form_{slot}",
+                )
+            elif slot in ("metrics", "active_scenarios"):
+                default_json = (
+                    json.dumps(current_value, indent=2, ensure_ascii=False)
+                    if current_value
+                    else "[]"
+                )
+                current_vals[slot] = st.text_area(
+                    label,
+                    value=default_json,
+                    key=f"reactive_form_{slot}",
+                    height=80,
+                )
+            else:
+                current_vals[slot] = st.text_input(
+                    label,
+                    value=current_value or "",
+                    key=f"reactive_form_{slot}",
+                )
+
+            was_frozen = slot in frozen_slots
+            st.checkbox(
+                "Congelar",
+                value=was_frozen,
+                key=f"reactive_form_freeze_{slot}",
+                help="Impide que el agente sobreescriba este valor automáticamente.",
+            )
+
+        st.markdown("---")
+        col_save, col_cancel, _spacer = st.columns([1.5, 1, 5])
+        with col_save:
+            save_clicked = st.button(
+                save_label, key="reactive_form_save", type="primary"
+            )
+        with col_cancel:
+            cancel_clicked = st.button("Cancelar", key="reactive_form_cancel")
+
+    if cancel_clicked:
+        on_cancel()
+        return current_vals
+
+    if save_clicked:
+        errors: List[str] = []
+        approved: List[Dict[str, Any]] = []
+        for slot in _REACTIVE_SLOTS:
+            m = mutations_by_slot.get(slot, {})
+            raw = str(st.session_state.get(f"reactive_form_{slot}", ""))
+            current_value = m.get("current_value")
+            parsed, err = _parse_reactive_form_inputs(slot, raw, current_value)
+            if err:
+                errors.append(f"**{_REACTIVE_SLOT_LABELS.get(slot, slot)}**: {err}")
+            else:
+                approved.append(
+                    {
+                        "slot": slot,
+                        "current_value": current_value,
+                        "proposed_value": parsed,
+                        "reason": "user edit",
+                    }
+                )
+
+        if errors:
+            for err_msg in errors:
+                st.error(sanitize_markdown(err_msg))
+        else:
+            freeze_all: List[str] = []
+            unfreeze_all: List[str] = []
+            for slot in _REACTIVE_SLOTS:
+                was_frozen = slot in frozen_slots
+                is_checked = bool(
+                    st.session_state.get(f"reactive_form_freeze_{slot}", False)
+                )
+                f, u = _compute_freeze_decisions(slot, was_frozen, is_checked)
+                freeze_all.extend(f)
+                unfreeze_all.extend(u)
+            on_save(approved, {"freeze": freeze_all, "unfreeze": unfreeze_all})
+
+    return current_vals
 
 
 # ---------------------------------------------------------------------------
