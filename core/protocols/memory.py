@@ -22,12 +22,43 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, List, Protocol, runtime_checkable
+from typing import Any, List, Optional, Protocol, Union, runtime_checkable
 from uuid import UUID
 
 from memory.state.active import ActiveAnalyticalState
 from memory.state.audit import StateTransition
 from memory.state.types import ResolvedMetric
+
+# ── Mutation outcome types (item 5.13.c) ─────────────────────────────────────
+
+
+@dataclass
+class MutationApplied:
+    """A mutation that succeeded and was written to state."""
+
+    slot: str
+    before: Any
+    after: Any
+    version_after: int
+
+
+@dataclass
+class MutationBlocked:
+    """A mutation that was rejected because the slot is frozen.
+
+    Both sources of blocks (intent-freeze in planner_node, slot-freeze via
+    attempt_mutation in the coordinator) produce this type and accumulate in
+    RunResult.blocked_mutations. The UI does not distinguish origin.
+    """
+
+    slot: str
+    blocked_value: Any  # the value that was attempted
+    reason: str  # always "frozen_by_user" in v1
+    current_value: Any  # the value that was preserved
+
+
+MutationOutcome = Union[MutationApplied, MutationBlocked]
+
 
 # ── Proposal / commit data model (item 5.13) ─────────────────────────────────
 
@@ -59,6 +90,10 @@ class StateProposal:
     mutations: list[SlotProposal]
     triggered_signals: list[str] = field(default_factory=list)
     original_query: str = ""  # query that triggered the gate; used for resume
+    # Candidate historical runs per slot — populated for REACTIVE_USER proposals only.
+    # Keys: "active_simulation_run", "active_optimization_run".
+    # Each value: list of {run_id, label, timestamp} dicts, newest first.
+    candidate_runs: dict[str, list[dict]] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -154,8 +189,12 @@ class MemoryService(Protocol):
         turn_id: int,
         cause: str,
         evidence: str = "",
-    ) -> None:
+    ) -> Optional[MutationOutcome]:
         """Record an active run reference after tool execution.
+
+        Returns MutationBlocked when the target slot is frozen (so callers
+        such as tool_node can surface the block to the user). Returns
+        MutationApplied on success, or None for unsupported tool types.
 
         tool is 'simulation' or 'optimization'. run_id holds the agent_runs.run_id.
 

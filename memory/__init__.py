@@ -10,6 +10,9 @@ Exports
   register_turn         – convenience wrapper for SessionManager.register_turn
   LocalMemoryService    – concrete MemoryService implementation (item 5.11)
   get_memory_service    – process-level singleton accessor for LocalMemoryService
+  Intent                – closed enum of high-level analytical intents (re-exported
+                          for use in ui/ per the boundary rule — consumers outside
+                          memory/ must import from here, not from memory.state.types)
 
 Boundary rule (item 5.11):
   Code outside memory/ MUST import only from this module or from
@@ -23,6 +26,7 @@ from .checkpointer import get_checkpointer, register_turn
 from .coordinator.intent_mapping import map_tool_to_intent
 from .service import LocalMemoryService
 from .session_manager import SessionManager
+from .state.types import Intent
 
 __all__ = [
     "get_checkpointer",
@@ -31,6 +35,7 @@ __all__ = [
     "LocalMemoryService",
     "get_memory_service",
     "map_tool_to_intent",
+    "Intent",
 ]
 
 _memory_service: LocalMemoryService | None = None

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
 # Deferred to break the circular import chain:
@@ -24,6 +24,7 @@ from uuid import UUID
 # them.
 if TYPE_CHECKING:
     from core.protocols.memory import (
+        MutationOutcome,
         ProposalSource,
         SlotProposal,
         StateCommitDecision,
@@ -122,18 +123,20 @@ class LocalMemoryService:
         turn_id: int,
         cause: str,
         evidence: str = "",
-    ) -> None:
+    ) -> "Optional[MutationOutcome]":
         coord = self._get_or_load(session_id)
+        outcome: Optional[MutationOutcome] = None
         if tool == "simulation":
-            coord.set_active_simulation_run(
+            outcome = coord.set_active_simulation_run(
                 run_id, turn_id=turn_id, cause=cause, evidence=evidence
             )
         elif tool == "optimization":
-            coord.set_active_optimization_run(
+            outcome = coord.set_active_optimization_run(
                 run_id, turn_id=turn_id, cause=cause, evidence=evidence
             )
         # Other tools: no slot defined in v1; ignore gracefully.
         self._persist_safe(coord)
+        return outcome
 
     # ── Explicit-mutation API (item 5.13) ──────────────────────────────────
 
@@ -163,9 +166,11 @@ class LocalMemoryService:
 
         if source == _ProposalSource.PROACTIVE_PLANNER:
             mutations = list(pending_mutations or [])
+            candidate_runs: dict[str, list[dict]] = {}
         else:
             # Reactive: build SlotProposal for each editable slot
             mutations = self._build_reactive_mutations(state)
+            candidate_runs = self._build_candidate_runs(session_id)
 
         proposal = _StateProposal(
             session_id=session_id,
@@ -173,6 +178,7 @@ class LocalMemoryService:
             source=source,
             mutations=mutations,
             original_query=original_query,
+            candidate_runs=candidate_runs,
         )
         self._proposals[(session_id, turn_id)] = proposal
         self._persist_proposal_safe(proposal)
@@ -324,6 +330,60 @@ class LocalMemoryService:
             db.commit()
 
     @staticmethod
+    def _build_candidate_runs(session_id: UUID) -> dict[str, list[dict]]:
+        """Query agent_runs for recent sim/opt runs in this session.
+
+        Returns a dict keyed by slot name with up to 10 most-recent runs each.
+        Each entry: {run_id, label (HH:MM), timestamp}. Fails open → returns {}.
+        """
+        import os  # noqa: PLC0415
+
+        if not os.getenv("DATABASE_URL", ""):
+            return {}
+        try:
+            from db.engine import get_session as _get_db_session  # noqa: PLC0415
+            from db.models import AgentRun  # noqa: PLC0415
+
+            slot_to_action = {
+                "active_simulation_run": "simulation",
+                "active_optimization_run": "optimization",
+            }
+            result: dict[str, list[dict]] = {}
+            for slot, action_val in slot_to_action.items():
+                with _get_db_session() as db:
+                    rows = (
+                        db.query(AgentRun)
+                        .filter(
+                            AgentRun.session_id == session_id,
+                            AgentRun.action == action_val,
+                        )
+                        .order_by(AgentRun.timestamp.desc())
+                        .limit(10)
+                        .all()
+                    )
+                    candidates = []
+                    for row in rows:
+                        ts = (
+                            row.timestamp.strftime("%H:%M")
+                            if row.timestamp
+                            else "??:??"
+                        )
+                        candidates.append(
+                            {
+                                "run_id": str(row.run_id),
+                                "label": ts,
+                                "timestamp": (
+                                    row.timestamp.isoformat() if row.timestamp else ""
+                                ),
+                            }
+                        )
+                    if candidates:
+                        result[slot] = candidates
+            return result
+        except Exception:  # noqa: BLE001
+            return {}
+
+    @staticmethod
     def _build_reactive_mutations(
         state: ActiveAnalyticalState,
     ) -> list[SlotProposal]:
@@ -350,7 +410,13 @@ class LocalMemoryService:
         turn_id: int,
         cause: str,
     ) -> None:
-        """Dispatch a SlotProposal to the appropriate coordinator method."""
+        """Dispatch a SlotProposal to the appropriate coordinator method.
+
+        Uses coord.attempt_mutation for all non-intent slots so that:
+        - Identity mutations are silent no-ops (no log, no version bump).
+        - Frozen slots return MutationBlocked (pre-filtered by caller, but
+          the protocol remains consistent).
+        """
         slot = mutation.slot
         value: Any = mutation.proposed_value
 
@@ -365,37 +431,54 @@ class LocalMemoryService:
             if isinstance(value, Intent):
                 coord.set_intent(value, turn_id=turn_id, cause=cause)
         elif slot == "metrics":
-            # Replace the whole metrics list
-            coord._mutate(  # noqa: SLF001
+            # B4 fix: coerce list[dict] → list[ResolvedMetric] so Pydantic
+            # does not warn about unexpected value types on serialization.
+            from memory.state.types import (  # noqa: PLC0415
+                ResolvedMetric as _ResolvedMetric,
+            )
+
+            raw_list: list[Any] = value if isinstance(value, list) else []
+            coerced: list[ResolvedMetric] = []
+            for item in raw_list:
+                if isinstance(item, _ResolvedMetric):
+                    coerced.append(item)
+                elif isinstance(item, dict):
+                    try:
+                        coerced.append(_ResolvedMetric(**item))
+                    except Exception:  # noqa: BLE001
+                        pass  # skip malformed entries silently
+            coord.attempt_mutation(
                 slot="metrics",
-                new_value=value if isinstance(value, list) else [],
+                new_value=coerced,
                 op_hint=TransitionOp.OVERWRITE,
                 turn_id=turn_id,
                 cause=cause,
                 evidence="user:correction:metrics",
             )
         elif slot == "active_simulation_run":
-            if isinstance(value, str) or value is None:
-                coord._mutate(  # noqa: SLF001
-                    slot="active_simulation_run",
-                    new_value=value,
-                    op_hint=TransitionOp.OVERWRITE,
-                    turn_id=turn_id,
-                    cause=cause,
-                    evidence="user:correction:active_simulation_run",
-                )
+            # B1(C) fix: normalize empty string → None (text input returns ""
+            # when user clears the field; None means "no active run").
+            norm_sim = value if (isinstance(value, str) and value.strip()) else None
+            coord.attempt_mutation(
+                slot="active_simulation_run",
+                new_value=norm_sim,
+                op_hint=TransitionOp.OVERWRITE,
+                turn_id=turn_id,
+                cause=cause,
+                evidence="user:correction:active_simulation_run",
+            )
         elif slot == "active_optimization_run":
-            if isinstance(value, str) or value is None:
-                coord._mutate(  # noqa: SLF001
-                    slot="active_optimization_run",
-                    new_value=value,
-                    op_hint=TransitionOp.OVERWRITE,
-                    turn_id=turn_id,
-                    cause=cause,
-                    evidence="user:correction:active_optimization_run",
-                )
+            norm_opt = value if (isinstance(value, str) and value.strip()) else None
+            coord.attempt_mutation(
+                slot="active_optimization_run",
+                new_value=norm_opt,
+                op_hint=TransitionOp.OVERWRITE,
+                turn_id=turn_id,
+                cause=cause,
+                evidence="user:correction:active_optimization_run",
+            )
         elif slot == "active_scenarios":
-            coord._mutate(  # noqa: SLF001
+            coord.attempt_mutation(
                 slot="active_scenarios",
                 new_value=value if isinstance(value, list) else [],
                 op_hint=TransitionOp.OVERWRITE,

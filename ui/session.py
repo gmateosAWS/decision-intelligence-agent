@@ -58,6 +58,7 @@ def handle_new_session() -> None:
     # from the previous session so stale panels do not ghost into the new one.
     st.session_state.pop("_pending_proposal", None)
     st.session_state.pop("_show_reactive_correction", None)
+    st.session_state.pop("_reactive_proposal_cache", None)
     st.session_state.pop("_gate_bypass_prompt", None)
     st.session_state.pop("_pending_query", None)
 
@@ -70,6 +71,7 @@ def resume_session(session_id: str, graph: Any) -> None:
     # from the previous session so stale panels do not ghost into the new one.
     st.session_state.pop("_pending_proposal", None)
     st.session_state.pop("_show_reactive_correction", None)
+    st.session_state.pop("_reactive_proposal_cache", None)
     st.session_state.pop("_gate_bypass_prompt", None)
     st.session_state.pop("_pending_query", None)
     messages: List[Dict] = []

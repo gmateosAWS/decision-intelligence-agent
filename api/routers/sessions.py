@@ -248,6 +248,7 @@ def create_state_proposal(
         source=proposal.source.value,
         mutations=[_slot_proposal_to_schema(m) for m in proposal.mutations],
         triggered_signals=proposal.triggered_signals,
+        candidate_runs=proposal.candidate_runs,
         created_at=proposal.created_at.isoformat(),
     )
 
