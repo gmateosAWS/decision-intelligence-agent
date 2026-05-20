@@ -22,7 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, List, Protocol, Union, runtime_checkable
+from typing import Any, List, Optional, Protocol, Union, runtime_checkable
 from uuid import UUID
 
 from memory.state.active import ActiveAnalyticalState
@@ -189,8 +189,12 @@ class MemoryService(Protocol):
         turn_id: int,
         cause: str,
         evidence: str = "",
-    ) -> None:
+    ) -> Optional[MutationOutcome]:
         """Record an active run reference after tool execution.
+
+        Returns MutationBlocked when the target slot is frozen (so callers
+        such as tool_node can surface the block to the user). Returns
+        MutationApplied on success, or None for unsupported tool types.
 
         tool is 'simulation' or 'optimization'. run_id holds the agent_runs.run_id.
 

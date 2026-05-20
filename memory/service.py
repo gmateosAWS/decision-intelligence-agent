@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from uuid import UUID
 
 # Deferred to break the circular import chain:
@@ -24,6 +24,7 @@ from uuid import UUID
 # them.
 if TYPE_CHECKING:
     from core.protocols.memory import (
+        MutationOutcome,
         ProposalSource,
         SlotProposal,
         StateCommitDecision,
@@ -122,18 +123,20 @@ class LocalMemoryService:
         turn_id: int,
         cause: str,
         evidence: str = "",
-    ) -> None:
+    ) -> "Optional[MutationOutcome]":
         coord = self._get_or_load(session_id)
+        outcome: Optional[MutationOutcome] = None
         if tool == "simulation":
-            coord.set_active_simulation_run(
+            outcome = coord.set_active_simulation_run(
                 run_id, turn_id=turn_id, cause=cause, evidence=evidence
             )
         elif tool == "optimization":
-            coord.set_active_optimization_run(
+            outcome = coord.set_active_optimization_run(
                 run_id, turn_id=turn_id, cause=cause, evidence=evidence
             )
         # Other tools: no slot defined in v1; ignore gracefully.
         self._persist_safe(coord)
+        return outcome
 
     # ── Explicit-mutation API (item 5.13) ──────────────────────────────────
 

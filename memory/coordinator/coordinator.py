@@ -86,10 +86,10 @@ class MemoryCoordinator:
         turn_id: int,
         cause: str,
         evidence: str = "",
-    ) -> None:
+    ) -> "MutationOutcome":
         # TODO(1.6/ObjectBus): change run_id type to ObjectId when bus lands.
         # See docs/tech_debt.md §"5.10 → 1.6".
-        self._mutate(
+        return self.attempt_mutation(
             slot="active_simulation_run",
             new_value=run_id,
             op_hint=(
@@ -108,9 +108,9 @@ class MemoryCoordinator:
         turn_id: int,
         cause: str,
         evidence: str = "",
-    ) -> None:
+    ) -> "MutationOutcome":
         # TODO(1.6/ObjectBus): same migration as above. See docs/tech_debt.md.
-        self._mutate(
+        return self.attempt_mutation(
             slot="active_optimization_run",
             new_value=run_id,
             op_hint=(

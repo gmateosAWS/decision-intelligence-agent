@@ -248,22 +248,49 @@ def tool_node(
             error=error,
         )
     # Record active run via MemoryService — fail-open (item 5.11).
+    # Propagate MutationBlocked when the target slot is frozen (H3 fix).
     memory = _get_memory_service(config)
     session_id = _get_session_id(config)
+    _new_blocks: list[dict[str, Any]] = list(state.get("blocked_mutations") or [])
     if memory is not None and session_id is not None and not error:
         try:
             run_id = state.get("run_id") or ""
             turn_id = memory.get_active_state(session_id).last_turn_id
-            memory.record_active_run(
+            _run_outcome = memory.record_active_run(
                 session_id=session_id,
                 tool=action,
                 run_id=run_id,
                 turn_id=turn_id,
                 cause=f"tool:{action}",
             )
+            if _run_outcome is not None:
+                from core.protocols.memory import (  # noqa: PLC0415
+                    MutationBlocked as _MutationBlocked,
+                )
+
+                if isinstance(_run_outcome, _MutationBlocked):
+                    if obs:
+                        obs.record_freeze_block(
+                            slot=_run_outcome.slot,
+                            attempted=_run_outcome.blocked_value,
+                            frozen=_run_outcome.current_value,
+                            source="coordinator",
+                        )
+                    _new_blocks.append(
+                        {
+                            "slot": _run_outcome.slot,
+                            "blocked_value": _run_outcome.blocked_value,
+                            "current_value": _run_outcome.current_value,
+                            "reason": _run_outcome.reason,
+                            "source": "coordinator",
+                        }
+                    )
         except Exception:  # noqa: BLE001
             pass
-    return {"raw_result": raw_result}
+    _tool_out: dict[str, Any] = {"raw_result": raw_result}
+    if _new_blocks != list(state.get("blocked_mutations") or []):
+        _tool_out["blocked_mutations"] = _new_blocks
+    return _tool_out
 
 
 def synthesizer_node(
